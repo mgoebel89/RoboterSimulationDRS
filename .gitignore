@@ -1,12 +1,14 @@
 # Aus der iRC-Installation erzeugt (igus-Daten, duerfen nicht weitergegeben werden)
-protos/meshes/
-protos/IgusRebel6DOF.proto
-werkzeuge/
+/protos/meshes/
+/protos/IgusRebel6DOF.proto
+/werkzeuge/
 
 # Laufzeitdaten im Container: Welten der Lehrkraefte, Teilebibliothek (abgeleitete Netze, u.a.
-# Schunk/CADENAS CC BY-ND), werden aus vorlagen/ und cad/ angelegt und bei Updates nie ueberschrieben
-worlds/
-teile/
+# Schunk/CADENAS CC BY-ND), im Baukasten gebaute Backensaetze. Werden aus vorlagen/ und cad/ angelegt
+# und bei Updates nie ueberschrieben. Muster mit / am Anfang: nur im Wurzelordner (cad/teile bleibt drin).
+/worlds/
+/teile/
+/backen/
 
 # Python, Logs, Status
 __pycache__/
