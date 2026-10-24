@@ -1,0 +1,23 @@
+{
+  "titel": "Sensor-Test",
+  "aufgabe": "",
+  "sichtbar": true,
+  "ea": {
+    "taster": [],
+    "leuchten": [],
+    "sensoren": [
+      {
+        "name": "Platz 1",
+        "groesse_mm": [
+          40.0,
+          40.0,
+          20.0
+        ],
+        "din": 24,
+        "art": "schliesser",
+        "typ": "belegt",
+        "knoten": "SENSOR_0"
+      }
+    ]
+  }
+}

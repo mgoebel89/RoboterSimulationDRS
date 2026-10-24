@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Robotermodell (igus ReBeL + Schunk EGP 25) aus iRC-Daten erzeugen.
+# Die Daten stammen aus einer iRC-Installation (tools/irc_daten_export.ps1 auf einem Windows-PC)
+# und werden nicht weitergegeben; sie bleiben nur in diesem Container.
+#
+#   rebel-sim-modell /root/irc-daten.zip
+set -euo pipefail
+BASIS="${BASIS:-/opt/rebel-sim}"
+ZIEL=/var/lib/rebel-sim/irc
+ZIP="${1:?Aufruf: rebel-sim-modell <irc-daten.zip>}"
+[ -f "$ZIP" ] || { echo "Datei nicht gefunden: $ZIP"; exit 1; }
+
+rm -rf "$ZIEL.neu"
+mkdir -p "$ZIEL.neu"
+# Python statt unzip: Windows PowerShell 5.1 schreibt Pfade mit Backslash ins ZIP
+python3 - "$ZIP" "$ZIEL.neu" <<'PY'
+import os, sys, zipfile
+quelle, ziel = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(quelle) as z:
+    for eintrag in z.infolist():
+        name = eintrag.filename.replace("\\", "/")
+        teile = [t for t in name.split("/") if t not in ("", ".", "..")]
+        if not teile or name.endswith("/"):
+            continue
+        pfad = os.path.join(ziel, *teile)
+        os.makedirs(os.path.dirname(pfad), exist_ok=True)
+        with z.open(eintrag) as q, open(pfad, "wb") as f:
+            f.write(q.read())
+PY
+[ -d "$ZIEL.neu/Data/Robots/REBEL" ] || { echo "In der ZIP-Datei fehlt Data/Robots/REBEL."; rm -rf "$ZIEL.neu"; exit 1; }
+rm -rf "$ZIEL"
+mv "$ZIEL.neu" "$ZIEL"
+chown -R rebelsim:rebelsim "$ZIEL"
+sudo -u rebelsim python3 "$BASIS/tools/erzeuge_rebel_modell.py" --irc "$ZIEL" --robot REBEL-6DOF-03
+echo
+echo "Modell erzeugt. Laufende Simulationen zeigen es nach 'Neu starten'."

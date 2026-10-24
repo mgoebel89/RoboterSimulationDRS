@@ -1,0 +1,39 @@
+{
+  "titel": "E/A-Test",
+  "aufgabe": "Testwelt fuer Taster und Leuchtmelder",
+  "sichtbar": true,
+  "ea": {
+    "taster": [
+      {
+        "name": "Start",
+        "din": 21,
+        "art": "schliesser",
+        "modus": "tastend"
+      },
+      {
+        "name": "Not-Halt",
+        "din": 22,
+        "art": "oeffner",
+        "modus": "tastend"
+      },
+      {
+        "name": "Automatik",
+        "din": 23,
+        "art": "schliesser",
+        "modus": "rastend"
+      }
+    ],
+    "leuchten": [
+      {
+        "name": "Greifer zu",
+        "dout": 32,
+        "farbe": "gruen"
+      },
+      {
+        "name": "Stoerung",
+        "dout": 5,
+        "farbe": "rot"
+      }
+    ]
+  }
+}

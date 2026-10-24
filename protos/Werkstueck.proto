@@ -1,0 +1,50 @@
+#VRML_SIM R2025a utf8
+# template language: javascript
+# Greifbares Werkstueck fuer die ReBeL-Simulation.
+# Der Controller "irc_bridge" erkennt automatisch alle Knoten dieses Typs.
+#
+# form "quader":   Quader mit Kantenlaengen size (x y z) in Metern
+# form "zylinder": Zylinder mit Durchmesser size.x und Hoehe size.z
+# form "modell":   eigenes CAD-Teil (STL/OBJ) aus "modell"; size ist dann der
+#                  Huellquader fuer Physik und Greifen, "skalierung" 0.001 fuer mm-Dateien.
+#                  "modellversatz" (m) verschiebt das CAD-Teil so, dass die Mitte seines
+#                  Huellquaders im Ursprung liegt (setzt der Weltbaukasten).
+
+PROTO Werkstueck [
+  field SFVec3f    translation 0 0 0.02
+  field SFRotation rotation    0 0 1 0
+  field SFString   name        "werkstueck"
+  field SFString{"quader", "zylinder", "modell"} form "quader"
+  field SFVec3f    size        0.04 0.04 0.04
+  field SFColor    farbe       0.1 0.4 0.9
+  field SFFloat    masse       0.05
+  field MFString   modell      []
+  field SFFloat    skalierung  0.001
+  field SFVec3f    modellversatz 0 0 0
+]
+{
+  Solid {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+    children [
+      %< if (fields.form.value === 'modell') { >%
+      Transform {
+        translation IS modellversatz
+        scale %<= fields.skalierung.value >% %<= fields.skalierung.value >% %<= fields.skalierung.value >%
+        children [ Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.5 metalness 0 } geometry Mesh { url IS modell } } ]
+      }
+      %< } else if (fields.form.value === 'zylinder') { >%
+      Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.5 metalness 0 } geometry Cylinder { radius %<= fields.size.value.x / 2 >% height %<= fields.size.value.z >% } }
+      %< } else { >%
+      Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.5 metalness 0 } geometry Box { size IS size } }
+      %< } >%
+    ]
+    %< if (fields.form.value === 'zylinder') { >%
+    boundingObject Cylinder { radius %<= fields.size.value.x / 2 >% height %<= fields.size.value.z >% }
+    %< } else { >%
+    boundingObject Box { size IS size }
+    %< } >%
+    physics Physics { density -1 mass IS masse }
+  }
+}

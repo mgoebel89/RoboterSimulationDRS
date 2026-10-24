@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ReBeL - Baukasten</title>
+<style>%%STIL%%
+html, body { height:100%; }
+body { display:flex; flex-direction:column; }
+header { flex-wrap:wrap; gap:10px; padding:10px 16px; }
+header label { display:flex; gap:6px; align-items:center; font-size:.9em; color:#cfd6e4; }
+header input, header select { font:inherit; font-size:.9em; padding:5px 7px; border-radius:6px; border:0; }
+header button, header a.knopf { font:inherit; font-size:.9em; border:0; border-radius:6px; padding:6px 11px; cursor:pointer;
+  background:#3a4256; color:#fff; text-decoration:none; }
+header button.haupt { background:var(--orange); font-weight:600; }
+header .rechts { margin-left:auto; display:flex; gap:8px; }
+.flaeche { flex:1; min-height:0; display:grid; grid-template-columns:340px 1fr; }
+aside { overflow:auto; background:var(--bg); border-right:1px solid #d9dee6; padding:12px; display:flex;
+  flex-direction:column; gap:12px; }
+#ansicht { position:relative; min-width:0; }
+#ansicht canvas { display:block; }
+.feld { background:var(--karte); border-radius:10px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,.12);
+  display:flex; flex-direction:column; gap:8px; }
+.feld h2 { margin:0; font-size:1em; }
+.feld input, .feld select { font:inherit; padding:5px 7px; border:1px solid #c6ccd6; border-radius:6px; }
+.feld button { font:inherit; font-size:.88em; border:0; border-radius:6px; padding:6px 9px; cursor:pointer;
+  background:#e6e9ef; color:var(--text); }
+.feld button.haupt { background:var(--orange); color:#fff; font-weight:600; }
+.feld button.warnen { background:var(--rot); color:#fff; }
+.feld button.an { background:#1d2330; color:#fff; }
+.zeile { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.zahlen { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+.zahlen label { display:flex; flex-direction:column; font-size:.8em; color:var(--leise); }
+.zahlen input { width:100%; }
+.liste { display:flex; flex-direction:column; gap:4px; }
+.liste div { padding:6px 8px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:6px;
+  background:#f1f3f6; font-size:.9em; }
+.liste div.an { background:#1d2330; color:#fff; }
+.liste .offen { color:var(--rot); font-size:.85em; }
+.wahlpunkt { display:block; font-size:.88em; line-height:1.35; padding:5px 8px; border-radius:6px; background:#f1f3f6; flex:1; min-width:0; }
+.hilfe { font-size:.82em; color:var(--leise); }
+#status { font-size:.88em; min-height:1.2em; }
+#status.fehler { color:var(--rot); }
+#hinweis3d { position:absolute; left:12px; top:10px; background:rgba(29,35,48,.82); color:#fff; padding:7px 11px;
+  border-radius:8px; font-size:.9em; pointer-events:none; max-width:calc(100% - 200px); }
+#kamera-knoepfe { position:absolute; right:12px; top:10px; display:flex; gap:6px; }
+#kamera-knoepfe button { font:inherit; font-size:.85em; border:0; border-radius:6px; padding:6px 10px; cursor:pointer;
+  background:rgba(29,35,48,.82); color:#fff; }
+#achsen { position:absolute; right:12px; bottom:10px; background:rgba(255,255,255,.85); padding:6px 9px;
+  border-radius:8px; font-size:.8em; pointer-events:none; }
+[hidden] { display:none !important; }
+.ea-liste { display:flex; flex-direction:column; gap:6px; }
+.ea-zeile { display:grid; grid-template-columns:1fr 62px auto; gap:4px; background:#f1f3f6; padding:6px; border-radius:6px; }
+.ea-zeile input, .ea-zeile select { font-size:.85em; padding:3px 5px; min-width:0; }
+.ea-zeile .zweite { grid-column:1 / 3; display:flex; gap:4px; align-items:center; font-size:.85em; }
+.ea-zeile button { padding:2px 8px; }
+summary { cursor:pointer; }
+details.feld[open] summary { margin-bottom:6px; }
+</style>
+<script type="importmap">
+{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+             "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<header><b>ReBeL</b> Baukasten
+  <label>Welt <select id="welt"></select></label>
+  <button id="neu">Neue Welt</button>
+  <label id="datei-feld">Dateiname <input id="weltdatei" size="16" placeholder="z.B. lf7_magazin" autocapitalize="none"></label>
+  <label>Titel <input id="titel" size="28"></label>
+  <label>Greifer <select id="greifer">
+    <option value="egp25">EGP 25</option><option value="egp25_finger">EGP 25 mit Fingern</option>
+    <option value="egp25_robi2">EGP 25 mit Robi2-Backen</option><option value="vakuum">Sauger</option>
+    <option value="kein">kein Greifer</option></select></label>
+  <span class="rechts"><button id="speichern" class="haupt">Speichern</button><a class="knopf" href="/lehrer">Lehrerbereich</a></span>
+</header>
+<div class="flaeche">
+<aside>
+  <details class="feld" id="tisch-feld"><summary><b>Tisch und Roboter</b> <span class="hilfe" id="tisch-kurz"></span></summary>
+    <div class="zeile"><label class="hilfe">Tisch <select id="t-art"><option value="eben">eben, Maße frei</option>
+      <option value="profil">Profiltisch 800 × 800 (Nut 10, Basisplatte)</option></select></label></div>
+    <div class="zahlen">
+      <label class="nur-eben">Länge (mm) <input id="t-laenge" type="number" step="10" min="200" max="4000"></label>
+      <label class="nur-eben">Breite (mm) <input id="t-breite" type="number" step="10" min="200" max="4000"></label>
+      <label class="nur-eben">Höhe (mm) <input id="t-hoehe" type="number" step="5" min="-1000" max="500"></label>
+      <label class="nur-eben">Roboter von hinten <input id="t-hinten" type="number" step="5"></label>
+      <label class="nur-eben">Roboter von links <input id="t-links" type="number" step="5"></label>
+      <label class="nur-profil">Anschlag → hinten <select id="t-ahinten"></select></label>
+      <label class="nur-profil">Anschlag → links <input id="t-alinks" type="number" step="1"></label>
+      <label>Roboter gedreht (°) <input id="t-drehung" type="number" step="90" min="-360" max="360"></label>
+    </div>
+    <div class="hilfe nur-eben">Der Roboterfuß bleibt der Ursprung wie in iRC; eingestellt wird, wo der Tisch um ihn herum liegt.
+      „von hinten/links“ = Abstand der Fußmitte von der hinteren bzw. linken Tischkante (vorne = Blickrichtung des
+      Roboters bei 0°). Höhe = Tischplatte relativ zum Roboterfuß, z.B. −100 bei einem 100-mm-Sockel.
+      Für übertragbare Punkte die Maße des echten Robotertischs eintragen.</div>
+    <div class="hilfe nur-profil">Gemessen wird wie am echten Tisch: von der Anschlagkante der Basisplatte (Ecke hinten
+      links, 90 mm von der Fußmitte) bis zur hinteren bzw. linken Tischkante. Nach hinten geht es nur im Nutraster
+      (40 mm), weil die Bohrungen der Platte über den Nuten liegen; nach links stufenlos (<span id="t-alinks-grenzen"></span> mm).
+      Die Nuten sind als Kanten anklickbar (nut-1 hinten bis nut-20 vorne, nut-links, nut-rechts).</div>
+  </details>
+  <details class="feld" id="ea-feld"><summary><b>Taster und Leuchtmelder</b> <span class="hilfe" id="ea-kurz"></span></summary>
+    <div class="hilfe">Taster erscheinen unten links in der Schüleransicht und setzen einen Eingang in iRC
+      (dazu muss auf dem PC die App „WebotsSim“ freigeschaltet sein). Leuchtmelder unten rechts zeigen einen Ausgang.
+      Nummern wie in der iRC-Anzeige.</div>
+    <div class="ea-liste" id="ea-taster"></div>
+    <button id="ea-plus-taster">+ Taster</button>
+    <div class="ea-liste" id="ea-leuchten"></div>
+    <button id="ea-plus-leuchte">+ Leuchtmelder</button>
+  </details>
+  <div class="feld"><h2>Teile in dieser Welt</h2>
+    <div class="liste" id="teileliste"></div>
+    <div class="zeile"><select id="neues-teil" style="flex:1"></select><button id="hinzufuegen">Hinzufügen</button></div>
+    <div class="zeile"><button id="plus-sensor" title="Fläche, die meldet, ob ein Werkstück darauf liegt">+ Sensorfläche</button></div>
+    <div class="hilfe">Neue Teile stehen erst neben dem Tisch. Mit einer Verbindung kommen sie an ihren Platz.</div>
+  </div>
+
+  <div class="feld" id="eigenschaften" hidden>
+    <h2 id="e-titel">Teil</h2>
+    <div class="zeile"><label class="hilfe">Name <input id="e-id" size="14"></label>
+      <select id="e-art"><option value="aufbau">Aufbau (fest)</option><option value="werkstueck">Werkstück (greifbar)</option></select>
+      <input id="e-farbe" type="color" title="Farbe"></div>
+    <div class="zeile" id="e-masse-zeile"><label class="hilfe">Masse in g (leer = aus Volumen, PLA)
+      <input id="e-masse" type="number" min="1" step="1" style="width:90px"></label></div>
+    <div id="e-sensor" hidden>
+      <div class="zeile"><label class="hilfe">Beschriftung <input id="s-name" maxlength="24" size="16"></label>
+        <select id="s-typ"><option value="belegt">Belegt-Sensor</option><option value="farbe">Farbsensor</option></select></div>
+      <div class="zeile" id="s-belegt"><label class="hilfe">DIn <input id="s-din" type="number" min="1" max="64" style="width:60px"></label>
+        <select id="s-art"><option value="schliesser">Schließer</option><option value="oeffner">Öffner</option></select></div>
+      <div id="s-farbe" hidden>
+        <div class="zeile"><select id="s-ausgabe"><option value="je_farbe">ein Eingang je Farbe</option>
+          <option value="bits">Farbcode über Bits</option></select>
+          <span id="s-bits-felder"><label class="hilfe">ab DIn <input id="s-bitdin" type="number" min="1" max="64" style="width:56px"></label>
+          <label class="hilfe">Bits <select id="s-bits"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label></span></div>
+        <div class="ea-liste" id="s-farben"></div>
+        <div class="hilfe" id="s-farb-hilfe"></div>
+      </div>
+      <div class="zahlen">
+        <label>Länge (mm) <input id="s-lx" type="number" min="1" max="1000" step="1"></label>
+        <label>Breite (mm) <input id="s-ly" type="number" min="1" max="1000" step="1"></label>
+        <label>Höhe (mm) <input id="s-lz" type="number" min="1" max="1000" step="1"></label>
+      </div>
+      <div class="hilfe">Meldet „belegt“, sobald ein Werkstück in den Quader ragt (Länge entlang X der Verbindung).
+        Die Unterseite ist schon als Punkt gewählt: nur noch das Gegenstück anklicken.</div>
+    </div>
+
+    <h2>Verbindung</h2>
+    <div class="zeile"><span class="hilfe">Was anklicken:</span>
+      <select id="w-art"><option value="auto">automatisch</option><option value="flaeche">Fläche</option>
+        <option value="bohrung">Bohrung</option><option value="kante">Kante</option><option value="ecke">Ecke</option></select></div>
+    <div class="zeile"><span class="wahlpunkt" id="p-teil">Punkt am Teil: –</span><button id="w-teil">anklicken</button></div>
+    <div class="zeile"><span class="wahlpunkt" id="p-ziel">Gegenstück: –</span><button id="w-ziel">anklicken</button></div>
+    <div class="hilfe" id="versatz-hilfe"></div>
+    <div class="zahlen">
+      <label>X (mm) <input id="v-x" type="number" step="0.5" value="0"></label>
+      <label>Y (mm) <input id="v-y" type="number" step="0.5" value="0"></label>
+      <label>Z (mm) <input id="v-z" type="number" step="0.5" value="0"></label>
+    </div>
+    <div class="zeile"><label class="hilfe">Drehung (°) <input id="v-dreh" type="number" step="15" value="0" style="width:80px"></label>
+      <button id="dreh-minus">−90°</button><button id="dreh-plus">+90°</button>
+      <label class="hilfe"><input id="v-um" type="checkbox"> umdrehen</label></div>
+    <div class="hilfe" id="e-lage"></div>
+    <div class="zeile"><button id="e-loesen">Verbindung lösen</button><button id="e-entfernen" class="warnen">Teil entfernen</button></div>
+  </div>
+  <div id="status"></div>
+</aside>
+<div id="ansicht"><div id="hinweis3d" hidden></div>
+  <div id="kamera-knoepfe"><button id="k-teil" title="Kamera auf das gewählte Teil">Teil</button><button id="k-gesamt" title="ganzer Tisch">Übersicht</button></div>
+  <div id="achsen">iRC-Koordinaten: <b style="color:#d22">x</b> <b style="color:#1a1">y</b> <b style="color:#22d">z</b> ·
+    Kreis = Reichweite ReBeL (664 mm) · Pfeile am Gegenstück: <b style="color:#d22">X</b> / <b style="color:#1a1">Y</b> des Versatzes</div></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+const $ = id => document.getElementById(id);
+// Tisch wie tisch_werte/tisch_merkmale in tools/baukasten.py
+const TISCH_STANDARD = {laenge_mm: 1000, breite_mm: 800, roboter_von_hinten_mm: 250, roboter_von_links_mm: 400,
+                        drehung_grad: 0, hoehe_mm: 0};
+const TISCH_FELDER = {laenge_mm: 't-laenge', breite_mm: 't-breite', hoehe_mm: 't-hoehe', roboter_von_hinten_mm: 't-hinten',
+                      roboter_von_links_mm: 't-links', drehung_grad: 't-drehung',
+                      anschlag_hinten_mm: 't-ahinten', anschlag_links_mm: 't-alinks'};
+// Profiltisch wie PROFIL/PLATTE in tools/baukasten.py
+const PROFIL = {groesse: 800, rahmen: 40, raster: 40, nut: 10, dicke: 40, kappe: 4, nuten: 20};
+const PLATTE = {dicke: 2, anschlag: 90, quer: 69.28};
+const PROFIL_STANDARD = {anschlag_hinten_mm: 50, anschlag_links_mm: 310, drehung_grad: 0};
+const ANSCHLAEGE_HINTEN = Array.from({length: PROFIL.nuten}, (_, k) => ({nut: k + 1, mm: PROFIL.raster / 2 + k * PROFIL.raster - PLATTE.anschlag}))
+  .filter(a => a.mm >= 0 && a.mm + 2 * PLATTE.anschlag <= PROFIL.groesse);
+const RAND = PROFIL.rahmen + PROFIL.nut / 2;
+const ALINKS = [Math.ceil(RAND + PLATTE.quer - PLATTE.anschlag), Math.floor(PROFIL.groesse - RAND - PLATTE.quer - PLATTE.anschlag)];
+let entwurf = {titel: '', aufgabe: '', greifer: 'egp25', teile: []};
+let weltName = null, auswahl = null, wahl = null;   // wahl: 'teil' | 'ziel' beim Anklicken
+let lagen = {}, teilDaten = {}, objekte = {};
+
+// ---------- Hilfen ----------
+function status(text, fehler) { $('status').textContent = text || ''; $('status').className = fehler ? 'fehler' : ''; }
+async function holen(url) { const r = await fetch(url, {cache: 'no-store'}); if (r.status === 403) location.href = '/lehrer'; return r.json(); }
+async function api(aktion, daten) {
+  const r = await fetch('/api/lehrer/' + aktion, {method: 'POST', body: JSON.stringify(daten),
+    headers: {'Content-Type': 'application/json', 'X-Lehrer': '1'}});
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 403) { location.href = '/lehrer'; throw new Error(); }
+  if (!r.ok) throw new Error(d.fehler || 'Das hat nicht geklappt.');
+  return d;
+}
+const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const kreuz = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = a => { const l = Math.hypot(...a) || 1; return a.map(v => v / l); };
+const mul = (a, s) => a.map(v => v * s);
+const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+const farbe = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+
+// ---------- Merkmale des Tischs (wie tools/baukasten.py) ----------
+function tischWerte() {
+  const eigene = entwurf.tisch || {};
+  if (eigene.art !== 'profil') return Object.assign({}, TISCH_STANDARD, eigene, {art: 'eben'});
+  const t = {art: 'profil'};
+  for (const k of Object.keys(PROFIL_STANDARD)) t[k] = eigene[k] ?? PROFIL_STANDARD[k];
+  const a = ANSCHLAEGE_HINTEN.find(a => Math.abs(a.mm - t.anschlag_hinten_mm) < 0.01);
+  return Object.assign(t, {nut: a ? a.nut : null, laenge_mm: PROFIL.groesse, breite_mm: PROFIL.groesse, hoehe_mm: -PLATTE.dicke,
+    roboter_von_hinten_mm: t.anschlag_hinten_mm + PLATTE.anschlag, roboter_von_links_mm: t.anschlag_links_mm + PLATTE.anschlag});
+}
+function profilNuten(t) {   // wie profil_nuten in baukasten.py: {name: [[x, y] Anfang, [x, y] Ende]} im Tischsystem
+  const x0 = -t.roboter_von_hinten_mm, y1 = t.roboter_von_links_mm, g = PROFIL.groesse, r = PROFIL.raster, ra = PROFIL.rahmen;
+  const nuten = {};
+  for (let k = 0; k < PROFIL.nuten; k++) nuten['nut-' + (k + 1)] = [[x0 + r / 2 + k * r, y1 - ra], [x0 + r / 2 + k * r, y1 - g + ra]];
+  nuten['nut-links'] = [[x0 + ra, y1 - ra / 2], [x0 + g - ra, y1 - ra / 2]];
+  nuten['nut-rechts'] = [[x0 + ra, y1 - g + ra / 2], [x0 + g - ra, y1 - g + ra / 2]];
+  return nuten;
+}
+function tischDrehen(t, x, y) {   // Tischsystem -> Welt (Roboter um +d gedreht = Tisch um -d)
+  const w = -t.drehung_grad * Math.PI / 180, c = Math.cos(w), s = Math.sin(w);
+  return [c * x - s * y, s * x + c * y];
+}
+function tischMerkmale(t) {
+  const x0 = -t.roboter_von_hinten_mm, x1 = t.laenge_mm - t.roboter_von_hinten_mm;
+  const y1 = t.roboter_von_links_mm, y0 = t.roboter_von_links_mm - t.breite_mm;
+  const welt = (x, y) => [...tischDrehen(t, x, y), t.hoehe_mm];
+  const lokal = {'hinten-rechts': [x0, y0], 'vorne-rechts': [x1, y0], 'vorne-links': [x1, y1], 'hinten-links': [x0, y1]};
+  const ep = Object.fromEntries(Object.entries(lokal).map(([n, p]) => [n, welt(...p)]));
+  const kanten = {vorne: ['vorne-rechts', 'vorne-links'], hinten: ['hinten-rechts', 'hinten-links'],
+                  links: ['hinten-links', 'vorne-links'], rechts: ['hinten-rechts', 'vorne-rechts']};
+  const nuten = t.art === 'profil' ? Object.entries(profilNuten(t)).map(([n, [a, b]]) =>
+    ({id: n, a: welt(...a), b: welt(...b), flaechen: ['oben'], fang_mm: PROFIL.nut / 2})) : [];
+  return {
+    flaechen: [{id: 'oben', normale: [0, 0, 1], mitte: welt((x0 + x1) / 2, (y0 + y1) / 2)},
+               {id: 'ursprung', normale: [0, 0, 1], mitte: [0, 0, 0]}],
+    kanten: Object.entries(kanten).map(([k, [a, b]]) => ({id: k, a: ep[a], b: ep[b], flaechen: ['oben']})).concat(nuten),
+    ecken: Object.keys(ep).map(n => ({id: n, punkt: ep[n], flaechen: [{flaeche: 'oben',
+      x: [...tischDrehen(t, n.startsWith('hinten') ? 1 : -1, 0), 0], y: [...tischDrehen(t, 0, n.endsWith('rechts') ? 1 : -1), 0]}]})),
+    bohrungen: [], mitte: welt((x0 + x1) / 2, (y0 + y1) / 2),
+  };
+}
+let TISCH = tischMerkmale(tischWerte());
+const ALTE_NAMEN = {'x+': 'vorne', 'x-': 'hinten', 'y+': 'links', 'y-': 'rechts', 'x+y-': 'vorne-rechts',
+                    'x+y+': 'vorne-links', 'x-y-': 'hinten-rechts', 'x-y+': 'hinten-links'};
+
+// Koordinatensystem eines Verbindungspunkts im Teil: {o, x, y, z} (wie punkt_lage in baukasten.py)
+function xInEbene(z) {
+  for (const ref of [[1, 0, 0], [0, 1, 0]]) { const x = sub(ref, mul(z, dot(ref, z))); if (dot(x, x) > 1e-6) return norm(x); }
+}
+function rahmen(z, x, o) { z = norm(z); x = norm(sub(x, mul(z, dot(x, z)))); return {o, x, y: kreuz(z, x), z}; }
+const finde = (liste, id) => liste.find(e => String(e.id) === String(ALTE_NAMEN[id] || id));
+function punktLage(m, p) {
+  if (!p) return null;
+  if (p.art === 'flaeche') { const f = finde(m.flaechen, p.id); return f && rahmen(f.normale, xInEbene(norm(f.normale)), f.mitte); }
+  if (p.art === 'bohrung') {
+    const b = finde(m.bohrungen, p.id); if (!b) return null;
+    const e = b.enden[p.ende || 0], q = b.enden[1 - (p.ende || 0)], z = norm(sub(e, q));
+    return rahmen(z, xInEbene(z), e);
+  }
+  if (p.art === 'kante') {
+    const k = finde(m.kanten, p.id); if (!k) return null;
+    const f = finde(m.flaechen, p.flaeche ?? k.flaechen[0]); if (!f) return null;
+    const z = norm(f.normale), mitte = mul([k.a[0] + k.b[0], k.a[1] + k.b[1], k.a[2] + k.b[2]], 0.5);
+    let x = norm(sub(k.b, k.a));
+    if (dot(kreuz(z, x), sub(f.mitte, mitte)) < 0) x = mul(x, -1);
+    return rahmen(z, x, mitte);
+  }
+  if (p.art === 'ecke') {
+    const e = finde(m.ecken, p.id); if (!e) return null;
+    const s = p.flaeche == null ? e.flaechen[0] : e.flaechen.find(s => String(s.flaeche) === String(p.flaeche));
+    if (!s) return null;
+    const z = norm(finde(m.flaechen, s.flaeche).normale);
+    let x = norm(s.x); const y = norm(s.y);
+    if (dot(kreuz(x, y), z) < 0) x = y;
+    return rahmen(z, x, e.punkt);
+  }
+  return null;
+}
+
+// ---------- 3D-Szene ----------
+const ansicht = $('ansicht');
+const szene = new THREE.Scene();
+szene.background = new THREE.Color(0xe9edf2);
+const kamera = new THREE.PerspectiveCamera(40, 1, 5, 30000);
+kamera.up.set(0, 0, 1);
+kamera.position.set(1500, -1300, 1000);
+const renderer = new THREE.WebGLRenderer({antialias: true});
+renderer.setPixelRatio(window.devicePixelRatio);
+ansicht.appendChild(renderer.domElement);
+const steuerung = new OrbitControls(kamera, renderer.domElement);
+steuerung.target.set(250, 0, 0);
+steuerung.update();
+szene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 1.6));
+const sonne = new THREE.DirectionalLight(0xffffff, 1.6); sonne.position.set(-600, -900, 1500); szene.add(sonne);
+const sonne2 = new THREE.DirectionalLight(0xffffff, 0.6); sonne2.position.set(900, 600, 500); szene.add(sonne2);
+
+function groesse() {
+  const w = ansicht.clientWidth, h = ansicht.clientHeight;
+  renderer.setSize(w, h); kamera.aspect = w / h; kamera.updateProjectionMatrix();
+}
+new ResizeObserver(groesse).observe(ansicht);
+
+// Tisch (nach den Einstellungen), Sockel, Roboterfuss, Achsen, Reichweite
+const tischMaterial = new THREE.MeshStandardMaterial({color: 0xd1ccc2, roughness: 0.9});
+const tisch = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), tischMaterial);
+tisch.userData = {bezug: 'tisch'};
+const sockel = new THREE.Mesh(new THREE.CylinderGeometry(80, 80, 1, 40), new THREE.MeshStandardMaterial({color: 0x5a5c61, roughness: 0.6}));
+sockel.rotation.x = Math.PI / 2;
+szene.add(tisch, sockel);
+// Profiltisch: Nuten, Beinkappen und Basisplatte als Zusatz zur Tischplatte (nicht anklickbar, Treffer gehen an die Platte)
+const profilGruppe = new THREE.Group();
+szene.add(profilGruppe);
+const NUT_MAT = new THREE.MeshStandardMaterial({color: 0x33363c, roughness: 0.8});
+const KAPPE_MAT = new THREE.MeshStandardMaterial({color: 0x151618, roughness: 0.7});
+const PLATTE_MAT = new THREE.MeshStandardMaterial({color: 0x52575e, roughness: 0.5, metalness: 0.3});
+let platteNetz;   // aus der Teilebibliothek (teile/basisplatte), sonst einfache Scheibe
+async function platteLaden() {
+  try { const d = await teilLaden('basisplatte'); if (d.teil && d.teil.box) platteNetz = d.geo; } catch (e) { /* Ersatz */ }
+  if (!platteNetz) { platteNetz = new THREE.CylinderGeometry(90, 90, 2, 64).rotateX(Math.PI / 2).translate(0, 0, 1); }
+}
+function quaderZwischen(a, b, breite, hoehe, z, material) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(b[0] - a[0], b[1] - a[1]), breite, hoehe), material);
+  m.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
+  m.rotation.z = Math.atan2(b[1] - a[1], b[0] - a[0]);
+  return m;
+}
+function profilZeichnen(t) {
+  while (profilGruppe.children.length) profilGruppe.children.pop().geometry?.dispose?.();
+  if (t.art !== 'profil') return;
+  const oben = t.hoehe_mm, x0 = -t.roboter_von_hinten_mm, y1 = t.roboter_von_links_mm, g = PROFIL.groesse, ra = PROFIL.rahmen;
+  for (const k of TISCH.kanten.filter(k => k.fang_mm)) profilGruppe.add(quaderZwischen(k.a, k.b, PROFIL.nut, 0.6, oben + 0.3, NUT_MAT));
+  for (const [x, y] of [[x0 + ra / 2, y1 - ra / 2], [x0 + g - ra / 2, y1 - ra / 2], [x0 + ra / 2, y1 - g + ra / 2], [x0 + g - ra / 2, y1 - g + ra / 2]]) {
+    const kappe = new THREE.Mesh(new THREE.BoxGeometry(ra, ra, PROFIL.kappe), KAPPE_MAT);
+    kappe.position.set(...tischDrehen(t, x, y), oben + PROFIL.kappe / 2); kappe.rotation.z = -t.drehung_grad * Math.PI / 180;
+    profilGruppe.add(kappe);
+  }
+  // Basisplatte wie platte_lage in baukasten.py: (x, y, z) -> (-y, -x, -z), dann mit dem Tisch gedreht
+  const platte = new THREE.Mesh(platteNetz.clone(), PLATTE_MAT);
+  const umgedreht = new THREE.Matrix4().makeBasis(V([0, -1, 0]), V([-1, 0, 0]), V([0, 0, -1]));
+  platte.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeRotationZ(-t.drehung_grad * Math.PI / 180).multiply(umgedreht));
+  profilGruppe.add(platte);
+}
+function tischZeichnen() {
+  const t = tischWerte();
+  TISCH = tischMerkmale(t);
+  const dicke = t.art === 'profil' ? PROFIL.dicke : 30;
+  tisch.scale.set(t.laenge_mm, t.breite_mm, dicke);
+  tisch.position.set(TISCH.mitte[0], TISCH.mitte[1], t.hoehe_mm - dicke / 2 - 0.05);
+  tisch.rotation.set(0, 0, -t.drehung_grad * Math.PI / 180);
+  tischMaterial.color.setHex(t.art === 'profil' ? 0xc8ccd2 : 0xd1ccc2);
+  sockel.visible = t.art !== 'profil' && t.hoehe_mm < -1;
+  sockel.scale.set(1, Math.max(1, -t.hoehe_mm), 1);
+  sockel.position.set(0, 0, t.hoehe_mm / 2);
+  profilZeichnen(t);
+  $('tisch-kurz').textContent = t.art === 'profil'
+    ? 'Profiltisch, Fuß auf Nut ' + (t.nut ?? '?') + ', Anschlag ' + t.anschlag_hinten_mm + ' / ' + t.anschlag_links_mm + ' mm'
+      + (t.drehung_grad ? ', Roboter ' + t.drehung_grad + '°' : '')
+    : t.laenge_mm + ' × ' + t.breite_mm + ' mm' + (t.drehung_grad ? ', Roboter ' + t.drehung_grad + '°' : '')
+      + (t.hoehe_mm ? ', Höhe ' + t.hoehe_mm : '');
+  $('t-art').value = t.art;
+  document.querySelectorAll('#tisch-feld .nur-eben').forEach(e => { e.hidden = t.art === 'profil'; });
+  document.querySelectorAll('#tisch-feld .nur-profil').forEach(e => { e.hidden = t.art !== 'profil'; });
+  for (const [k, id] of Object.entries(TISCH_FELDER)) if (t[k] != null) $(id).value = t[k];
+  if (t.art === 'profil' && !(ALINKS[0] <= t.anschlag_links_mm && t.anschlag_links_mm <= ALINKS[1]))
+    status('Anschlag → links: ' + ALINKS[0] + ' bis ' + ALINKS[1] + ' mm, sonst liegen Bohrungen der Basisplatte über dem Rahmen.', true);
+}
+const fuss = new THREE.Mesh(new THREE.CylinderGeometry(65, 70, 100, 48), new THREE.MeshStandardMaterial({color: 0x26282c, roughness: 0.6}));
+fuss.rotation.x = Math.PI / 2; fuss.position.set(0, 0, 50);
+fuss.userData = {bezug: 'roboterfuss'};
+szene.add(fuss);
+const ring = new THREE.Mesh(new THREE.CylinderGeometry(71, 71, 12, 48), new THREE.MeshStandardMaterial({color: 0xf26b00}));
+ring.rotation.x = Math.PI / 2; ring.position.set(0, 0, 90); szene.add(ring);
+const achsen = new THREE.AxesHelper(180); achsen.position.z = 101; szene.add(achsen);
+const kreis = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
+  Array.from({length: 128}, (_, i) => new THREE.Vector3(664 * Math.cos(i / 64 * Math.PI), 664 * Math.sin(i / 64 * Math.PI), 0.6))),
+  new THREE.LineDashedMaterial({color: 0x5b6475, dashSize: 14, gapSize: 10}));
+kreis.computeLineDistances(); szene.add(kreis);
+const pickbar = [tisch, fuss];
+
+// Markierungen (Vorschau beim Zeigen, gewaehlte Punkte)
+const vorschauGruppe = new THREE.Group(), punktGruppe = new THREE.Group();
+szene.add(vorschauGruppe, punktGruppe);
+const ORANGE = new THREE.MeshBasicMaterial({color: 0xf26b00, transparent: true, opacity: 0.75, depthTest: false});
+function leeren(g) { while (g.children.length) { const c = g.children.pop(); c.geometry?.dispose?.(); } }
+function stab(a, b, dicke, material) {
+  const va = V(a), vb = V(b), laenge = va.distanceTo(vb);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(dicke, dicke, Math.max(laenge, 0.01), 8), material);
+  m.position.copy(va.clone().add(vb).multiplyScalar(0.5));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize());
+  m.renderOrder = 10; return m;
+}
+function kugel(p, r, material) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), material); m.position.copy(V(p)); m.renderOrder = 10; return m; }
+function pfeil(o, richtung, laenge, farbeHex) {
+  const a = new THREE.ArrowHelper(V(norm(richtung)), V(o), laenge, farbeHex, laenge * 0.28, laenge * 0.16);
+  a.traverse(c => { if (c.material) { c.material.depthTest = false; c.renderOrder = 11; } });
+  return a;
+}
+
+// ---------- Teile laden und anzeigen ----------
+async function teilLaden(name) {
+  if (!teilDaten[name]) {
+    const [teil, netz] = await Promise.all([holen('/api/lehrer/teil?name=' + encodeURIComponent(name)),
+                                            holen('/api/lehrer/netz?name=' + encodeURIComponent(name))]);
+    const pos = [], idx = [], dreieckFlaeche = [], flaechenNetz = {};
+    for (const [tag, f] of Object.entries(netz)) {
+      const basis = pos.length / 3;
+      for (const v of f.p) pos.push(v);
+      for (let i = 0; i < f.i.length; i++) idx.push(f.i[i] + basis);
+      for (let i = 0; i < f.i.length / 3; i++) dreieckFlaeche.push(Number(tag));
+      flaechenNetz[tag] = f;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx); geo.computeVertexNormals(); geo.computeBoundingBox();
+    const b = teil.box, diag = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    teilDaten[name] = {teil, geo, kanten: new THREE.EdgesGeometry(geo, 25), dreieckFlaeche, flaechenNetz, diag};
+  }
+  return teilDaten[name];
+}
+// Sensorflaeche: Quader mit Ursprung in der Mitte der Unterseite (wie quader_merkmale in baukasten.py)
+const SENSOR_STANDARD = {groesse_mm: [40, 40, 20], din: 24, art: 'schliesser'};
+function quaderMerkmale(lx, ly, lz) {
+  const hx = lx / 2, hy = ly / 2;
+  const seiten = {vorne: [1, 0, 0], hinten: [-1, 0, 0], links: [0, 1, 0], rechts: [0, -1, 0]};
+  const flaechen = [{id: 'unten', normale: [0, 0, -1], mitte: [0, 0, 0]}, {id: 'oben', normale: [0, 0, 1], mitte: [0, 0, lz]}]
+    .concat(Object.entries(seiten).map(([id, n]) => ({id, normale: n, mitte: [n[0] * hx, n[1] * hy, lz / 2]})));
+  const ep = {'hinten-rechts': [-hx, -hy, 0], 'vorne-rechts': [hx, -hy, 0], 'vorne-links': [hx, hy, 0], 'hinten-links': [-hx, hy, 0]};
+  const kk = {vorne: ['vorne-rechts', 'vorne-links'], hinten: ['hinten-rechts', 'hinten-links'], links: ['hinten-links', 'vorne-links'], rechts: ['hinten-rechts', 'vorne-rechts']};
+  return {box: [-hx, -hy, 0, hx, hy, lz], flaechen, bohrungen: [],
+    kanten: Object.entries(kk).map(([id, [a, b]]) => ({id, a: ep[a], b: ep[b], flaechen: ['unten', id]})),
+    ecken: Object.entries(ep).map(([id, p]) => ({id, punkt: p, flaechen: [{flaeche: 'unten', x: [p[0] > 0 ? -1 : 1, 0, 0], y: [0, p[1] > 0 ? -1 : 1, 0]}]}))};
+}
+const sensorDaten = {};
+function sensorWerte(t) { return Object.assign({}, SENSOR_STANDARD, t.sensor || {}); }
+function datenVon(t) {
+  if (t.art !== 'sensor') return teilDaten[t.teil];
+  const [lx, ly, lz] = sensorWerte(t).groesse_mm, schluessel = [lx, ly, lz].join(':');
+  if (!sensorDaten[schluessel]) {
+    const geo = new THREE.BoxGeometry(lx, ly, lz).translate(0, 0, lz / 2).toNonIndexed();
+    // BoxGeometry: je zwei Dreiecke +x, -x, +y, -y, +z, -z
+    const namen = ['vorne', 'hinten', 'links', 'rechts', 'oben', 'unten'], p = geo.getAttribute('position').array;
+    const dreieckFlaeche = [], flaechenNetz = {};
+    for (let k = 0; k < 12; k++) {
+      const n = namen[Math.floor(k / 2)];
+      dreieckFlaeche.push(n);
+      const f = flaechenNetz[n] = flaechenNetz[n] || {p: [], i: []};
+      for (let j = 0; j < 3; j++) { f.i.push(f.p.length / 3); f.p.push(p[(k * 3 + j) * 3], p[(k * 3 + j) * 3 + 1], p[(k * 3 + j) * 3 + 2]); }
+    }
+    sensorDaten[schluessel] = {teil: quaderMerkmale(lx, ly, lz), geo, kanten: new THREE.EdgesGeometry(geo), dreieckFlaeche,
+                               flaechenNetz, diag: Math.hypot(lx, ly, lz)};
+  }
+  return sensorDaten[schluessel];
+}
+function standardFarbe(t) {
+  return t.art === 'sensor' ? [0.15, 0.75, 0.35] : t.farbe || (t.art === 'werkstueck' ? [0.1, 0.4, 0.9] : [0.7, 0.7, 0.72]);
+}
+async function objektBauen(t) {
+  const d = t.art === 'sensor' ? datenVon(t) : await teilLaden(t.teil);
+  const g = new THREE.Group();
+  const mesh = new THREE.Mesh(d.geo, new THREE.MeshStandardMaterial({color: new THREE.Color(...standardFarbe(t)), roughness: 0.65, metalness: 0.1,
+                                                                    transparent: t.art === 'sensor', opacity: t.art === 'sensor' ? 0.45 : 1}));
+  mesh.userData = {teilId: t.id};
+  g.add(mesh, new THREE.LineSegments(d.kanten, new THREE.LineBasicMaterial({color: 0x1d2330, transparent: true, opacity: 0.35})));
+  g.userData = {mesh};
+  szene.add(g); pickbar.push(mesh);
+  objekte[t.id] = g;
+}
+function objektEntfernen(id) {
+  const g = objekte[id]; if (!g) return;
+  szene.remove(g); pickbar.splice(pickbar.indexOf(g.userData.mesh), 1); delete objekte[id];
+}
+function teil(id) { return entwurf.teile.find(t => t.id === id); }
+function vollstaendig(t) { const v = t.verbindung; return v && v.punkt && v.an && v.an_punkt; }
+
+// Lage anwenden: geloeste Teile an ihren Platz, die anderen auf den Parkplatz
+function lagenAnwenden() {
+  let park = 0;
+  for (const t of entwurf.teile) {
+    const g = objekte[t.id]; if (!g) continue;
+    const l = lagen[t.id];
+    if (l) {
+      g.position.copy(V(l.ursprung_mm));
+      g.quaternion.setFromAxisAngle(V(l.drehung.slice(0, 3)).normalize(), l.drehung[3]);
+    } else {
+      // Parkplatz: 150 mm vor der vorderen Tischkante, nebeneinander
+      const b = datenVon(t).teil.box, tw = tischWerte();
+      const vorne = TISCH.kanten.find(k => k.id === 'vorne');
+      const [fx, fy] = tischDrehen(tw, 1, 0), [sx, sy] = tischDrehen(tw, 0, 1);
+      const mx = (vorne.a[0] + vorne.b[0]) / 2 + fx * 150 - sx * (tw.breite_mm / 2 - 100 - park * 160);
+      const my = (vorne.a[1] + vorne.b[1]) / 2 + fy * 150 - sy * (tw.breite_mm / 2 - 100 - park * 160);
+      g.quaternion.identity();
+      g.position.set(mx - (b[0] + b[3]) / 2, my - (b[1] + b[4]) / 2, tw.hoehe_mm - b[2]);
+      park++;
+    }
+    g.userData.mesh.material.color.setRGB(...standardFarbe(t));
+  }
+  punkteZeigen();
+}
+
+// Lokale Merkmale -> Welt (fuer Markierungen)
+function inWelt(id) {
+  if (id === 'tisch' || id === 'roboterfuss') return p => p;
+  const g = objekte[id];
+  return p => V(p).applyQuaternion(g.quaternion).add(g.position).toArray();
+}
+function richtungInWelt(id) {
+  if (id === 'tisch' || id === 'roboterfuss') return r => r;
+  const g = objekte[id];
+  return r => V(r).applyQuaternion(g.quaternion).toArray();
+}
+function merkmaleVon(id) { return (id === 'tisch' || id === 'roboterfuss') ? TISCH : datenVon(teil(id)).teil; }
+function groesseVon(id) { return (id === 'tisch' || id === 'roboterfuss') ? 1000 : datenVon(teil(id)).diag; }
+
+// Gewaehlte Punkte des ausgewaehlten Teils zeigen; am Gegenstueck X/Y des Versatzes
+function punkteZeigen() {
+  leeren(punktGruppe);
+  const t = auswahl && teil(auswahl);
+  if (!t || !t.verbindung) return;
+  const v = t.verbindung;
+  if (v.punkt) {
+    const r = punktLage(merkmaleVon(t.id), v.punkt);
+    if (r) { const w = inWelt(t.id), d = richtungInWelt(t.id), l = Math.max(12, groesseVon(t.id) * 0.25);
+      punktGruppe.add(kugel(w(r.o), l * 0.08, ORANGE), pfeil(w(r.o), d(r.z), l, 0xf26b00)); }
+  }
+  if (v.an && v.an_punkt && (objekte[v.an] || v.an === 'tisch' || v.an === 'roboterfuss')) {
+    const r = punktLage(merkmaleVon(v.an), v.an_punkt);
+    if (r) {
+      const w = inWelt(v.an), d = richtungInWelt(v.an), l = Math.max(15, Math.min(120, groesseVon(v.an) * 0.15));
+      punktGruppe.add(pfeil(w(r.o), d(r.x), l, 0xdd2222), pfeil(w(r.o), d(r.y), l, 0x22aa22), pfeil(w(r.o), d(r.z), l * 0.7, 0x2244dd));
+    }
+  }
+}
+
+// ---------- Anklicken ----------
+const strahl = new THREE.Raycaster();
+function treffer(ereignis) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const maus = new THREE.Vector2(((ereignis.clientX - r.left) / r.width) * 2 - 1, -((ereignis.clientY - r.top) / r.height) * 2 + 1);
+  strahl.setFromCamera(maus, kamera);
+  return strahl.intersectObjects(pickbar, false)[0];
+}
+function abstandStrecke(p, a, b) {
+  const ab = sub(b, a), t = Math.max(0, Math.min(1, dot(sub(p, a), ab) / (dot(ab, ab) || 1)));
+  return Math.hypot(...sub(p, [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t]));
+}
+// Welches Merkmal liegt am Klickpunkt? Gibt {ziel, punkt, text, zeichnen} oder null
+function merkmalBei(hit, nurTeil) {
+  if (!hit) return null;
+  const art = $('w-art').value;
+  const bezug = hit.object.userData.bezug, id = bezug || hit.object.userData.teilId;
+  if (nurTeil && id !== nurTeil) return null;
+  if (!nurTeil && id === auswahl) return null;   // nicht an sich selbst haengen
+  const m = merkmaleVon(id);
+  let lokal, flaeche;
+  if (bezug) {
+    if (bezug === 'roboterfuss') return {ziel: id, punkt: {art: 'flaeche', id: 'ursprung'}, text: 'Roboterfuß: iRC-Ursprung'};
+    lokal = hit.point.toArray(); lokal[2] = tischWerte().hoehe_mm;   // auch Treffer an der Plattenkante zaehlen zur Oberseite
+    flaeche = 'oben';
+  } else {
+    lokal = objekte[id].worldToLocal(hit.point.clone()).toArray();
+    flaeche = datenVon(teil(id)).dreieckFlaeche[hit.faceIndex];
+  }
+  const r = bezug ? 30 : Math.max(1.5, groesseVon(id) * 0.04);
+  const name = bezug ? 'Tisch' : id;
+  const mitF = l => l.filter(e => e.flaechen.some(f => String(f.flaeche ?? f) === String(flaeche)));
+  if (art === 'auto' || art === 'ecke') {
+    const e = mitF(m.ecken).map(e => [Math.hypot(...sub(lokal, e.punkt)), e]).sort((a, b) => a[0] - b[0])[0];
+    if (e && (art === 'ecke' || e[0] < r)) return {ziel: id, punkt: {art: 'ecke', id: e[1].id, flaeche}, text: name + ': Ecke ' + e[1].id,
+      zeichnen: () => kugel(inWelt(id)(e[1].punkt), Math.max(3, r * 0.5), ORANGE)};
+    if (art === 'ecke') return null;
+  }
+  if (art === 'auto' || art === 'kante') {
+    const k = m.kanten.filter(k => k.flaechen.map(String).includes(String(flaeche)))
+      .map(k => [abstandStrecke(lokal, k.a, k.b), k]).sort((a, b) => a[0] - b[0])[0];
+    if (k && (art === 'kante' || k[0] < (k[1].fang_mm ?? r * 0.6))) return {ziel: id, punkt: {art: 'kante', id: k[1].id, flaeche}, text: name + ': Kante ' + k[1].id,
+      zeichnen: () => stab(inWelt(id)(k[1].a), inWelt(id)(k[1].b), Math.max(1, r * 0.18), ORANGE)};
+    if (art === 'kante') return null;
+  }
+  if (art === 'auto' || art === 'bohrung') {
+    const b = m.bohrungen.find(b => b.flaechen.map(String).includes(String(flaeche)));
+    if (b) {
+      const ende = Math.hypot(...sub(lokal, b.enden[0])) <= Math.hypot(...sub(lokal, b.enden[1])) ? 0 : 1;
+      return {ziel: id, punkt: {art: 'bohrung', id: b.id, ende}, text: name + ': ' + (b.innen ? 'Bohrung' : 'Zapfen') + ' Ø' + b.durchmesser + ' (Ende ' + ende + ')',
+        zeichnen: () => { const g = new THREE.Group(); g.add(stab(inWelt(id)(b.enden[0]), inWelt(id)(b.enden[1]), b.radius * 1.05, ORANGE));
+          g.add(kugel(inWelt(id)(b.enden[ende]), b.radius * 0.6, new THREE.MeshBasicMaterial({color: 0x1d2330, depthTest: false}))); return g; }};
+    }
+    if (art === 'bohrung') return null;
+  }
+  const f = finde(m.flaechen, flaeche);
+  if (!f) return null;
+  return {ziel: id, punkt: {art: 'flaeche', id: f.id}, text: name + ': Fläche ' + f.id, zeichnen: () => {
+    if (bezug) { const mat = ORANGE.clone(), t = tischWerte(); mat.opacity = 0.25;
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(t.laenge_mm, t.breite_mm), mat);
+      p.position.set(TISCH.mitte[0], TISCH.mitte[1], t.hoehe_mm + 0.5); p.rotation.z = -t.drehung_grad * Math.PI / 180; return p; }
+    const n = datenVon(teil(id)).flaechenNetz[f.id];
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(n.p, 3)); geo.setIndex(n.i);
+    const ov = new THREE.Mesh(geo, ORANGE); ov.renderOrder = 10;
+    const g = new THREE.Group(); g.add(ov); g.position.copy(objekte[id].position); g.quaternion.copy(objekte[id].quaternion); return g; }};
+}
+
+let zeigerRahmen = null;
+renderer.domElement.addEventListener('pointermove', ev => {
+  if (!wahl || zeigerRahmen) return;
+  zeigerRahmen = requestAnimationFrame(() => {
+    zeigerRahmen = null;
+    leeren(vorschauGruppe);
+    const mk = merkmalBei(treffer(ev), wahl === 'teil' ? auswahl : null);
+    $('hinweis3d').hidden = false;
+    $('hinweis3d').textContent = (wahl === 'teil' ? 'Punkt am Teil wählen' : 'Gegenstück wählen') + (mk ? ': ' + mk.text : ' (Esc = abbrechen)');
+    if (mk && mk.zeichnen) vorschauGruppe.add(mk.zeichnen());
+  });
+});
+let unten = null;
+renderer.domElement.addEventListener('pointerdown', ev => { unten = [ev.clientX, ev.clientY]; });
+renderer.domElement.addEventListener('pointerup', ev => {
+  if (!unten || Math.hypot(ev.clientX - unten[0], ev.clientY - unten[1]) > 4) return;   // gezogen = Kamera drehen
+  const hit = treffer(ev);
+  if (!wahl) {   // Teil auswaehlen
+    if (hit && hit.object.userData.teilId) waehlen(hit.object.userData.teilId);
+    return;
+  }
+  const mk = merkmalBei(hit, wahl === 'teil' ? auswahl : null);
+  if (!mk) return;
+  const t = teil(auswahl);
+  t.verbindung = t.verbindung || {versatz_mm: [0, 0, 0], drehung_grad: 0};
+  if (wahl === 'teil') t.verbindung.punkt = mk.punkt;
+  else { t.verbindung.an = mk.ziel; t.verbindung.an_punkt = mk.punkt; }
+  wahlBeenden(); formularZeigen(); rechnen();
+});
+window.addEventListener('keydown', ev => { if (ev.key === 'Escape') wahlBeenden(); });
+// Kamera: auf ein Teil zoomen (Blickrichtung bleibt) oder den ganzen Tisch zeigen
+function blickAuf(id) {
+  const g = id && objekte[id]; if (!g) return;
+  const box = new THREE.Box3().setFromObject(g.userData.mesh), mitte = box.getCenter(new THREE.Vector3());
+  const abstand = Math.max(120, box.getSize(new THREE.Vector3()).length() * 2.2);
+  const richtung = kamera.position.clone().sub(steuerung.target).normalize();
+  steuerung.target.copy(mitte); kamera.position.copy(mitte.clone().add(richtung.multiplyScalar(abstand)));
+}
+function uebersicht() {
+  const m = TISCH.mitte, groesse = Math.max(tischWerte().laenge_mm, tischWerte().breite_mm);
+  steuerung.target.set(m[0], m[1], m[2]);
+  kamera.position.set(m[0] + 1.25 * groesse, m[1] - 1.1 * groesse, m[2] + 0.9 * groesse);
+}
+$('k-teil').onclick = () => blickAuf(auswahl);
+$('k-gesamt').onclick = uebersicht;
+function wahlStarten(was) {
+  wahl = wahl === was ? null : was;
+  if (wahl === 'teil') blickAuf(auswahl);
+  $('w-teil').classList.toggle('an', wahl === 'teil'); $('w-ziel').classList.toggle('an', wahl === 'ziel');
+  $('hinweis3d').hidden = !wahl;
+  if (wahl) $('hinweis3d').textContent = wahl === 'teil' ? 'Fläche, Bohrung, Kante oder Ecke am Teil anklicken'
+    : 'Gegenstück anklicken: Tisch, Roboterfuß oder ein anderes Teil';
+  leeren(vorschauGruppe);
+}
+function wahlBeenden() { wahl = null; wahlStarten(null); }
+
+// ---------- Formular ----------
+function punktText(id, p) {
+  if (!p) return '–';
+  const name = id === 'tisch' ? 'Tisch' : id === 'roboterfuss' ? 'Roboterfuß' : id;
+  const art = {flaeche: 'Fläche', bohrung: 'Bohrung', kante: 'Kante', ecke: 'Ecke'}[p.art];
+  return name + ': ' + art + ' ' + p.id + (p.art === 'bohrung' ? ' (Ende ' + (p.ende || 0) + ')' : '');
+}
+const VERSATZ_HILFE = {
+  flaeche: 'X/Y verschieben in der Fläche (Pfeile rot/grün), Z = Abstand von der Fläche.',
+  bohrung: 'Z = entlang der Achse (negativ = hinein), X/Y quer dazu.',
+  kante: 'X = entlang der Kante, Y = Abstand von der Kante (grüner Pfeil), Z = Höhe.',
+  ecke: 'X und Y = Abstand von den beiden Kanten (Pfeile rot/grün), Z = Höhe.',
+};
+function formularZeigen() {
+  const t = auswahl && teil(auswahl);
+  $('eigenschaften').hidden = !t;
+  listeZeigen();
+  if (!t) return;
+  const v = t.verbindung || {};
+  const sensor = t.art === 'sensor';
+  $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : t.teil) + ')';
+  $('e-id').value = t.id; $('e-art').value = t.art || 'aufbau';
+  $('e-farbe').value = hex(standardFarbe(t));
+  $('e-art').hidden = $('e-farbe').hidden = sensor;
+  $('e-masse-zeile').hidden = t.art !== 'werkstueck';
+  $('e-sensor').hidden = !sensor;
+  if (sensor) sensorFormular(t);
+  $('e-masse').value = t.masse_kg ? Math.round(t.masse_kg * 1000) : '';
+  $('p-teil').textContent = 'Punkt am Teil: ' + punktText(t.id, v.punkt);
+  $('p-ziel').textContent = 'Gegenstück: ' + punktText(v.an, v.an_punkt);
+  const vs = v.versatz_mm || [0, 0, 0];
+  $('v-x').value = vs[0]; $('v-y').value = vs[1]; $('v-z').value = vs[2];
+  $('v-dreh').value = v.drehung_grad || 0; $('v-um').checked = !!v.umdrehen;
+  $('versatz-hilfe').textContent = VERSATZ_HILFE[(v.an_punkt || {}).art] || 'Erst Punkt am Teil und Gegenstück anklicken.';
+  const l = lagen[t.id];
+  $('e-lage').textContent = l ? 'Lage des CAD-Ursprungs: x ' + l.ursprung_mm.map(v => v.toFixed(1)).join(', ') + ' mm (iRC)'
+                              : 'Noch nicht platziert (steht neben dem Tisch).';
+  punkteZeigen();
+}
+function listeZeigen() {
+  $('teileliste').innerHTML = entwurf.teile.map(t => '<div data-id="' + t.id + '" class="' + (t.id === auswahl ? 'an' : '') + '"><span>'
+    + t.id + ' <span class="hilfe">' + (t.art === 'sensor' ? (sensorWerte(t).typ === 'farbe' ? 'Farbsensor' : 'Sensorfläche, DIn' + sensorWerte(t).din)
+                                        : t.teil + (t.art === 'werkstueck' ? ', Werkstück' : '')) + '</span></span>'
+    + (lagen[t.id] ? '' : '<span class="offen">offen</span>') + '</div>').join('') || '<span class="hilfe">Noch keine Teile.</span>';
+}
+$('teileliste').onclick = ev => { const d = ev.target.closest('[data-id]'); if (d) waehlen(d.dataset.id); };
+function waehlen(id) {
+  auswahl = id; wahlBeenden(); formularZeigen();
+  for (const [i, g] of Object.entries(objekte)) g.userData.mesh.material.emissive?.setHex(i === id ? 0x332200 : 0x000000);
+}
+$('w-teil').onclick = () => wahlStarten('teil');
+$('w-ziel').onclick = () => wahlStarten('ziel');
+function verbindungAusFormular() {
+  const t = teil(auswahl); if (!t) return;
+  t.verbindung = t.verbindung || {};
+  t.verbindung.versatz_mm = ['v-x', 'v-y', 'v-z'].map(i => Number($(i).value) || 0);
+  t.verbindung.drehung_grad = Number($('v-dreh').value) || 0;
+  t.verbindung.umdrehen = $('v-um').checked;
+  rechnenSpaeter();
+}
+['v-x', 'v-y', 'v-z', 'v-dreh', 'v-um'].forEach(i => $(i).addEventListener('input', verbindungAusFormular));
+$('dreh-minus').onclick = () => { $('v-dreh').value = ((Number($('v-dreh').value) || 0) - 90 + 360) % 360; verbindungAusFormular(); };
+$('dreh-plus').onclick = () => { $('v-dreh').value = ((Number($('v-dreh').value) || 0) + 90) % 360; verbindungAusFormular(); };
+$('e-art').onchange = () => { const t = teil(auswahl); t.art = $('e-art').value; delete t.farbe; formularZeigen(); lagenAnwenden(); };
+$('e-farbe').oninput = () => { teil(auswahl).farbe = farbe($('e-farbe').value); lagenAnwenden(); };
+$('e-masse').onchange = () => { const g = Number($('e-masse').value); const t = teil(auswahl); if (g > 0) t.masse_kg = g / 1000; else delete t.masse_kg; };
+$('e-id').onchange = () => {
+  const neu = $('e-id').value.trim(), alt = auswahl;
+  if (neu === alt) return;
+  if (!/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(neu) || teil(neu) || neu === 'tisch' || neu === 'roboterfuss') {
+    status('Name: Buchstabe zuerst, dann a-z, 0-9, - und _; jeder Name nur einmal.', true); $('e-id').value = alt; return;
+  }
+  teil(alt).id = neu;
+  for (const t of entwurf.teile) if (t.verbindung && t.verbindung.an === alt) t.verbindung.an = neu;
+  objekte[neu] = objekte[alt]; delete objekte[alt]; objekte[neu].userData.mesh.userData.teilId = neu;
+  if (lagen[alt]) { lagen[neu] = lagen[alt]; delete lagen[alt]; }
+  auswahl = neu; formularZeigen();
+};
+$('e-loesen').onclick = () => { const t = teil(auswahl); t.verbindung = null; formularZeigen(); rechnen(); };
+$('e-entfernen').onclick = () => {
+  if (!confirm('Teil ' + auswahl + ' aus der Welt entfernen?')) return;
+  const weg = auswahl;
+  entwurf.teile = entwurf.teile.filter(t => t.id !== weg);
+  for (const t of entwurf.teile) if (t.verbindung && t.verbindung.an === weg) { t.verbindung.an = null; t.verbindung.an_punkt = null; }
+  objektEntfernen(weg); auswahl = null; formularZeigen(); rechnen();
+};
+
+// ---------- Rechnen und Speichern ----------
+// Nur Teile mitschicken, deren ganze Kette bis zum Tisch vollstaendig ist
+function rechenbar() {
+  const ok = new Set();
+  let neu = true;
+  while (neu) {
+    neu = false;
+    for (const t of entwurf.teile) {
+      if (ok.has(t.id) || !vollstaendig(t)) continue;
+      const an = t.verbindung.an;
+      if (an === 'tisch' || an === 'roboterfuss' || ok.has(an)) { ok.add(t.id); neu = true; }
+    }
+  }
+  return entwurf.teile.filter(t => ok.has(t.id));
+}
+let rechenZeit = null;
+function rechnenSpaeter() { clearTimeout(rechenZeit); rechenZeit = setTimeout(rechnen, 150); }
+async function rechnen() {
+  const teile = rechenbar();
+  try {
+    lagen = teile.length ? (await api('baukasten_rechnen', {entwurf: {teile, tisch: tischWerte()}})).lagen : {};
+    const offen = entwurf.teile.length - teile.length;
+    status(offen ? offen + ' Teil(e) noch ohne vollständige Verbindung.' : '');
+  } catch (e) { status(e.message, true); }
+  lagenAnwenden(); formularZeigen();
+}
+async function hinzufuegen(name) {
+  let n = 1, basis = /^[A-Za-z]/.test(name) ? name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 30) : 't_' + name.slice(0, 28);
+  while (teil(basis + (n > 1 ? '_' + n : ''))) n++;
+  const t = {id: basis + (n > 1 ? '_' + n : ''), teil: name, art: 'aufbau', verbindung: null};
+  entwurf.teile.push(t);
+  await objektBauen(t);
+  waehlen(t.id); rechnen();
+  status('Jetzt „Punkt am Teil“ und „Gegenstück“ anklicken.');
+}
+$('hinzufuegen').onclick = () => { const n = $('neues-teil').value; if (n) hinzufuegen(n).catch(e => status(e.message, true)); };
+// Sensorflaeche: Unterseite ist schon der Punkt am Teil, gleich das Gegenstueck anklicken
+$('plus-sensor').onclick = async () => {
+  let n = 1;
+  while (teil('sensor' + n)) n++;
+  const belegt = entwurf.teile.filter(t => t.art === 'sensor').map(t => sensorWerte(t).din);
+  let din = SENSOR_STANDARD.din;
+  while (belegt.includes(din)) din++;
+  const t = {id: 'sensor' + n, art: 'sensor', sensor: {name: 'Platz ' + n, din, art: 'schliesser', groesse_mm: [...SENSOR_STANDARD.groesse_mm]},
+             verbindung: {punkt: {art: 'flaeche', id: 'unten'}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+  entwurf.teile.push(t);
+  await objektBauen(t);
+  waehlen(t.id); await rechnen(); wahlStarten('ziel');
+  status('Jetzt das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).');
+};
+// Farbsensor: Farben wie FARBNAMEN in baukasten.py / FARBEN im Controller
+const FARBNAMEN = {rot: '#d91f1a', gruen: '#26b33a', blau: '#1a66e6', gelb: '#f2d91a', weiss: '#f2f2f2', schwarz: '#141414'};
+const FARBTEXT = {rot: 'rot', gruen: 'grün', blau: 'blau', gelb: 'gelb', weiss: 'weiß', schwarz: 'schwarz'};
+function sensorFormular(t) {
+  const s = sensorWerte(t), farbe = s.typ === 'farbe', bits = s.ausgabe === 'bits';
+  $('s-name').value = s.name || t.id; $('s-typ').value = s.typ || 'belegt';
+  $('s-din').value = s.din; $('s-art').value = s.art || 'schliesser';
+  [$('s-lx').value, $('s-ly').value, $('s-lz').value] = s.groesse_mm;
+  $('s-belegt').hidden = farbe; $('s-farbe').hidden = !farbe;
+  $('s-ausgabe').value = bits ? 'bits' : 'je_farbe'; $('s-bits-felder').hidden = !bits;
+  $('s-bitdin').value = s.din; $('s-bits').value = s.bits || 2;
+  const wert = n => { const f = (s.farben || []).find(f => f.farbe === n); return f ? (bits ? f.code : f.din) : ''; };
+  $('s-farben').innerHTML = Object.keys(FARBNAMEN).map(n => '<label class="zeile hilfe"><span style="display:inline-block;width:14px;height:14px;'
+    + 'border-radius:3px;border:1px solid #888;background:' + FARBNAMEN[n] + '"></span><span style="width:60px">' + FARBTEXT[n] + '</span>'
+    + '<input type="number" data-farbe="' + n + '" min="' + (bits ? 1 : 1) + '" max="' + (bits ? 2 ** (s.bits || 2) - 1 : 64) + '" style="width:64px" value="' + wert(n) + '">'
+    + '</label>').join('');
+  $('s-farb-hilfe').textContent = bits
+    ? 'Zahl je Farbe (1 bis ' + (2 ** (s.bits || 2) - 1) + '), leer = Farbe wird nicht gemeldet. Keine Farbe = 0. Bit 0 liegt auf DIn' + s.din + '.'
+    : 'DIn je Farbe, leer = Farbe wird nicht gemeldet. Erkannt wird die Farbe des Werkstücks (nächste dieser Farben).';
+}
+function sensorAusFormular() {
+  const t = teil(auswahl); if (!t || t.art !== 'sensor') return;
+  const groesse = ['s-lx', 's-ly', 's-lz'].map(i => Math.min(1000, Math.max(1, Number($(i).value) || 1)));
+  const neueGroesse = groesse.join(':') !== sensorWerte(t).groesse_mm.join(':');
+  const ganz = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
+  const vorher = sensorWerte(t);
+  t.sensor = {name: $('s-name').value.trim().slice(0, 24) || t.id, typ: $('s-typ').value, groesse_mm: groesse};
+  if (t.sensor.typ === 'farbe') {
+    const bits = $('s-ausgabe').value === 'bits';
+    Object.assign(t.sensor, {ausgabe: bits ? 'bits' : 'je_farbe', din: ganz(bits ? $('s-bitdin').value : vorher.din, 1, 64)});
+    if (bits) t.sensor.bits = ganz($('s-bits').value, 1, 4);
+    t.sensor.farben = [...document.querySelectorAll('#s-farben input[data-farbe]')].filter(e => e.value !== '' && Number(e.value) > 0)
+      .map(e => bits ? {farbe: e.dataset.farbe, code: ganz(e.value, 1, 2 ** t.sensor.bits - 1)} : {farbe: e.dataset.farbe, din: ganz(e.value, 1, 64)});
+    if (vorher.typ !== 'farbe' || (vorher.ausgabe || 'je_farbe') !== t.sensor.ausgabe) t.sensor.farben = [];   // Zahlen hiessen vorher etwas anderes
+  } else Object.assign(t.sensor, {din: ganz($('s-din').value, 1, 64), art: $('s-art').value});
+  if (t.sensor.typ === 'farbe' && !t.sensor.farben.length) {   // frisch umgestellt: rot und blau vorschlagen
+    const d = t.sensor.din;
+    t.sensor.farben = t.sensor.ausgabe === 'bits' ? [{farbe: 'rot', code: 1}, {farbe: 'blau', code: 2}]
+                                                  : [{farbe: 'rot', din: d}, {farbe: 'blau', din: Math.min(64, d + 1)}];
+  }
+  sensorFormular(t);
+  if (neueGroesse) {   // neues Netz, Lage neu rechnen
+    objektEntfernen(t.id);
+    objektBauen(t).then(() => { waehlen(t.id); rechnen(); });
+  } else { listeZeigen(); rechnenSpaeter(); }   // rechnen prueft auch die Sensor-Einstellungen
+}
+['s-name', 's-typ', 's-din', 's-art', 's-ausgabe', 's-bitdin', 's-bits', 's-lx', 's-ly', 's-lz']
+  .forEach(i => $(i).addEventListener('change', sensorAusFormular));
+$('s-farben').addEventListener('change', sensorAusFormular);
+$('titel').oninput = () => { entwurf.titel = $('titel').value; };
+for (const [k, id] of Object.entries(TISCH_FELDER)) $(id).addEventListener('change', () => {
+  const v = Number($(id).value);
+  if (!Number.isFinite(v)) return;
+  entwurf.tisch = Object.assign(tischWerte(), {[k]: v});
+  status(''); tischZeichnen(); rechnen();
+});
+$('t-ahinten').innerHTML = ANSCHLAEGE_HINTEN.map(a => '<option value="' + a.mm + '">' + a.mm + ' mm (Fuß auf Nut ' + a.nut + ')</option>').join('');
+$('t-alinks').min = ALINKS[0]; $('t-alinks').max = ALINKS[1];
+$('t-alinks-grenzen').textContent = ALINKS[0] + ' bis ' + ALINKS[1];
+$('t-art').onchange = () => {
+  const alt = tischWerte();
+  entwurf.tisch = $('t-art').value === 'profil'
+    ? Object.assign({}, PROFIL_STANDARD, {art: 'profil', drehung_grad: alt.drehung_grad})
+    : Object.assign({}, TISCH_STANDARD, {drehung_grad: alt.drehung_grad});
+  status(''); tischZeichnen(); uebersicht(); rechnen();
+};
+$('greifer').onchange = () => { entwurf.greifer = $('greifer').value; };
+
+// ---------- Taster und Leuchtmelder (wie ea_werte in baukasten.py) ----------
+const EA_MAX = 8;
+function ea() { entwurf.ea = entwurf.ea || {taster: [], leuchten: []}; entwurf.ea.taster ||= []; entwurf.ea.leuchten ||= []; return entwurf.ea; }
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function wahlliste(feld, werte, aktuell) {
+  return '<select data-feld="' + feld + '">' + werte.map(([w, t]) => '<option value="' + w + '"' + (w === aktuell ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>';
+}
+function eaZeigen() {
+  const e = ea();
+  $('ea-taster').innerHTML = e.taster.map((t, i) => '<div class="ea-zeile" data-art="taster" data-i="' + i + '">'
+    + '<input data-feld="name" maxlength="24" placeholder="Beschriftung" value="' + esc(t.name) + '">'
+    + '<input data-feld="din" type="number" min="1" max="64" title="Eingang (DIn) wie in iRC" value="' + (t.din ?? '') + '">'
+    + '<button data-weg title="entfernen">×</button>'
+    + '<div class="zweite">DIn · ' + wahlliste('art', [['schliesser', 'Schließer'], ['oeffner', 'Öffner']], t.art || 'schliesser')
+    + wahlliste('modus', [['tastend', 'tastend'], ['rastend', 'rastend']], t.modus || 'tastend') + '</div></div>').join('');
+  $('ea-leuchten').innerHTML = e.leuchten.map((l, i) => '<div class="ea-zeile" data-art="leuchten" data-i="' + i + '">'
+    + '<input data-feld="name" maxlength="24" placeholder="Beschriftung" value="' + esc(l.name) + '">'
+    + '<input data-feld="dout" type="number" min="1" max="64" title="Ausgang (DOut) wie in iRC" value="' + (l.dout ?? '') + '">'
+    + '<button data-weg title="entfernen">×</button>'
+    + '<div class="zweite">DOut · ' + wahlliste('farbe', [['gruen', 'grün'], ['gelb', 'gelb'], ['rot', 'rot'], ['blau', 'blau'], ['weiss', 'weiß']], l.farbe || 'gruen')
+    + '<label><input type="checkbox" data-feld="umkehren"' + (l.umkehren ? ' checked' : '') + '> umgekehrt</label></div></div>').join('');
+  $('ea-kurz').textContent = e.taster.length || e.leuchten.length ? e.taster.length + ' Taster, ' + e.leuchten.length + ' Leuchten' : '';
+  $('ea-plus-taster').disabled = e.taster.length >= EA_MAX; $('ea-plus-leuchte').disabled = e.leuchten.length >= EA_MAX;
+}
+function eaAendern(ev) {
+  const zeile = ev.target.closest('.ea-zeile'); if (!zeile) return;
+  const liste = ea()[zeile.dataset.art], i = Number(zeile.dataset.i);
+  if (ev.type === 'click' && ev.target.matches('[data-weg]')) { liste.splice(i, 1); eaZeigen(); return; }
+  const f = ev.target.dataset.feld; if (!f || ev.type === 'click') return;
+  liste[i][f] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.type === 'number' ? Number(ev.target.value) || null : ev.target.value;
+}
+['ea-taster', 'ea-leuchten'].forEach(id => { $(id).addEventListener('change', eaAendern); $(id).addEventListener('click', eaAendern); });
+function freieNummer(liste, feld) { let n = 21; while (liste.some(e => e[feld] === n)) n++; return n; }
+$('ea-plus-taster').onclick = () => { const l = ea().taster; l.push({name: 'Taster ' + (l.length + 1), din: freieNummer(l, 'din'), art: 'schliesser', modus: 'tastend'}); eaZeigen(); };
+$('ea-plus-leuchte').onclick = () => { const l = ea().leuchten; l.push({name: 'Leuchte ' + (l.length + 1), dout: freieNummer(l, 'dout'), farbe: 'gruen', umkehren: false}); eaZeigen(); };
+$('speichern').onclick = async () => {
+  if (!entwurf.teile.length) { status('Die Welt hat noch keine Teile.', true); return; }
+  if (rechenbar().length !== entwurf.teile.length) { status('Erst alle Teile verbinden (in der Liste „offen“).', true); return; }
+  if (!weltName) {
+    const n = $('weltdatei').value.trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,50}$/.test(n)) { status('Bitte oben einen Dateinamen eingeben (a-z, 0-9, - und _).', true); $('weltdatei').focus(); return; }
+    weltName = n;
+  }
+  $('speichern').disabled = true; status('speichere, Webots rechnet das Vorschaubild ...');
+  try {
+    entwurf.titel = $('titel').value.trim() || weltName;
+    entwurf.tisch = tischWerte();
+    await api('baukasten_speichern', {welt: weltName, entwurf});
+    status('Gespeichert als ' + weltName + '. Freigeben für Schüler im Lehrerbereich unter „Welten“.');
+    await weltenListe(weltName); $('datei-feld').hidden = true;
+  } catch (e) { status(e.message, true); if (!(await holen('/api/lehrer/entwuerfe')).includes(weltName)) weltName = null; }
+  finally { $('speichern').disabled = false; }
+};
+
+// ---------- Laden ----------
+async function weltenListe(gewaehlt) {
+  const namen = await holen('/api/lehrer/entwuerfe');
+  $('welt').innerHTML = '<option value="">(neue Welt)</option>' + namen.map(n => '<option' + (n === gewaehlt ? ' selected' : '') + '>' + n + '</option>').join('');
+}
+async function weltLaden(name) {
+  for (const id of Object.keys(objekte)) objektEntfernen(id);
+  lagen = {}; auswahl = null; weltName = name || null;
+  entwurf = name ? await holen('/api/lehrer/baukasten?welt=' + encodeURIComponent(name)) : {titel: '', aufgabe: '', greifer: 'egp25', teile: []};
+  $('titel').value = entwurf.titel || ''; $('greifer').value = entwurf.greifer || 'egp25';
+  $('datei-feld').hidden = !!weltName; $('weltdatei').value = '';
+  tischZeichnen(); uebersicht(); eaZeigen();
+  for (const t of entwurf.teile) await objektBauen(t);
+  formularZeigen(); await rechnen();
+}
+$('welt').onchange = () => weltLaden($('welt').value).catch(e => status(e.message, true));
+$('neu').onclick = () => { $('welt').value = ''; weltLaden(null); };
+
+async function start() {
+  groesse();
+  const teile = await holen('/api/lehrer/teile');
+  $('neues-teil').innerHTML = teile.map(t => '<option value="' + t.name + '">' + t.name + ' (' + t.groesse_mm.map(v => Math.round(v)).join('×') + ' mm)</option>').join('')
+    || '<option value="">(Teilebibliothek leer)</option>';
+  const welt = new URLSearchParams(location.search).get('welt');
+  await platteLaden();
+  await weltenListe(welt);
+  await weltLaden(welt);
+}
+renderer.setAnimationLoop(() => { steuerung.update(); renderer.render(szene, kamera); });
+start().catch(e => status('Start fehlgeschlagen: ' + e.message, true));
+</script>
+</body></html>

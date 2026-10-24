@@ -1,0 +1,106 @@
+#VRML_SIM R2025a utf8
+# Robotertisch mit igus ReBeL als digitaler Zwilling zu iRC (CRI).
+# Koordinaten: Weltursprung = Roboterfuss, Tischplatte bei z = 0.
+# Damit gilt: Position in Webots (Meter) = iRC-Koordinate (mm) / 1000.
+
+EXTERNPROTO "../protos/IgusRebel6DOF.proto"
+EXTERNPROTO "../protos/Werkstueck.proto"
+EXTERNPROTO "../protos/Aufbau.proto"
+
+WorldInfo {
+  info [
+    "igus ReBeL am Robotertisch, gesteuert aus igus Robot Control ueber CRI"
+  ]
+  title "ReBeL Robotertisch mit Robi2-Backen"
+  basicTimeStep 16
+  contactProperties [
+    ContactProperties {
+      coulombFriction [ 0.8 ]
+    }
+  ]
+}
+Viewpoint {
+  orientation -0.1973 0.0842 0.9767 2.3518
+  position 1.35 -1.15 0.75
+}
+Background {
+  skyColor [ 0.86 0.89 0.93 ]
+}
+DirectionalLight {
+  direction -0.4 0.5 -1
+  intensity 2.2
+  castShadows FALSE
+}
+DirectionalLight {
+  direction 0.6 -0.3 -0.5
+  intensity 0.8
+}
+DEF BODEN Solid {
+  translation 0 0 -0.75
+  children [
+    Shape {
+      appearance PBRAppearance { baseColor 0.55 0.56 0.58 roughness 1 metalness 0 }
+      geometry Plane { size 8 8 }
+    }
+  ]
+  name "boden"
+  boundingObject Plane { size 8 8 }
+}
+DEF TISCH Solid {
+  translation 0.25 0 0
+  children [
+    Pose {
+      translation 0 0 -0.015
+      children [
+        Shape {
+          appearance PBRAppearance { baseColor 0.82 0.80 0.76 roughness 0.8 metalness 0 }
+          geometry Box { size 1.0 0.8 0.03 }
+        }
+      ]
+    }
+    DEF BEIN Pose {
+      translation 0.45 0.35 -0.39
+      children [
+        Shape {
+          appearance DEF ALU PBRAppearance { baseColor 0.7 0.72 0.75 roughness 0.4 metalness 0.8 }
+          geometry Box { size 0.05 0.05 0.72 }
+        }
+      ]
+    }
+    Pose { translation -0.45 0.35 -0.39 children [ Shape { appearance USE ALU geometry Box { size 0.05 0.05 0.72 } } ] }
+    Pose { translation 0.45 -0.35 -0.39 children [ Shape { appearance USE ALU geometry Box { size 0.05 0.05 0.72 } } ] }
+    Pose { translation -0.45 -0.35 -0.39 children [ Shape { appearance USE ALU geometry Box { size 0.05 0.05 0.72 } } ] }
+  ]
+  name "tisch"
+  boundingObject Pose {
+    translation 0 0 -0.015
+    children [ Box { size 1.0 0.8 0.03 } ]
+  }
+}
+DEF ABLAGE_MARKE Pose {
+  translation 0.175 0.3031 0.0005
+  children [
+    Shape {
+      appearance PBRAppearance { baseColor 0.2 0.7 0.3 roughness 0.9 metalness 0 }
+      geometry Plane { size 0.06 0.06 }
+    }
+  ]
+}
+DEF GREIF_MARKE Pose {
+  translation 0.35 0 0.0005
+  children [
+    Shape {
+      appearance PBRAppearance { baseColor 0.9 0.8 0.2 roughness 0.9 metalness 0 }
+      geometry Plane { size 0.06 0.06 }
+    }
+  ]
+}
+DEF REBEL IgusRebel6DOF {
+  greifer "egp25_robi2"
+}
+DEF STIFT Werkstueck {
+  translation 0.35 0 0.01
+  name "stift"
+  size 0.008 0.008 0.02
+  farbe 0.1 0.4 0.9
+}

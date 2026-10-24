@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Admin-Konto fuer den Lehrerbereich anlegen oder dessen Passwort neu setzen (fragt nach dem Passwort).
+#
+#   rebel-sim-admin <name>        z.B. rebel-sim-admin mueller
+#   rebel-sim-admin --liste       vorhandene Konten zeigen
+set -euo pipefail
+BASIS="${BASIS:-/opt/rebel-sim}"
+if [ "${1:-}" = "--liste" ]; then
+  exec sudo -u rebelsim python3 "$BASIS/tools/lehrer.py" liste
+fi
+exec sudo -u rebelsim python3 "$BASIS/tools/lehrer.py" admin "${1:?Aufruf: rebel-sim-admin <name>}"

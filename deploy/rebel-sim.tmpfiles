@@ -1,0 +1,3 @@
+# /etc/tmpfiles.d/rebel-sim.conf - Statusordner nach jedem Neustart anlegen
+d /run/rebel-sim 0755 rebelsim rebelsim -
+d /var/log/rebel-sim 0755 rebelsim rebelsim -

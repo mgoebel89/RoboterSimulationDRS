@@ -1,0 +1,14 @@
+{
+  "_hilfe": "Backensatz fuer den Schunk EGP 25. Beschreibt die LINKE Backe (x < 0); die rechte ist dieselbe, um 180 Grad um die Werkzeugachse gedreht. Werkzeugsystem wie in iRC: Ursprung Flansch, z zeigt vom Flansch weg, Backen bewegen sich entlang x. TCP, Greifbreite und Greifbereich werden aus der Geometrie berechnet.",
+  "name": "robi2",
+  "titel": "Robi2-Backen",
+  "basis": "egp25",
+  "netz": "backe.obj",
+  "_achsen": "Wohin die Achsen der Backe (CAD) im Werkzeugsystem zeigen: duennes Ende nach unten (CAD -x = Werkzeug +z), ebene Greifflaeche zur Mitte (CAD -z = Werkzeug +x)",
+  "achsen": {"x": "-z", "y": "-y", "z": "-x"},
+  "_verschiebung_mm": "PROVISORISCH bis zum Messen am echten Greifer: Greifflaeche bei offenem Greifer auf der Innenseite des Backentraegers (x = -5,5 mm), dickes Ende buendig mit der Oberkante des Backentraegers (z = 80,7 mm)",
+  "verschiebung_mm": [-5.5, 0.0, 105.7],
+  "_tcp": "spitze = mittig zwischen den Backen auf Hoehe der Backenspitze",
+  "tcp": "spitze",
+  "provisorisch": true
+}

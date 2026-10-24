@@ -1,2 +1,19 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Skripte und Dateien, die im Linux-Container laufen: immer LF, auch beim Auschecken unter Windows
+*.sh text eol=lf
+*.py text eol=lf
+*.service text eol=lf
+*.tmpfiles text eol=lf
+*.proto text eol=lf
+*.wbt text eol=lf
+install/rebel-sim-* text eol=lf
+# Windows-Skript
+*.ps1 text eol=crlf
+# CAD und Bilder unveraendert lassen
+*.step binary
+*.stp binary
+*.obj binary
+*.zip binary
+*.jpg binary
+*.png binary

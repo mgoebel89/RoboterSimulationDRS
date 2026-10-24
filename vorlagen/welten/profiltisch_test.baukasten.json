@@ -1,0 +1,66 @@
+{
+  "titel": "Profiltisch Test",
+  "greifer": "egp25",
+  "tisch": {
+    "art": "profil",
+    "anschlag_hinten_mm": 210,
+    "anschlag_links_mm": 310,
+    "drehung_grad": 0,
+    "nut": 8,
+    "laenge_mm": 800,
+    "breite_mm": 800,
+    "hoehe_mm": -2,
+    "roboter_von_hinten_mm": 300,
+    "roboter_von_links_mm": 400
+  },
+  "teile": [
+    {
+      "id": "magazin",
+      "teil": "magazin4x4",
+      "art": "aufbau",
+      "verbindung": {
+        "punkt": {
+          "art": "flaeche",
+          "id": 6
+        },
+        "an": "tisch",
+        "an_punkt": {
+          "art": "kante",
+          "id": "nut-10",
+          "flaeche": "oben"
+        },
+        "versatz_mm": [
+          0,
+          240,
+          0
+        ],
+        "drehung_grad": 0,
+        "umdrehen": false
+      }
+    },
+    {
+      "id": "target1",
+      "teil": "target",
+      "art": "werkstueck",
+      "verbindung": {
+        "punkt": {
+          "art": "flaeche",
+          "id": 3
+        },
+        "an": "magazin",
+        "an_punkt": {
+          "art": "flaeche",
+          "id": 10
+        },
+        "versatz_mm": [
+          0,
+          0,
+          0
+        ],
+        "drehung_grad": 0,
+        "umdrehen": false
+      }
+    }
+  ],
+  "besitzer": "lehrer:vorlage"
+}

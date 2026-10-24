@@ -1,0 +1,120 @@
+#VRML_SIM R2025a utf8
+# Erzeugt vom Weltbaukasten (tools/baukasten.py) aus profiltisch_test.baukasten.json - Aenderungen bitte im Baukasten.
+# Koordinaten: Weltursprung = Roboterfuss, Tischplatte bei z = 0, Position in m = iRC-Koordinate in mm / 1000.
+
+EXTERNPROTO "../protos/IgusRebel6DOF.proto"
+EXTERNPROTO "../protos/Werkstueck.proto"
+EXTERNPROTO "../protos/Aufbau.proto"
+
+WorldInfo {
+  info [ "" ]
+  title "Profiltisch Test"
+  basicTimeStep 16
+  contactProperties [ ContactProperties { coulombFriction [ 0.8 ] } ]
+}
+Viewpoint {
+  orientation -0.2175 0.0929 0.9716 2.3546
+  position 1.200 -1.150 0.748
+}
+Background { skyColor [ 0.86 0.89 0.93 ] }
+DirectionalLight { direction -0.4 0.5 -1 intensity 2.2 castShadows FALSE }
+DirectionalLight { direction 0.6 -0.3 -0.5 intensity 0.8 }
+DEF BODEN Solid {
+  translation 0 0 -0.7520
+  children [ Shape { appearance PBRAppearance { baseColor 0.55 0.56 0.58 roughness 1 metalness 0 } geometry Plane { size 8 8 } } ]
+  name "boden"
+  boundingObject Plane { size 8 8 }
+}
+DEF TISCH Solid {
+  translation 0.1000 0.0000 -0.0020
+  rotation 0 0 1 -0.000000
+  children [
+    Pose { translation -0.3925 0.0000 -0.0200 children [ Shape { appearance DEF ALU PBRAppearance { baseColor 0.78 0.8 0.83 roughness 0.45 metalness 0.35 } geometry Box { size 0.0150 0.7200 0.0400 } } ] }
+    Pose { translation -0.3600 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.3200 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.2800 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.2400 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.2000 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.1600 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.1200 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.0800 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation -0.0400 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.0000 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.0400 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.0800 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.1200 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.1600 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.2000 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.2400 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.2800 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.3200 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.3600 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0300 0.7200 0.0400 } } ] }
+    Pose { translation 0.3925 0.0000 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.0150 0.7200 0.0400 } } ] }
+    Pose { translation -0.3800 0.0000 -0.0260 children [ Shape { appearance DEF NUTGRUND PBRAppearance { baseColor 0.2 0.21 0.23 roughness 0.8 metalness 0 } geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.3400 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.3000 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.2600 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.2200 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.1800 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.1400 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.1000 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.0600 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation -0.0200 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.0200 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.0600 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.1000 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.1400 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.1800 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.2200 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.2600 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.3000 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.3400 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.3800 0.0000 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.0100 0.7200 0.0280 } } ] }
+    Pose { translation 0.0000 0.3675 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.7200 0.0150 0.0400 } } ] }
+    Pose { translation 0.0000 0.3925 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.7200 0.0150 0.0400 } } ] }
+    Pose { translation 0.0000 0.3800 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.7200 0.0100 0.0280 } } ] }
+    Pose { translation 0.0000 -0.3925 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.7200 0.0150 0.0400 } } ] }
+    Pose { translation 0.0000 -0.3675 -0.0200 children [ Shape { appearance USE ALU geometry Box { size 0.7200 0.0150 0.0400 } } ] }
+    Pose { translation 0.0000 -0.3800 -0.0260 children [ Shape { appearance USE NUTGRUND geometry Box { size 0.7200 0.0100 0.0280 } } ] }
+    Pose { translation 0.3800 0.3800 -0.3750 children [ Shape { appearance USE ALU geometry Box { size 0.0400 0.0400 0.7500 } } ] }
+    Pose { translation 0.3800 0.3800 0.0020 children [ Shape { appearance DEF KAPPE PBRAppearance { baseColor 0.08 0.08 0.09 roughness 0.7 metalness 0 } geometry Box { size 0.0400 0.0400 0.0040 } } ] }
+    Pose { translation 0.3800 -0.3800 -0.3750 children [ Shape { appearance USE ALU geometry Box { size 0.0400 0.0400 0.7500 } } ] }
+    Pose { translation 0.3800 -0.3800 0.0020 children [ Shape { appearance USE KAPPE geometry Box { size 0.0400 0.0400 0.0040 } } ] }
+    Pose { translation -0.3800 0.3800 -0.3750 children [ Shape { appearance USE ALU geometry Box { size 0.0400 0.0400 0.7500 } } ] }
+    Pose { translation -0.3800 0.3800 0.0020 children [ Shape { appearance USE KAPPE geometry Box { size 0.0400 0.0400 0.0040 } } ] }
+    Pose { translation -0.3800 -0.3800 -0.3750 children [ Shape { appearance USE ALU geometry Box { size 0.0400 0.0400 0.7500 } } ] }
+    Pose { translation -0.3800 -0.3800 0.0020 children [ Shape { appearance USE KAPPE geometry Box { size 0.0400 0.0400 0.0040 } } ] }
+  ]
+  name "tisch"
+  boundingObject Pose { translation 0 0 -0.0200 children [ Box { size 0.8000 0.8000 0.0400 } ] }
+}
+DEF BASISPLATTE Aufbau {
+  rotation 0.707107 -0.707107 0.000000 3.141593
+  name "basisplatte"
+  modell [ "../teile/basisplatte/netz.obj" ]
+  skalierung 0.001
+  farbe 0.32 0.34 0.37
+}
+DEF REBEL IgusRebel6DOF {
+  greifer "egp25"
+}
+Aufbau {
+  translation 0.350000 0.030000 0.003000
+  rotation 0.000000 0.000000 -1.000000 1.570796
+  name "magazin"
+  modell [ "../teile/magazin4x4/netz.obj" ]
+  skalierung 0.001
+  farbe 0.700 0.700 0.720
+}
+Werkstueck {
+  translation 0.350000 -0.030000 0.023000
+  rotation 0.000000 0.000000 -1.000000 1.570796
+  name "target1"
+  form "modell"
+  modell [ "../teile/target/netz.obj" ]
+  skalierung 0.001
+  modellversatz -0.000000 -0.000000 -0.020000
+  size 0.040000 0.039987 0.040000
+  farbe 0.100 0.400 0.900
+  masse 0.0474
+}

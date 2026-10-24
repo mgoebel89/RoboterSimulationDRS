@@ -1,0 +1,9 @@
+{
+  "_hilfe": "Einstellungen des Simulationsverwalters. Wird von install.sh nach /etc/rebel-sim/verwalter.json kopiert, falls dort noch keine liegt. Aenderungen gelten sofort.",
+  "max_simulationen": 10,
+  "leerlauf_minuten": 15,
+  "_ende_uhrzeiten": "Zu diesen Uhrzeiten werden alle Simulationen beendet (Stundenende), z.B. [\"09:30\", \"11:15\", \"13:00\"]",
+  "ende_uhrzeiten": [],
+  "_lehrer_ips": "Diese PCs sehen die Lehrer-Uebersicht und alle Simulationen (bis zum Lehrerbereich mit PIN)",
+  "lehrer_ips": []
+}

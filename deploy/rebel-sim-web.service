@@ -1,0 +1,16 @@
+# Uebersichtsseite fuer die Klasse: http://<container>:8080
+[Unit]
+Description=ReBeL-Simulation Uebersichtsseite
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=rebelsim
+Group=rebelsim
+Environment=UEBERSICHT_PORT=8080
+ExecStart=/usr/bin/python3 /opt/rebel-sim/tools/uebersicht.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,5 @@
+{
+  "titel": "Stift umsetzen mit Robi2-Backen (Test)",
+  "aufgabe": "Setze den blauen Stift von der gelben Marke (X 350, Y 0 mm) auf die grüne Marke (X 175, Y 303 mm).\n\nGreifer: Schunk EGP 25 mit den Robi2-Backen. In iRC das Werkzeug \"EGP-25 Robi2-Backen\" wählen (TCP an der Backenspitze, 130,7 mm).\nDOut32 EIN (DOut31 AUS) schließt, DOut31 EIN (DOut32 AUS) öffnet.\n\nDie Lage der Backen ist noch provisorisch und wird am echten Greifer nachgemessen.",
+  "sichtbar": false
+}

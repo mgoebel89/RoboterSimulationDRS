@@ -1,0 +1,23 @@
+# Eine Webots-Instanz je Platz, z.B. rebel-sim@07
+# Einstellungen in /etc/rebel-sim/07.env:
+#   IRC_HOST=R212-PC07          (Pflicht: Schueler-PC mit iRC)
+#   IRC_PORTS=3921,3920         (optional)
+#   WELT=rebel_tisch.wbt        (optional, Datei in /opt/rebel-sim/worlds)
+#   STREAM_PORT=1247            (optional, Standard 1240 + Platz)
+[Unit]
+Description=ReBeL-Simulation Platz %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=rebelsim
+Group=rebelsim
+EnvironmentFile=/etc/rebel-sim/%i.env
+ExecStart=/opt/rebel-sim/tools/start_platz.sh %i ${IRC_HOST}
+Restart=always
+RestartSec=5
+# Webots braucht beim Start etwas laenger
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

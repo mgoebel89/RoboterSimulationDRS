@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Update der ReBeL-Simulation: neuesten Stand aus dem Repository holen und einrichten.
+# Startet eine Kopie des Installationsskripts, weil das Original beim Update selbst ersetzt wird.
+set -euo pipefail
+BASIS="${BASIS:-/opt/rebel-sim}"
+kopie=$(mktemp /tmp/rebel-sim-install.XXXXXX.sh)
+trap 'rm -f "$kopie"' EXIT
+git config --global --add safe.directory "$BASIS"
+git -C "$BASIS" fetch -q origin "${ZWEIG:-main}"
+git -C "$BASIS" show "origin/${ZWEIG:-main}:install/rebel-sim-install.sh" > "$kopie"
+BASIS="$BASIS" bash "$kopie"

@@ -1,0 +1,17 @@
+# Aus der iRC-Installation erzeugt (igus-Daten, duerfen nicht weitergegeben werden)
+protos/meshes/
+protos/IgusRebel6DOF.proto
+werkzeuge/
+
+# Laufzeitdaten im Container: Welten der Lehrkraefte, Teilebibliothek (abgeleitete Netze, u.a.
+# Schunk/CADENAS CC BY-ND), werden aus vorlagen/ und cad/ angelegt und bei Updates nie ueberschrieben
+worlds/
+teile/
+
+# Python, Logs, Status
+__pycache__/
+*.pyc
+controllers/irc_bridge/*.log
+controllers/irc_bridge/platz-*
+controllers/irc_bridge/irc_bridge.json
+tools/log*.txt

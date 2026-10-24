@@ -1,0 +1,4 @@
+<App name="WebotsSim" label="Webots-Simulation (Taster und Sensoren)" vendor="DRS Neuwied" version="1.0.0">
+	<!-- Ohne Programm: die Webots-Simulation im Container verbindet sich von aussen (gRPC, Port 5000)
+	     und setzt in der iRC-Simulation digitale Eingaenge (Taster, Belegt- und Farbsensoren). -->
+</App>

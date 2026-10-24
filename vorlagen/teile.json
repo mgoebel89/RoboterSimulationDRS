@@ -1,0 +1,10 @@
+{
+  "_hilfe": "Teilebibliothek fuer den Weltbaukasten. Fehlt teile/<name> im Container, liest install/rebel-sim-install.sh die STEP-Datei mit gmsh ein (tools/teile.py). Weitere Teile laden Lehrkraefte im Lehrerbereich unter 'Teile' hoch.",
+  "teile": [
+    {"name": "basisplatte", "step": "cad/tisch/basisplatte.step"},
+    {"name": "robi2_backe", "step": "cad/backen/robi2/robi2_greiferbacke.step"},
+    {"name": "schunk_egp25", "step": "cad/greifer/egp25/schunk_egp25_n_s_b.stp", "koerper": "1,3,8"},
+    {"name": "target", "step": "cad/teile/target.step"},
+    {"name": "magazin4x4", "step": "cad/teile/magazin4x4.step"}
+  ]
+}

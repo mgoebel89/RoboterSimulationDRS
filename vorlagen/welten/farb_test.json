@@ -1,0 +1,38 @@
+{
+  "titel": "Farbsensor-Test",
+  "aufgabe": "",
+  "sichtbar": true,
+  "ea": {
+    "taster": [],
+    "leuchten": [],
+    "sensoren": [
+      {
+        "name": "Platz 1",
+        "groesse_mm": [
+          40.0,
+          40.0,
+          20.0
+        ],
+        "typ": "farbe",
+        "ausgabe": "bits",
+        "din": 30,
+        "bits": 2,
+        "farben": [
+          {
+            "farbe": "rot",
+            "code": 1
+          },
+          {
+            "farbe": "blau",
+            "code": 2
+          },
+          {
+            "farbe": "gelb",
+            "code": 3
+          }
+        ],
+        "knoten": "SENSOR_0"
+      }
+    ]
+  }
+}

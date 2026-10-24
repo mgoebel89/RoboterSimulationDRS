@@ -1,0 +1,15 @@
+{
+  "_hilfe": "Einstellungen fuer die Kopplung iRC -> Webots. Erklaerung siehe README.md, Abschnitt Einstellungen.",
+  "host": "127.0.0.1",
+  "ports": [3921, 3920],
+  "nur_mithoeren": true,
+  "gelenkwerte": "current",
+  "achsrichtung": [1, 1, 1, 1, 1, 1],
+  "achsversatz_grad": [0, 0, 0, 0, 0, 0],
+  "greifer_dout_oeffnen": 31,
+  "greifer_dout_schliessen": 32,
+  "greifer_dout_vakuum": 32,
+  "dout_versatz": -1,
+  "greifer_invertiert": false,
+  "abweichung_warnen_ab_mm": 5.0
+}

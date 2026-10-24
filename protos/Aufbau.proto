@@ -1,0 +1,28 @@
+#VRML_SIM R2025a utf8
+# Feststehender Aufbau auf dem Robotertisch aus einer eigenen CAD-Datei (STL/OBJ),
+# z.B. Magazin, Vorrichtung, Foerderband-Attrappe. Bewegt sich nicht, Werkstuecke
+# koennen darauf abgelegt werden und der Roboter kann damit kollidieren.
+# "skalierung" 0.001 fuer Dateien in Millimetern (FreeCAD, Fusion, Onshape).
+
+PROTO Aufbau [
+  field SFVec3f    translation 0 0 0
+  field SFRotation rotation    0 0 1 0
+  field SFString   name        "aufbau"
+  field MFString   modell      []
+  field SFFloat    skalierung  0.001
+  field SFColor    farbe       0.7 0.7 0.72
+]
+{
+  Solid {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+    children [
+      DEF FORM Transform {
+        scale %<= fields.skalierung.value >% %<= fields.skalierung.value >% %<= fields.skalierung.value >%
+        children [ Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.6 metalness 0.1 } geometry Mesh { url IS modell } } ]
+      }
+    ]
+    boundingObject USE FORM
+  }
+}
