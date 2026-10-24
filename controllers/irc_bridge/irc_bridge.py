@@ -149,6 +149,17 @@ def m_vec(a, v):
     return [a[r * 3] * v[0] + a[r * 3 + 1] * v[1] + a[r * 3 + 2] * v[2] for r in range(3)]
 
 
+def achse_winkel_zu_matrix(aa):
+    """Webots-Rotation (Achse x y z, Winkel) -> 3x3 zeilenweise wie getOrientation."""
+    x, y, z, w = aa
+    laenge = math.sqrt(x * x + y * y + z * z) or 1.0
+    x, y, z = x / laenge, y / laenge, z / laenge
+    c, s, t = math.cos(w), math.sin(w), 1 - math.cos(w)
+    return [t * x * x + c, t * x * y - s * z, t * x * z + s * y,
+            t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+            t * x * z - s * y, t * y * z + s * x, t * z * z + c]
+
+
 def m_to_axis_angle(m):
     cos_a = max(-1.0, min(1.0, (m[0] + m[4] + m[8] - 1.0) / 2.0))
     angle = math.acos(cos_a)
@@ -266,6 +277,9 @@ class Greifer:
         self.halte_rot = None
         self.meldung = ""
         self.auflagen = lambda: []   # Netze der Aufbauten (setzt main), fuer _auf_auflage
+        self.abgelegt = {}           # Node-Id -> (Node, Lage, Drehung): auf Aufbauten abgelegt, festgehalten
+        self.tischhoehe = lambda: None   # Oberkante des Tischs in m (setzt main)
+        self.ablage = "auflage"          # oder "liegen_lassen" (Einstellung der Welt, siehe _auf_auflage)
 
     def beschreibung(self):
         if self.bit_auf is not None:
@@ -462,6 +476,7 @@ class Greifer:
                 self.led.set(1)
             return
         _d, node, lokal, r_rel, e = bestes
+        self.abgelegt.pop(node.getId(), None)   # war auf einem Aufbau festgehalten
         self.teil = node
         self.teil_name = node.getField("name").getSFString()
         self.halte_pos = lokal
@@ -478,44 +493,104 @@ class Greifer:
         if self.led:
             self.led.set(1)
 
+    def _festlegen(self, node, hub):
+        feld = node.getField("translation")
+        t = feld.getSFVec3f()
+        lage = [t[0], t[1], t[2] + hub]
+        feld.setSFVec3f(lage)
+        self.abgelegt[node.getId()] = (node, lage, node.getField("rotation").getSFRotation())
+
     def _auf_auflage(self, node):
-        """Steckt das Teil beim Loslassen in einem Aufbau, auf dessen Auflage heben (siehe auflage_hoehe).
-        Gezaehlt wird nur der Kern der Grundflaeche (60 %), damit Taschenwaende am Rand nicht tragen.
-        Rueckgabe: wie weit es angehoben wurde (m)."""
-        netze = self.auflagen()
-        if not netze:
-            return 0.0
+        """Wird ein Teil ueber einem Aufbau (Magazin, Vorrichtung) losgelassen, kommt es direkt auf dessen Auflage
+        und bleibt dort liegen (festhalten), bis es wieder gegriffen wird. Grund: Das Werkstueck kollidiert als
+        Quader, der Aufbau als Netz; faellt ein Quader in eine Tasche, wirft ihn die Netz-Kollision weg (durch
+        duenne Boeden nach unten, zur Seite). Gezaehlt wird nur der Kern der Grundflaeche (60 %), damit
+        Taschenwaende am Rand nicht tragen. Ueber dem Tisch bleibt die Physik zustaendig.
+        Ablage "liegen_lassen" (Einstellung der Welt, nachsichtig): Steckt das Teil beim Loslassen zu tief im
+        Aufbau oder im Tisch, bleibt es genau dort (festgehalten), wo der Greifer es loslaesst.
+        Rueckgabe (Verschiebung nach oben in m oder None ohne Auflage darunter, steckt-Tiefe in m oder 0)."""
         p, r = node.getPosition(), node.getOrientation()
         size = node.getField("size").getSFVec3f()
         halb = [0.5 * sum(abs(r[k * 3 + j]) * size[j] for j in range(3)) for k in range(3)]
-        auflage = auflage_hoehe(netze, p, [0.6 * halb[0], 0.6 * halb[1]], p[2])
+        netze = self.auflagen()
+        auflage = auflage_hoehe(netze, p, [0.6 * halb[0], 0.6 * halb[1]], p[2]) if netze else None
         unten = p[2] - halb[2]
-        if auflage is None or auflage <= unten + 0.0002:
-            return 0.0
-        hub = auflage - unten + 0.0005
-        feld = node.getField("translation")
-        t = feld.getSFVec3f()
-        feld.setSFVec3f([t[0], t[1], t[2] + hub])
-        return hub
+        if self.ablage == "liegen_lassen":
+            tisch = self.tischhoehe()
+            stuetze = max((h for h in (auflage, tisch) if h is not None), default=None)
+            if stuetze is not None and unten < stuetze - 0.0005:
+                self._festlegen(node, 0.0)
+                return 0.0, stuetze - unten
+        if auflage is None:
+            return None, 0.0
+        hub = auflage + 0.0002 - unten
+        self._festlegen(node, hub)
+        return hub, 0.0
+
+    def startlagen_festhalten(self, teile, startlagen):
+        """Teile, deren Startlage auf einem Aufbau liegt (z.B. in einer Magazintasche), von Anfang an festhalten.
+        Sonst sinken sie schon vor dem ersten Griff ein (der Quader rutscht durch den Netz-Boden, beim Target im
+        Magazin 5 mm), werden eingesunken gegriffen und gelten beim Ablegen am selben Punkt als zu tief.
+        Erst nach dem ersten Simulationsschritt aufrufen (dann kennt Webots die Lage der Aufbauten)."""
+        netze = self.auflagen()
+        anzahl = 0
+        for node in teile if netze else []:
+            lage = startlagen.get(node.getId())
+            if lage is None or node is self.teil or node.getId() in self.abgelegt:
+                continue
+            p, drehung = list(lage[0]), list(lage[1])
+            r = achse_winkel_zu_matrix(drehung)
+            size = node.getField("size").getSFVec3f()
+            halb = [0.5 * sum(abs(r[k * 3 + j]) * size[j] for j in range(3)) for k in range(3)]
+            auflage = auflage_hoehe(netze, p, [0.6 * halb[0], 0.6 * halb[1]], p[2])
+            if auflage is not None and abs(p[2] - halb[2] - auflage) <= 0.002:
+                self.abgelegt[node.getId()] = (node, p, drehung)
+                anzahl += 1
+        return anzahl
+
+    def festhalten(self):
+        """Auf Aufbauten abgelegte Teile ruhig halten (in jedem Schritt; siehe _auf_auflage)."""
+        for node, lage, drehung in self.abgelegt.values():
+            if max(abs(a - b) for a, b in zip(node.getPosition(), lage)) > 0.0001:
+                node.getField("translation").setSFVec3f(list(lage))
+                node.getField("rotation").setSFRotation(list(drehung))
+            node.resetPhysics()
 
     def _loslassen(self):
+        steckt = 0.0
         if self.teil is not None:
-            angehoben = self._auf_auflage(self.teil)
+            hub, steckt = self._auf_auflage(self.teil)
             self.teil.resetPhysics()
             x, y, z = self.teil.getPosition()
+            if steckt:
+                zusatz = (" - steckt %.1f mm zu tief, bleibt dort liegen (Ablage nachsichtig; am echten Roboter: "
+                          "Ablegepunkt in iRC hoeher setzen)" % (steckt * 1000))
+            elif hub is None:
+                zusatz = ""
+            elif hub > 0.001:
+                zusatz = " - lag %.1f mm zu tief im Aufbau, auf die Auflage gehoben (Ablegepunkt in iRC hoeher setzen)" % (hub * 1000)
+            else:
+                zusatz = " - liegt auf dem Aufbau" + (" (%.1f mm abgesenkt)" % (-hub * 1000) if hub < -0.001 else "")
             print("losgelassen: %s bei x=%.0f y=%.0f z=%.0f mm%s" % (
-                self.teil_name, x * 1000, y * 1000, (z + angehoben) * 1000,
-                " - lag %.1f mm zu tief im Aufbau, auf die Auflage gehoben (Ablegepunkt in iRC hoeher setzen)"
-                % (angehoben * 1000) if angehoben else ""))
+                self.teil_name, x * 1000, y * 1000, (z + (hub or 0.0)) * 1000, zusatz))
+        # zu tief abgelegt: im 3D-Bild stehen lassen, bis wieder gegriffen wird (am echten Roboter ein Crash)
+        if self.teil is not None and steckt:
+            self.meldung = "offen - %s %.1f mm zu tief abgelegt (bleibt liegen)" % (self.teil_name, steckt * 1000)
+        elif self.teil is not None and hub is not None and hub > 0.001:
+            self.meldung = "offen - %s lag %.1f mm zu tief im Aufbau: Ablegepunkt in iRC hoeher setzen" % (
+                self.teil_name, hub * 1000)
+        else:
+            self.meldung = "Greifer offen"
         self.teil = None
-        self.meldung = "Greifer offen"
         for f in self.fingers:
             f.setPosition(0.0)
         if self.led:
             self.led.set(0)
 
     def fallen_lassen(self, meldung):
-        """Gegriffenes Teil freigeben, ohne die Backen zu bewegen (die steuert weiter iRC)."""
+        """Gegriffenes Teil freigeben, ohne die Backen zu bewegen (die steuert weiter iRC).
+        Auch festgehaltene Teile sind danach wieder frei (z.B. vor "Teile zurueck")."""
+        self.abgelegt = {}
         self.teil = None
         self.teil_name = ""
         self.meldung = meldung
@@ -547,6 +622,34 @@ def aufbauten(robot):
     kinder = robot.getRoot().getField("children")
     return [kinder.getMFNode(i) for i in range(kinder.getCount())
             if kinder.getMFNode(i).getTypeName() == "Aufbau"]
+
+
+def tisch_oberkante(robot):
+    """Oberkante des Tischs (DEF TISCH, Kollision Box oder Pose mit Box) in m, sonst None."""
+    node = robot.getFromDef("TISCH")
+    if node is None:
+        return None
+    try:
+        form = node.getField("boundingObject").getSFNode()
+        dz = 0.0
+        if form is not None and form.getTypeName() == "Pose":
+            dz = form.getField("translation").getSFVec3f()[2]
+            form = form.getField("children").getMFNode(0)
+        if form is not None and form.getTypeName() == "Box":
+            return node.getPosition()[2] + dz + form.getField("size").getSFVec3f()[2] / 2
+    except (AttributeError, IndexError, TypeError):
+        pass
+    return None
+
+
+def welt_ablage(welt_pfad):
+    """Einstellung "ablage" der Welt (worlds/<welt>.json): "auflage" (realistisch) oder "liegen_lassen"."""
+    try:
+        with open(os.path.splitext(welt_pfad)[0] + ".json", encoding="utf-8") as f:
+            wert = json.load(f).get("ablage")
+    except (OSError, ValueError, AttributeError):
+        return "auflage"
+    return wert if wert in ("auflage", "liegen_lassen") else "auflage"
 
 
 def aufbau_welt_netz(robot, node):
@@ -608,7 +711,9 @@ def teile_zuruecksetzen(teile, startlagen, greifer):
         node.getField("translation").setSFVec3f(list(lage[0]))
         node.getField("rotation").setSFRotation(list(lage[1]))
         node.resetPhysics()
-    print("Teile auf Startlage gesetzt (%d Werkstuecke)" % len(teile))
+    fest = greifer.startlagen_festhalten(teile, startlagen)
+    print("Teile auf Startlage gesetzt (%d Werkstuecke%s)" % (len(teile), ", %d davon auf Aufbauten festgehalten" % fest
+                                                              if fest else ""))
 
 
 def main():
@@ -634,7 +739,16 @@ def main():
     tcp = me.getFromProtoDef("TCP")
     greifer = Greifer(robot, cfg, tcp)
     greifer.auflagen = lambda: [n for n in (aufbau_welt_netz(robot, a) for a in aufbauten(robot)) if n]
-    print("Greifer: %s" % greifer.beschreibung())
+    tisch_oben = {}   # erst beim ersten Loslassen lesen (vor dem ersten Schritt kennt Webots die Lage noch nicht)
+
+    def tischhoehe():
+        if "z" not in tisch_oben:
+            tisch_oben["z"] = tisch_oberkante(robot)
+        return tisch_oben["z"]
+    greifer.tischhoehe = tischhoehe
+    greifer.ablage = welt_ablage(robot.getWorldPath())
+    print("Greifer: %s%s" % (greifer.beschreibung(),
+                             ", zu tief abgelegte Teile bleiben liegen" if greifer.ablage == "liegen_lassen" else ""))
 
     cri = CriClient(cfg["host"], cfg["ports"], passive=cfg["nur_mithoeren"], log=print).start()
 
@@ -669,11 +783,17 @@ def main():
     abgleich_bezug = "Flansch"
     letzte_warnung = 0.0
     letzter_statusbericht = 0.0
+    erster_schritt = True
 
     # tools/vorschau.sh: nach kurzer Zeit ein Bild der Szene speichern und Webots beenden
     vorschau = os.environ.get("VORSCHAU_BILD")
 
     while robot.step(step) != -1:
+        if erster_schritt:   # jetzt kennt Webots die Lage der Aufbauten: Teile darauf ab Start festhalten
+            erster_schritt = False
+            fest = greifer.startlagen_festhalten(teile, startlagen)
+            if fest:
+                print("%d Werkstueck(e) liegen auf Aufbauten und werden dort festgehalten, bis sie gegriffen werden" % fest)
         if vorschau and robot.getTime() > 1.0:
             robot.exportImage(vorschau, 90)
             print("Vorschaubild gespeichert: %s" % vorschau)
@@ -757,6 +877,7 @@ def main():
                              st.cart[0], st.cart[1], st.cart[2], abweichung_mm))
 
         greifer.mitfuehren()
+        greifer.festhalten()
         if jetzt - hilfe_zeit >= 0.25:   # 4x pro Sekunde reicht (Netzschnitt bei CAD-Werkstuecken)
             hilfe_zeit = jetzt
             hilfe = greifer.einteach_hilfe(teile, me.getOrientation())

@@ -322,13 +322,20 @@ def _welt_basis(welten_dir, datei):
     return os.path.join(welten_dir, datei[:-4])
 
 
-def speichere_weltangaben(welten_dir, datei, titel, aufgabe, sichtbar):
+ABLAGE = ("auflage", "liegen_lassen")   # zu tief abgelegte Teile: auf die Auflage (realistisch) oder liegen lassen
+
+
+def speichere_weltangaben(welten_dir, datei, titel, aufgabe, sichtbar, ablage=None):
     basis = _welt_basis(welten_dir, datei)
     titel, aufgabe = str(titel or "").strip(), str(aufgabe or "").strip()
     if len(titel) > 100 or len(aufgabe) > 5000:
         raise LehrerFehler("Titel hoechstens 100, Aufgabe hoechstens 5000 Zeichen.")
+    if ablage is not None and ablage not in ABLAGE:
+        raise LehrerFehler("Ablage: 'auflage' oder 'liegen_lassen'.")
     angaben = _lies_json(basis + ".json")   # unbekannte Schluessel bleiben erhalten
     angaben.update({"titel": titel, "aufgabe": aufgabe, "sichtbar": bool(sichtbar)})
+    if ablage is not None:
+        angaben["ablage"] = ablage
     schreibe_json(basis + ".json", angaben)
     return angaben
 

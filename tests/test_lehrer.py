@@ -298,6 +298,14 @@ class TestLehrerSeiten(Grundlage):
                                                                    "aufgabe": "A", "sichtbar": True})[0], 200)
         welten = {w["datei"]: w for w in self.anfrage("GET", "/api/lehrer/welten")[1]}
         self.assertTrue(welten["geheim.wbt"]["sichtbar"])
+        self.assertEqual(welten["geheim.wbt"]["ablage"], "auflage")   # Standard: realistisch
+        neu = {"datei": "geheim.wbt", "titel": "Jetzt offen", "aufgabe": "A", "sichtbar": True, "ablage": "liegen_lassen"}
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/welt", neu)[0], 200)
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/welt", dict(neu, ablage="egal"))[0], 409)
+        # Freigabe-Knopf schickt keine Ablage: Einstellung bleibt
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/welt", dict(neu, ablage=None, sichtbar=True))[0], 200)
+        self.assertEqual({w["datei"]: w for w in self.anfrage("GET", "/api/lehrer/welten")[1]}["geheim.wbt"]["ablage"],
+                         "liegen_lassen")
         self.assertEqual(self.v.starten("pc-a", "geheim.wbt"), "01")   # jetzt fuer Schueler startbar
         self.assertEqual(self.anfrage("POST", "/api/lehrer/upload?datei=tisch.wbt", roh=PDF, typ="application/pdf"),
                          (200, {"ok": True, "datei": "tisch.pdf"}))

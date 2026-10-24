@@ -95,6 +95,7 @@ def lese_welten(welten_dir):
             "bild": bild,
             "pdf": basis + ".pdf" if basis + ".pdf" in namen else None,
             "ea": angaben.get("ea") if isinstance(angaben.get("ea"), dict) else {},
+            "ablage": angaben.get("ablage") if angaben.get("ablage") in ("auflage", "liegen_lassen") else "auflage",
         })
     return welten
 

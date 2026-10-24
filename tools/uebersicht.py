@@ -383,6 +383,11 @@ input[type=file] { display:none; }
   <div class="zeile"><label>Greifer <select id="wd-greifer"></select></label>
     <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="wd-sichtbar"> für Schüler freigegeben</label></div>
   <div class="hilfe" id="wd-greifer-hilfe"></div>
+  <label>Zu tief abgelegte Werkstücke <select id="wd-ablage">
+    <option value="auflage">auf die Auflage legen (realistisch: der Griff danach auf derselben Höhe scheitert)</option>
+    <option value="liegen_lassen">liegen lassen, wo der Greifer sie loslässt (nachsichtig)</option></select></label>
+  <div class="hilfe">Gilt, wenn iRC ein Teil unterhalb des Magazinbodens oder der Tischplatte ablegt – am echten Roboter
+    ein Crash. Hinweis erscheint so oder so oben links im 3D-Bild. Wirkt nach „Neu starten“ der Simulation.</div>
   <div class="zeile">
     <div><div class="vorschau" id="wd-bild">kein Vorschaubild</div>
       <div class="knopfreihe"><button id="wd-vorschau">Vorschaubild erzeugen</button>
@@ -610,7 +615,7 @@ function weltDialog(w, nurDateien) {
   weltOffen = w.datei;
   if (!nurDateien) {   // beim Neuladen nach Bild/PDF die Eingaben nicht ueberschreiben
     $('wd-titel').textContent = w.titel; $('wd-name').value = w.titel; $('wd-aufgabe').value = w.aufgabe || '';
-    $('wd-sichtbar').checked = w.sichtbar;
+    $('wd-sichtbar').checked = w.sichtbar; $('wd-ablage').value = w.ablage || 'auflage';
     const namen = greiferNamen.map(g => g.name);
     $('wd-greifer').innerHTML = (w.greifer && !namen.includes(w.greifer) ? '<option value="' + esc(w.greifer) + '">' + esc(w.greifer) + ' (unbekannt)</option>' : '')
       + greiferNamen.map(g => '<option value="' + esc(g.name) + '">' + esc(g.titel) + '</option>').join('');
@@ -644,6 +649,7 @@ $('welt-dialog').addEventListener('click', ev => { if (ev.target === $('welt-dia
 $('wd-speichern').onclick = async () => {
   const w = weltListe.find(w => w.datei === weltOffen);
   await api('welt', {datei: w.datei, titel: $('wd-name').value, aufgabe: $('wd-aufgabe').value, sichtbar: $('wd-sichtbar').checked,
+                     ablage: $('wd-ablage').value,
                      greifer: $('wd-greifer').disabled ? undefined : $('wd-greifer').value});
   melden('Gespeichert.'); weltDialogZu(); welten();
 };
@@ -2092,8 +2098,10 @@ class Handler(BaseHTTPRequestHandler):
         elif aktion == "welt":
             datei, greifer = daten.get("datei"), daten.get("greifer")
             w = lehrer.speichere_weltangaben(WELTEN_DIR, datei, daten.get("titel"),
-                                             daten.get("aufgabe"), daten.get("sichtbar"))
-            protokoll = "Welt %s gespeichert (%s)" % (datei, "freigegeben" if w["sichtbar"] else "gesperrt")
+                                             daten.get("aufgabe"), daten.get("sichtbar"), daten.get("ablage"))
+            protokoll = "Welt %s gespeichert (%s%s)" % (datei, "freigegeben" if w["sichtbar"] else "gesperrt",
+                                                        ", zu tief abgelegte Teile bleiben liegen"
+                                                        if w.get("ablage") == "liegen_lassen" else "")
             if greifer and greifer != lehrer.welt_greifer(WELTEN_DIR, datei):
                 lehrer.setze_greifer(WELTEN_DIR, datei, greifer, greifer_liste())
                 protokoll += ", Greifer %s" % greifer

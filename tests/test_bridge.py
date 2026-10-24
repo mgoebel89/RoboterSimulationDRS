@@ -241,11 +241,70 @@ class TestGreifer(unittest.TestCase):
         target = _Teil("target", (0.35, 0.0, 0.018), (0.04, 0.04, 0.04))
         self.greifer.teil, self.greifer.teil_name = target, "target"
         self.greifer._loslassen()
-        self.assertAlmostEqual(target.pos[2], 0.0235)   # Unterkante 0,5 mm ueber dem Taschenboden
-        target.pos = [0.35, 0.0, 0.030]                 # zu hoch abgelegt: faellt selbst, bleibt
+        self.assertAlmostEqual(target.pos[2], 0.0232)   # Unterkante 0,2 mm ueber dem Taschenboden
+        # die Physik wirft den Quader aus der Netz-Tasche: festhalten legt ihn zurueck
+        target.pos = [0.354, 0.0, 0.006]
+        self.greifer.festhalten()
+        self.assertEqual([round(v, 4) for v in target.pos], [0.35, 0.0, 0.0232])
+        # wieder gegriffen: nicht mehr festgehalten
+        self.tcp.setze(kin.ik_nach_unten(0.35, 0.0, 0.0232, kin.TCP_EGP25))
+        self.greifer.zu = False
+        self.greifer.masse["spalt"] = 0.03
+        self.greifer.schalte(True, [target])
+        self.assertIs(self.greifer.teil, target)
+        self.assertEqual(self.greifer.abgelegt, {})
+        # zu hoch ueber dem Aufbau losgelassen: kommt auf die Auflage, statt hineinzufallen
+        target.pos = [0.35, 0.0, 0.030]
+        self.greifer._loslassen()
+        self.assertAlmostEqual(target.pos[2], 0.0232)
+        # ueber dem Tisch (kein Aufbau darunter): Physik wie bisher, nichts festgehalten
+        self.greifer.fallen_lassen("Teile zurueck")
+        target.pos = [0.10, 0.0, 0.030]
         self.greifer.teil = target
         self.greifer._loslassen()
-        self.assertAlmostEqual(target.pos[2], 0.030)
+        self.assertEqual((target.pos[2], self.greifer.abgelegt), (0.030, {}))
+
+    def test_teile_im_magazin_sinken_nach_dem_start_nicht_ein(self):
+        boden = ([[0.30, -0.05, 0.003], [0.40, -0.05, 0.003], [0.40, 0.05, 0.003], [0.30, 0.05, 0.003]], [(0, 1, 2), (0, 2, 3)],
+                 [0.30, -0.05, 0.40, 0.05])
+        g = self.greifer
+        g.auflagen = lambda: [boden]
+        im_magazin = _Teil("target", (0.35, 0.0, 0.023), (0.04, 0.04, 0.04))   # Unterkante auf dem Taschenboden
+        auf_tisch = _Teil("stift", (0.10, 0.0, 0.01), (0.008, 0.008, 0.02))
+        darueber = _Teil("schwebt", (0.35, 0.02, 0.050), (0.01, 0.01, 0.01))
+        teile = [im_magazin, auf_tisch, darueber]
+        startlagen = {}
+        irc_bridge.merke_startlagen(teile, startlagen)
+        self.assertEqual(g.startlagen_festhalten(teile, startlagen), 1)
+        im_magazin.pos = [0.35, 0.0, 0.018]   # die Netz-Kollision laesst es 5 mm einsinken ...
+        g.festhalten()
+        self.assertEqual([round(v, 4) for v in im_magazin.pos], [0.35, 0.0, 0.023])   # ... festhalten nicht
+        # Teile zurueck: wieder auf Startlage und wieder festgehalten
+        g.fallen_lassen("x")
+        irc_bridge.teile_zuruecksetzen(teile, startlagen, g)
+        self.assertEqual(list(g.abgelegt), [im_magazin.getId()])
+        # gedreht (90 Grad um z, wie in profiltisch_test) gilt dasselbe
+        self.assertEqual([round(v, 6) for v in irc_bridge.achse_winkel_zu_matrix([0, 0, -1, math.pi / 2])],
+                         [0, 1, 0, -1, 0, 0, 0, 0, 1])
+
+    def test_nachsichtige_ablage_laesst_zu_tief_abgelegte_teile_liegen(self):
+        boden = ([[0.30, -0.05, 0.003], [0.40, -0.05, 0.003], [0.40, 0.05, 0.003], [0.30, 0.05, 0.003]], [(0, 1, 2), (0, 2, 3)],
+                 [0.30, -0.05, 0.40, 0.05])
+        g = self.greifer
+        g.auflagen, g.tischhoehe, g.ablage = (lambda: [boden]), (lambda: 0.0), "liegen_lassen"
+        for start, erwartet, fest in (((0.35, 0.0, 0.018), 0.018, True),    # 5 mm unter dem Taschenboden: bleibt so
+                                      ((0.35, 0.0, 0.030), 0.0232, True),   # zu hoch ueber dem Magazin: auf die Auflage
+                                      ((0.10, 0.0, 0.015), 0.015, True),    # 5 mm in der Tischplatte: bleibt so
+                                      ((0.10, 0.0, 0.030), 0.030, False)):  # ueber dem Tisch: Physik
+            g.fallen_lassen("neu")
+            target = _Teil("target", start, (0.04, 0.04, 0.04))
+            g.teil, g.teil_name = target, "target"
+            g._loslassen()
+            self.assertAlmostEqual(target.pos[2], erwartet, msg=start)
+            self.assertEqual(bool(g.abgelegt), fest, start)
+            if start[2] in (0.018, 0.015):
+                self.assertIn("zu tief abgelegt (bleibt liegen)", g.meldung)
+        self.assertEqual(irc_bridge.welt_ablage(os.path.join(ROOT, "worlds", "gibtsnicht.wbt")), "auflage")
 
     def test_daneben_gegriffen(self):
         self.tcp.setze(kin.ik_nach_unten(0.35, 0.08, 0.0155, kin.TCP_EGP25))

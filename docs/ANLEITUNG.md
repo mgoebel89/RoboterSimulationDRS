@@ -167,6 +167,9 @@ Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehre
   die Welt: Titel, Aufgabentext, **Greifer**, Freigabe, Vorschaubild, Arbeitsblatt (PDF) und **Welt löschen**.
   Gelöschte Welten kommen in den Papierkorb `worlds/papierkorb/` (zum Zurückholen die Dateien wieder nach `worlds/`
   kopieren). Eine Welt, die gerade läuft, lässt sich nicht löschen.
+- **Zu tief abgelegte Werkstücke** (je Welt im Dialog): „auf die Auflage legen“ (realistisch, Standard) oder
+  „liegen lassen, wo der Greifer sie loslässt“ (nachsichtig). Werkstücke auf Aufbauten (z.B. im Magazin) liegen in
+  beiden Fällen ruhig, auch schon ab dem Start; die Physik lässt sie nicht mehr durch den Taschenboden sinken.
 - **Aufgabentext in Markdown:** `# Überschrift`, `**fett**`, `*kursiv*`, `- Aufzählung`, `1. Schritt`, `> Hinweis`,
   `` `DOut31` ``, `[Link](https://…)`, Tabellen mit `| A | B |` und darunter `|---|---|`. „Vorschau“ im Dialog zeigt
   den Text so, wie ihn die Schüler sehen. Alte Texte ohne Markdown bleiben unverändert lesbar.
