@@ -38,13 +38,14 @@ else
   apt-mark hold webots >/dev/null   # Welten und Browser-Ansicht sind auf R2025a abgestimmt
 fi
 
-schritt "Programm aus $REPO ($ZWEIG)"
 id rebelsim >/dev/null 2>&1 || useradd -m -s /bin/bash rebelsim
 if [ -d "$BASIS/.git" ]; then
   git config --global --add safe.directory "$BASIS"
+  schritt "Programm aktualisieren von $(git -C "$BASIS" remote get-url origin) ($ZWEIG)"
   git -C "$BASIS" fetch -q origin "$ZWEIG"
   git -C "$BASIS" reset -q --hard "origin/$ZWEIG"   # nur Programmdateien; Welten, Teile usw. sind nicht im Repository
 elif [ -d "$BASIS" ]; then
+  schritt "Programm aus $REPO ($ZWEIG)"
   # Umstellung einer Installation ohne Git: Programm neu holen, Laufzeitdaten uebernehmen
   alt="$BASIS.vor-git-$(date +%Y%m%d-%H%M%S)"
   gelb "Vorhandene Installation ohne Git wird nach $alt verschoben, Laufzeitdaten werden uebernommen."
@@ -55,6 +56,7 @@ elif [ -d "$BASIS" ]; then
   done
   [ -f "$alt/protos/IgusRebel6DOF.proto" ] && cp -p "$alt/protos/IgusRebel6DOF.proto" "$BASIS/protos/"
 else
+  schritt "Programm aus $REPO ($ZWEIG)"
   git clone -q --branch "$ZWEIG" "$REPO" "$BASIS"
 fi
 git config --global --add safe.directory "$BASIS"
