@@ -1,6 +1,6 @@
 # Packt die iRC-Dateien, aus denen der Container das Robotermodell erzeugt, in irc-daten.zip:
 #   Data\Robots\REBEL\REBEL-6DOF-03\*        (Kinematik und Glieder des igus ReBeL)
-#   Data\Tools\Schunk_EGP25_*                (Greifer Schunk EGP 25 mit ReBeL-Adapterplatte)
+#   Data\Tools\Schunk_EGP40_*, Schunk_EGP25_* (Greifer Schunk EGP 40 und 25 mit ReBeL-Adapterplatte)
 # Die Dateien gehoeren igus und duerfen nicht weitergegeben werden; deshalb stehen sie nicht im
 # Repository, sondern kommen nur in den eigenen Container (rebel-sim-modell /root/irc-daten.zip).
 #
@@ -22,6 +22,7 @@ New-Item -ItemType Directory -Force (Join-Path $tmp "Data\Robots\REBEL\REBEL-6DO
 New-Item -ItemType Directory -Force (Join-Path $tmp "Data\Tools") | Out-Null
 Copy-Item (Join-Path $roboter "*") (Join-Path $tmp "Data\Robots\REBEL\REBEL-6DOF-03")
 Copy-Item (Join-Path $werkzeuge "Schunk_EGP25_*") (Join-Path $tmp "Data\Tools")
+Copy-Item (Join-Path $werkzeuge "Schunk_EGP40_*") (Join-Path $tmp "Data\Tools")
 if (Test-Path $Ziel) { Remove-Item $Ziel }
 Compress-Archive -Path (Join-Path $tmp "Data") -DestinationPath $Ziel
 Remove-Item -Recurse -Force $tmp

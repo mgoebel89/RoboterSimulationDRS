@@ -351,6 +351,83 @@ class TestSensorflaechen(unittest.TestCase):
         self.assertEqual(w["sensoren"], [{"name": "A", "din": 25, "art": "schliesser", "typ": "belegt", "knoten": "SENSOR_0"}])
 
 
+# Schunk EGP 25 wie in teile/schunk_egp25 (Schunk-CAD, mm): M4-Gewinde quer durch die Backentraeger
+SCHUNK = {"box": [-13.5, 0, -9, 13.5, 80.9, 9], "flaechen": [], "kanten": [], "ecken": [], "bohrungen": [
+    {"id": 454, "innen": True, "durchmesser": 3.24, "enden": [[-9.5, 76.9, 0], [-5.5, 76.9, 0]]},
+    {"id": 331, "innen": True, "durchmesser": 3.24, "enden": [[9.5, 76.9, 0], [5.5, 76.9, 0]]}]}
+# Schunk EGP 40 wie in teile/schunk_egp40: je Traeger zwei M3 in Greifrichtung (Traeger x 8..14 offen)
+SCHUNK40 = {"box": [-20, 0, -13, 20.8, 100.65, 13], "flaechen": [], "kanten": [], "ecken": [], "bohrungen": [
+    {"id": 620, "innen": True, "durchmesser": 2.5, "enden": [[-8.0, 97.65, -5.0], [-14.0, 97.65, -5.0]]},
+    {"id": 511, "innen": True, "durchmesser": 2.5, "enden": [[8.0, 97.65, 5.0], [14.0, 97.65, 5.0]]}]}
+TEILE_B = dict(TEILE, schunk_egp25=SCHUNK, schunk_egp40=SCHUNK40)
+
+
+class TestBackensatz(unittest.TestCase):
+    def entwurf(self, bohrung, ende=0, versatz=(0, 0, 0)):
+        return {"titel": "Test-Backen", "art": "backensatz", "teile": [
+            {"id": "backe", "teil": "vorrichtung", "art": "aufbau", "verbindung": {
+                "punkt": {"art": "bohrung", "id": 31, "ende": 0}, "an": "greifer",
+                "an_punkt": {"art": "bohrung", "id": bohrung, "ende": ende}, "versatz_mm": list(versatz)}}]}
+
+    def satz(self, e):
+        return bk.backensatz_aus_entwurf("test", e, bk.loese(e, TEILE_B.__getitem__), TEILE_B.__getitem__)
+
+    def test_greifer_im_werkzeugsystem(self):
+        # M4 des linken Traegers: Schunk (-9.5, 76.9, 0) -> Werkzeug (-9.5, 0, 84.9), wie im iRC-Modell
+        self.assertEqual([round(v, 6) for v in bk.GREIFER_LAGE.punkt([-9.5, 76.9, 0])], [-9.5, 0, 84.9])
+
+    def test_backe_am_linken_traeger(self):
+        e = self.entwurf(454)
+        lage = bk.loese(e, TEILE_B.__getitem__)["backe"]
+        # Bohrungsende der Backe (Mitte der Unterseite) liegt auf dem aeusseren Gewindeende, Achse entlang x
+        self.assertEqual([round(v, 6) for v in lage.punkt([20, 20, 0])], [-9.5, 0, 84.9])
+        self.assertEqual([round(v, 6) for v in lage.punkt([20, 20, 40])], [-49.5, 0, 84.9])
+        s = self.satz(e)
+        self.assertEqual((s["name"], s["basis"], s["teil"], s["tcp"], s["titel"]), ("test", "egp25", "vorrichtung", "spitze", "Test-Backen"))
+        self.assertEqual([round(v, 4) for v in bk.Lage(s["matrix"], s["verschiebung_mm"]).punkt([20, 20, 40])], [-49.5, 0, 84.9])
+
+    def test_egp40_tcp_und_hub(self):
+        e = dict(self.entwurf(620, ende=1), basis="egp40", tcp={"bezug": "mitte", "mm": -2.5}, hub_mm="5,5".replace(",", "."))
+        lage = bk.loese(e, TEILE_B.__getitem__)["backe"]
+        # Bohrungsende der Backe auf dem aeusseren Ende des M3 am linken Traeger: Schunk (-14, 97.65, -5) -> (-14, 5, 105.65)
+        self.assertEqual([round(v, 6) for v in lage.punkt([20, 20, 0])], [-14.0, 5.0, 105.65])
+        s = self.satz(e)
+        self.assertEqual((s["basis"], s["tcp"], s["tcp_versatz_mm"], s["hub_mm"]), ("egp40", "mitte", -2.5, 5.5))
+        self.assertEqual(bk.tcp_werte({"tcp": {"bezug": "flansch", "mm": 131.24}}), {"tcp": 131.24, "tcp_versatz_mm": 0})
+        self.assertEqual(bk.tcp_werte({}), {"tcp": "spitze", "tcp_versatz_mm": 0})
+        for falsch in ({"bezug": "irgendwo"}, {"bezug": "flansch", "mm": 0}, {"bezug": "spitze", "mm": "viel"},
+                       {"bezug": "mitte", "mm": 500}):
+            with self.assertRaises(bk.BaukastenFehler, msg=falsch):
+                bk.tcp_werte({"tcp": falsch})
+        with self.assertRaises(bk.BaukastenFehler):
+            self.satz(dict(e, hub_mm=0))
+        with self.assertRaises(bk.BaukastenFehler):
+            bk.loese(dict(e, basis="egp64"), TEILE_B.__getitem__)
+
+    def test_backe_am_rechten_traeger_wird_zur_linken(self):
+        links, rechts = self.satz(self.entwurf(454)), self.satz(self.entwurf(331))
+        for a, b in zip(sum(links["matrix"], []) + links["verschiebung_mm"], sum(rechts["matrix"], []) + rechts["verschiebung_mm"]):
+            self.assertAlmostEqual(a, b, places=6)
+
+    def test_fehler(self):
+        e = self.entwurf(454)
+        for name in ("", "Robi", "1abc", "a" * 21, "mit-strich"):
+            with self.assertRaises(bk.BaukastenFehler, msg=name):
+                bk.backensatz_aus_entwurf(name, e, bk.loese(e, TEILE_B.__getitem__), TEILE_B.__getitem__)
+        zwei = self.entwurf(454)
+        zwei["teile"].append(dict(zwei["teile"][0], id="backe2"))
+        with self.assertRaises(bk.BaukastenFehler):
+            self.satz(zwei)
+        am_tisch = self.entwurf(454)
+        am_tisch["teile"][0]["verbindung"].update(an="tisch", an_punkt={"art": "flaeche", "id": "oben"})
+        with self.assertRaises(bk.BaukastenFehler):          # im Backensatz gibt es keinen Tisch
+            bk.loese(am_tisch, TEILE_B.__getitem__)
+        welt = self.entwurf(454)
+        del welt["art"]
+        with self.assertRaises(bk.BaukastenFehler):          # in einer Welt gibt es keinen Greifer als Bezug
+            bk.loese(welt, TEILE_B.__getitem__)
+
+
 def abstand_strecke(p, a, b):
     ab = [b[i] - a[i] for i in range(3)]
     t = max(0.0, min(1.0, sum((p[i] - a[i]) * ab[i] for i in range(3)) / sum(v * v for v in ab)))

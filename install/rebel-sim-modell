@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Robotermodell (igus ReBeL + Schunk EGP 25) aus iRC-Daten erzeugen.
+# Robotermodell (igus ReBeL + Schunk EGP 40/25) aus iRC-Daten erzeugen.
 # Die Daten stammen aus einer iRC-Installation (tools/irc_daten_export.ps1 auf einem Windows-PC)
 # und werden nicht weitergegeben; sie bleiben nur in diesem Container.
 #

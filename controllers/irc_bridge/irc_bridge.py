@@ -265,6 +265,7 @@ class Greifer:
         self.halte_pos = None
         self.halte_rot = None
         self.meldung = ""
+        self.auflagen = lambda: []   # Netze der Aufbauten (setzt main), fuer _auf_auflage
 
     def beschreibung(self):
         if self.bit_auf is not None:
@@ -477,11 +478,35 @@ class Greifer:
         if self.led:
             self.led.set(1)
 
+    def _auf_auflage(self, node):
+        """Steckt das Teil beim Loslassen in einem Aufbau, auf dessen Auflage heben (siehe auflage_hoehe).
+        Gezaehlt wird nur der Kern der Grundflaeche (60 %), damit Taschenwaende am Rand nicht tragen.
+        Rueckgabe: wie weit es angehoben wurde (m)."""
+        netze = self.auflagen()
+        if not netze:
+            return 0.0
+        p, r = node.getPosition(), node.getOrientation()
+        size = node.getField("size").getSFVec3f()
+        halb = [0.5 * sum(abs(r[k * 3 + j]) * size[j] for j in range(3)) for k in range(3)]
+        auflage = auflage_hoehe(netze, p, [0.6 * halb[0], 0.6 * halb[1]], p[2])
+        unten = p[2] - halb[2]
+        if auflage is None or auflage <= unten + 0.0002:
+            return 0.0
+        hub = auflage - unten + 0.0005
+        feld = node.getField("translation")
+        t = feld.getSFVec3f()
+        feld.setSFVec3f([t[0], t[1], t[2] + hub])
+        return hub
+
     def _loslassen(self):
         if self.teil is not None:
+            angehoben = self._auf_auflage(self.teil)
             self.teil.resetPhysics()
             x, y, z = self.teil.getPosition()
-            print("losgelassen: %s bei x=%.0f y=%.0f z=%.0f mm" % (self.teil_name, x * 1000, y * 1000, z * 1000))
+            print("losgelassen: %s bei x=%.0f y=%.0f z=%.0f mm%s" % (
+                self.teil_name, x * 1000, y * 1000, (z + angehoben) * 1000,
+                " - lag %.1f mm zu tief im Aufbau, auf die Auflage gehoben (Ablegepunkt in iRC hoeher setzen)"
+                % (angehoben * 1000) if angehoben else ""))
         self.teil = None
         self.meldung = "Greifer offen"
         for f in self.fingers:
@@ -508,6 +533,61 @@ def werkstuecke(robot):
     kinder = robot.getRoot().getField("children")
     return [kinder.getMFNode(i) for i in range(kinder.getCount())
             if kinder.getMFNode(i).getTypeName() == "Werkstueck"]
+
+
+# --- Auflage beim Loslassen: Teile, die zu tief in einem Aufbau abgelegt werden ---
+# Legt iRC ein Teil z.B. 5 mm unter dem Boden einer Magazintasche ab, steckt es beim Loslassen im
+# Aufbau. Die Physik schiebt es dann durch duenne Boeden nach UNTEN durch (Netz-Kollision), und beim
+# naechsten Griff liegt es zu tief. Deshalb wird es vorher auf die Auflage darunter gehoben.
+
+AUFBAU_NETZE = {}   # Aufbauten stehen fest: Dreiecke in Weltkoordinaten nur einmal je Node rechnen
+
+
+def aufbauten(robot):
+    kinder = robot.getRoot().getField("children")
+    return [kinder.getMFNode(i) for i in range(kinder.getCount())
+            if kinder.getMFNode(i).getTypeName() == "Aufbau"]
+
+
+def aufbau_welt_netz(robot, node):
+    """(Punkte in Welt, Dreiecke, Huellquader [xmin, ymin, xmax, ymax]) eines Aufbaus oder None."""
+    if node.getId() not in AUFBAU_NETZE:
+        netz = None
+        try:
+            url = node.getField("modell").getMFString(0)
+            skal = node.getField("skalierung").getSFFloat()
+            roh = lies_netz(os.path.join(os.path.dirname(robot.getWorldPath()), url), skal, [0.0, 0.0, 0.0])
+        except (AttributeError, IndexError, TypeError):
+            roh = None
+        if roh is not None and roh[0]:
+            p, r = node.getPosition(), node.getOrientation()
+            punkte = [add(p, m_vec(r, v)) for v in roh[0]]
+            box = [min(q[0] for q in punkte), min(q[1] for q in punkte), max(q[0] for q in punkte), max(q[1] for q in punkte)]
+            netz = (punkte, roh[1], box)
+        AUFBAU_NETZE[node.getId()] = netz
+    return AUFBAU_NETZE[node.getId()]
+
+
+def auflage_hoehe(netze, mitte, halb, z_max):
+    """Hoechste Stelle der Aufbauten unter dem Rechteck mitte +- halb (x, y in m), nur unterhalb von z_max.
+    None, wenn dort kein Aufbau ist (dann traegt der Tisch, den die Physik selbst richtig behandelt)."""
+    x0, x1, y0, y1 = mitte[0] - halb[0], mitte[0] + halb[0], mitte[1] - halb[1], mitte[1] + halb[1]
+    hoechste = None
+    for punkte, dreiecke, box in netze:
+        if box[2] < x0 or box[0] > x1 or box[3] < y0 or box[1] > y1:
+            continue
+        for a, b, c in dreiecke:
+            poly = [punkte[a], punkte[b], punkte[c]]
+            if (max(q[0] for q in poly) < x0 or min(q[0] for q in poly) > x1 or max(q[1] for q in poly) < y0
+                    or min(q[1] for q in poly) > y1 or min(q[2] for q in poly) > z_max):
+                continue
+            for achse, wert, groesser in ((0, x0, True), (0, x1, False), (1, y0, True), (1, y1, False), (2, z_max, False)):
+                poly = _abschneiden(poly, achse, wert, groesser)
+                if not poly:
+                    break
+            for q in poly:
+                hoechste = q[2] if hoechste is None else max(hoechste, q[2])
+    return hoechste
 
 
 def merke_startlagen(teile, startlagen):
@@ -553,6 +633,7 @@ def main():
     flansch = me.getFromProtoDef("FLANSCH")
     tcp = me.getFromProtoDef("TCP")
     greifer = Greifer(robot, cfg, tcp)
+    greifer.auflagen = lambda: [n for n in (aufbau_welt_netz(robot, a) for a in aufbauten(robot)) if n]
     print("Greifer: %s" % greifer.beschreibung())
 
     cri = CriClient(cfg["host"], cfg["ports"], passive=cfg["nur_mithoeren"], log=print).start()

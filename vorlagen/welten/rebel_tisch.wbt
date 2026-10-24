@@ -96,7 +96,7 @@ DEF GREIF_MARKE Pose {
   ]
 }
 DEF REBEL IgusRebel6DOF {
-  greifer "egp25"
+  greifer "egp40"
 }
 DEF STIFT Werkstueck {
   translation 0.35 0 0.01

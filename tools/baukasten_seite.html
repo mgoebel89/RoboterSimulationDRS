@@ -4,50 +4,56 @@
 <style>%%STIL%%
 html, body { height:100%; }
 body { display:flex; flex-direction:column; }
-header { flex-wrap:wrap; gap:10px; padding:10px 16px; }
-header label { display:flex; gap:6px; align-items:center; font-size:.9em; color:#cfd6e4; }
-header input, header select { font:inherit; font-size:.9em; padding:5px 7px; border-radius:6px; border:0; }
-header button, header a.knopf { font:inherit; font-size:.9em; border:0; border-radius:6px; padding:6px 11px; cursor:pointer;
-  background:#3a4256; color:#fff; text-decoration:none; }
-header button.haupt { background:var(--orange); font-weight:600; }
+header { flex-wrap:wrap; gap:10px; padding:8px 16px; }
+header label { display:flex; gap:6px; align-items:center; font-size:.9em; color:var(--leise); }
+header input, header select { font:inherit; font-size:.9em; padding:5px 7px; border-radius:3px; border:1px solid var(--grau-hell);
+  color:var(--text); background:#fff; }
+header button, header a.knopf { font:inherit; font-size:.9em; border:0; border-radius:3px; padding:7px 11px; cursor:pointer;
+  background:var(--knopf); color:var(--text); text-decoration:none; margin:0; font-weight:400; }
+header button:hover, header a.knopf:hover { background:var(--blau-hell); color:var(--blau); }
+header button.haupt { background:var(--blau); color:#fff; font-weight:700; }
+header button.haupt:hover { background:var(--blau-dunkel); color:#fff; }
 header .rechts { margin-left:auto; display:flex; gap:8px; }
 .flaeche { flex:1; min-height:0; display:grid; grid-template-columns:340px 1fr; }
-aside { overflow:auto; background:var(--bg); border-right:1px solid #d9dee6; padding:12px; display:flex;
+aside { overflow:auto; background:var(--bg); border-right:1px solid var(--linie); padding:12px; display:flex;
   flex-direction:column; gap:12px; }
 #ansicht { position:relative; min-width:0; }
 #ansicht canvas { display:block; }
-.feld { background:var(--karte); border-radius:10px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,.12);
+.feld { background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:12px; border:1px solid var(--linie);
   display:flex; flex-direction:column; gap:8px; }
-.feld h2 { margin:0; font-size:1em; }
-.feld input, .feld select { font:inherit; padding:5px 7px; border:1px solid #c6ccd6; border-radius:6px; }
-.feld button { font:inherit; font-size:.88em; border:0; border-radius:6px; padding:6px 9px; cursor:pointer;
-  background:#e6e9ef; color:var(--text); }
-.feld button.haupt { background:var(--orange); color:#fff; font-weight:600; }
-.feld button.warnen { background:var(--rot); color:#fff; }
-.feld button.an { background:#1d2330; color:#fff; }
+.feld h2 { margin:0; font-size:1em; color:var(--blau); }
+.feld input, .feld select { font:inherit; padding:5px 7px; border:1px solid var(--grau-hell); border-radius:3px; }
+.feld button { font:inherit; font-size:.88em; border:0; border-radius:3px; padding:6px 9px; cursor:pointer;
+  background:var(--knopf); color:var(--text); }
+.feld button:hover { background:var(--blau-hell); color:var(--blau); }
+.feld button.haupt { background:var(--blau); color:#fff; font-weight:700; }
+.feld button.warnen { background:var(--pink); color:#fff; }
+.feld button.an { background:var(--blau); color:#fff; }
+.feld a.knopf { font-size:.88em; border-radius:3px; padding:6px 9px; background:var(--blau); color:#fff;
+  text-decoration:none; font-weight:700; margin:0; }
 .zeile { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 .zahlen { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
 .zahlen label { display:flex; flex-direction:column; font-size:.8em; color:var(--leise); }
 .zahlen input { width:100%; }
 .liste { display:flex; flex-direction:column; gap:4px; }
 .liste div { padding:6px 8px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:6px;
-  background:#f1f3f6; font-size:.9em; }
-.liste div.an { background:#1d2330; color:#fff; }
+  background:var(--bg); font-size:.9em; }
+.liste div.an { background:var(--blau); color:#fff; } .liste div.an .hilfe { color:#dfeaf3; }
 .liste .offen { color:var(--rot); font-size:.85em; }
-.wahlpunkt { display:block; font-size:.88em; line-height:1.35; padding:5px 8px; border-radius:6px; background:#f1f3f6; flex:1; min-width:0; }
+.wahlpunkt { display:block; font-size:.88em; line-height:1.35; padding:5px 8px; border-radius:3px; background:var(--bg); flex:1; min-width:0; }
 .hilfe { font-size:.82em; color:var(--leise); }
 #status { font-size:.88em; min-height:1.2em; }
 #status.fehler { color:var(--rot); }
-#hinweis3d { position:absolute; left:12px; top:10px; background:rgba(29,35,48,.82); color:#fff; padding:7px 11px;
-  border-radius:8px; font-size:.9em; pointer-events:none; max-width:calc(100% - 200px); }
+#hinweis3d { position:absolute; left:12px; top:10px; background:rgba(26,26,26,.8); color:#fff; padding:7px 11px;
+  border-radius:var(--ecke) 0 0 0; font-size:.9em; pointer-events:none; max-width:calc(100% - 200px); }
 #kamera-knoepfe { position:absolute; right:12px; top:10px; display:flex; gap:6px; }
-#kamera-knoepfe button { font:inherit; font-size:.85em; border:0; border-radius:6px; padding:6px 10px; cursor:pointer;
-  background:rgba(29,35,48,.82); color:#fff; }
-#achsen { position:absolute; right:12px; bottom:10px; background:rgba(255,255,255,.85); padding:6px 9px;
-  border-radius:8px; font-size:.8em; pointer-events:none; }
+#kamera-knoepfe button { font:inherit; font-size:.85em; border:0; border-radius:3px; padding:6px 10px; cursor:pointer;
+  background:rgba(26,26,26,.8); color:#fff; }
+#achsen { position:absolute; right:12px; bottom:10px; background:rgba(255,255,255,.88); padding:6px 9px;
+  border-radius:var(--ecke) 0 0 0; font-size:.8em; pointer-events:none; }
 [hidden] { display:none !important; }
 .ea-liste { display:flex; flex-direction:column; gap:6px; }
-.ea-zeile { display:grid; grid-template-columns:1fr 62px auto; gap:4px; background:#f1f3f6; padding:6px; border-radius:6px; }
+.ea-zeile { display:grid; grid-template-columns:1fr 62px auto; gap:4px; background:var(--bg); padding:6px; border-radius:3px; }
 .ea-zeile input, .ea-zeile select { font-size:.85em; padding:3px 5px; min-width:0; }
 .ea-zeile .zweite { grid-column:1 / 3; display:flex; gap:4px; align-items:center; font-size:.85em; }
 .ea-zeile button { padding:2px 8px; }
@@ -60,19 +66,42 @@ details.feld[open] summary { margin-bottom:6px; }
 </script>
 </head>
 <body>
-<header><b>ReBeL</b> Baukasten
-  <label>Welt <select id="welt"></select></label>
+<header>%%MARKE%% <span id="modus-titel" class="unter">Baukasten</span>
+  <label><span id="welt-text">Welt</span> <select id="welt"></select></label>
   <button id="neu">Neue Welt</button>
   <label id="datei-feld">Dateiname <input id="weltdatei" size="16" placeholder="z.B. lf7_magazin" autocapitalize="none"></label>
   <label>Titel <input id="titel" size="28"></label>
-  <label>Greifer <select id="greifer">
+  <label id="greifer-feld">Greifer <select id="greifer">
+    <option value="egp40">EGP 40</option><option value="egp40_finger">EGP 40 mit Fingern</option>
     <option value="egp25">EGP 25</option><option value="egp25_finger">EGP 25 mit Fingern</option>
-    <option value="egp25_robi2">EGP 25 mit Robi2-Backen</option><option value="vakuum">Sauger</option>
-    <option value="kein">kein Greifer</option></select></label>
-  <span class="rechts"><button id="speichern" class="haupt">Speichern</button><a class="knopf" href="/lehrer">Lehrerbereich</a></span>
+    <option value="vakuum">Sauger</option><option value="kein">kein Greifer</option></select></label>
+  <span class="rechts"><button id="speichern" class="haupt">Speichern</button>
+    <a class="knopf" id="modus-wechsel" href="/lehrer/baukasten?modus=backen">Backensätze</a>
+    <a class="knopf" href="/lehrer">Lehrerbereich</a></span>
 </header>
 <div class="flaeche">
 <aside>
+  <div class="feld" id="backen-feld" hidden><h2>Backensatz</h2>
+    <div class="zeile"><label class="hilfe">Greifer <select id="b-basis"><option value="egp40">Schunk EGP 40</option>
+      <option value="egp25">Schunk EGP 25</option></select></label></div>
+    <div class="hilfe">Eigene Backe aus der Teilebibliothek an den Backenträger setzen, z.B. eine Bohrung der Backe auf
+      ein Gewinde des Trägers (EGP 40: zwei M3 in Greifrichtung, EGP 25: ein M4). Der Greifer steht offen im
+      Werkzeugsystem von iRC (Ursprung Flansch, Pfeil blau = z vom Flansch weg, Backen bewegen sich entlang x).
+      Eine Backe genügt: die zweite ist dieselbe, um die Werkzeugachse gedreht. Speichern erzeugt die
+      Greifer-Variante „egp40_&lt;name&gt;“ für die Welten und ein Werkzeugpaket für iRC.</div>
+    <h2>TCP</h2>
+    <div class="zeile"><select id="b-tcp-bezug"><option value="spitze">Backenspitze</option>
+      <option value="mitte">Mitte der Backe</option><option value="flansch">fester Abstand ab Flansch</option></select>
+      <label class="hilfe"><span id="b-tcp-text">Versatz (mm)</span> <input id="b-tcp-mm" type="number" step="0.5" value="0" style="width:80px"></label></div>
+    <div class="hilfe">Der TCP liegt immer mittig zwischen den Backen; verschoben wird er entlang der Werkzeugachse
+      (+ = vom Flansch weg). Im Bild: gelbes Kreuz. iRC bekommt denselben Wert im Werkzeugpaket.</div>
+    <div class="zeile"><label class="hilfe">Hub je Backe (mm) <input id="b-hub" type="number" min="0.5" max="30" step="0.5"
+      style="width:80px" placeholder="Datenblatt"></label><span class="hilfe" id="b-hub-text"></span></div>
+    <div id="b-tcp-wert" class="hilfe"></div>
+    <div id="backen-daten" class="hilfe"></div>
+    <div class="zeile"><a id="backen-paket" class="knopf" hidden>Werkzeugpaket für iRC (ZIP)</a>
+      <button id="backen-loeschen" class="warnen" hidden>Backensatz löschen</button></div>
+  </div>
   <details class="feld" id="tisch-feld"><summary><b>Tisch und Roboter</b> <span class="hilfe" id="tisch-kurz"></span></summary>
     <div class="zeile"><label class="hilfe">Tisch <select id="t-art"><option value="eben">eben, Maße frei</option>
       <option value="profil">Profiltisch 800 × 800 (Nut 10, Basisplatte)</option></select></label></div>
@@ -185,7 +214,7 @@ const ANSCHLAEGE_HINTEN = Array.from({length: PROFIL.nuten}, (_, k) => ({nut: k 
   .filter(a => a.mm >= 0 && a.mm + 2 * PLATTE.anschlag <= PROFIL.groesse);
 const RAND = PROFIL.rahmen + PROFIL.nut / 2;
 const ALINKS = [Math.ceil(RAND + PLATTE.quer - PLATTE.anschlag), Math.floor(PROFIL.groesse - RAND - PLATTE.quer - PLATTE.anschlag)];
-let entwurf = {titel: '', aufgabe: '', greifer: 'egp25', teile: []};
+let entwurf = {titel: '', aufgabe: '', greifer: 'egp40', teile: []};
 let weltName = null, auswahl = null, wahl = null;   // wahl: 'teil' | 'ziel' beim Anklicken
 let lagen = {}, teilDaten = {}, objekte = {};
 
@@ -291,7 +320,7 @@ function punktLage(m, p) {
 // ---------- 3D-Szene ----------
 const ansicht = $('ansicht');
 const szene = new THREE.Scene();
-szene.background = new THREE.Color(0xe9edf2);
+szene.background = new THREE.Color(0xf4f5f6);
 const kamera = new THREE.PerspectiveCamera(40, 1, 5, 30000);
 kamera.up.set(0, 0, 1);
 kamera.position.set(1500, -1300, 1000);
@@ -388,10 +417,57 @@ const kreis = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
 kreis.computeLineDistances(); szene.add(kreis);
 const pickbar = [tisch, fuss];
 
+// ---------- Backensatz-Modus (?modus=backen): Schunk EGP 40/25 im Werkzeugsystem statt Tisch ----------
+// wie GREIFER_LAGE in baukasten.py: Schunk-x bleibt x, Schunk-y wird z (+8 mm Adapterplatte), Schunk-z wird -y
+const BACKEN = new URLSearchParams(location.search).get('modus') === 'backen';
+const GREIFER_TEILE = {egp40: 'schunk_egp40', egp25: 'schunk_egp25'};
+const HUB_DATENBLATT = {egp40: 6, egp25: 3};   // mm je Backe, wie HUB_DATENBLATT in erzeuge_rebel_modell.py
+const basis = () => entwurf.basis || 'egp25';   // Entwuerfe ohne Angabe stammen aus der Zeit vor dem EGP 40
+const greiferObjekt = new THREE.Group();
+greiferObjekt.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(V([1, 0, 0]), V([0, 0, 1]), V([0, -1, 0])));
+greiferObjekt.position.set(0, 0, 8);
+// TCP-Markierung: Kreuz auf der Werkzeugachse
+const tcpMarke = new THREE.Group();
+{ const m = new THREE.MeshBasicMaterial({color: 0xF8B442, depthTest: false});
+  for (const r of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) tcpMarke.add(stab(mul(r, -9), mul(r, 9), 0.6, m));
+  tcpMarke.add(kugel([0, 0, 0], 1.6, m)); tcpMarke.visible = false; }
+let greiferGeladen = null;
+async function greiferAufbauen() {
+  for (const o of [tisch, sockel, profilGruppe, fuss, ring, kreis]) o.visible = false;
+  pickbar.length = 0;
+  achsen.position.set(0, 0, 0); achsen.scale.setScalar(0.3);
+  const flansch = new THREE.Mesh(new THREE.CylinderGeometry(31.5, 31.5, 2, 48),
+    new THREE.MeshStandardMaterial({color: 0x26282c, roughness: 0.6, transparent: true, opacity: 0.35}));
+  flansch.rotation.x = Math.PI / 2; flansch.position.z = -1; szene.add(flansch, tcpMarke);
+  szene.add(greiferObjekt);
+  // Kopfzeile und Seitenleiste umstellen
+  $('modus-titel').textContent = 'Backensatz'; $('welt-text').textContent = 'Backensatz'; $('neu').textContent = 'Neuer Backensatz';
+  $('weltdatei').placeholder = 'z.B. robi3'; $('greifer-feld').hidden = true;
+  $('modus-wechsel').textContent = 'Welten'; $('modus-wechsel').href = '/lehrer/baukasten';
+  for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor']) $(id).hidden = true;
+  $('backen-feld').hidden = false; $('e-art').disabled = true;
+}
+async function greiferZeigen() {   // Schunk-Modell der gewaehlten Groesse (aus der Teilebibliothek)
+  if (greiferGeladen === basis()) return;
+  const alt = greiferObjekt.userData.mesh;
+  if (alt) { pickbar.splice(pickbar.indexOf(alt), 1); while (greiferObjekt.children.length) greiferObjekt.remove(greiferObjekt.children[0]); }
+  greiferGeladen = basis();
+  let d;
+  try { d = await teilLaden(GREIFER_TEILE[basis()]); }
+  catch (e) { status('Das Schunk-Modell ' + GREIFER_TEILE[basis()] + ' fehlt in der Teilebibliothek.', true); return; }
+  const mesh = new THREE.Mesh(d.geo, new THREE.MeshStandardMaterial({color: 0x9aa0a8, roughness: 0.45, metalness: 0.4}));
+  mesh.userData = {teilId: 'greifer'};
+  greiferObjekt.add(mesh, new THREE.LineSegments(d.kanten, new THREE.LineBasicMaterial({color: 0x1d2330, transparent: true, opacity: 0.3})));
+  greiferObjekt.userData = {mesh};
+  pickbar.push(mesh);
+}
+const objektVon = id => id === 'greifer' ? greiferObjekt : objekte[id];
+const datenVonId = id => id === 'greifer' ? teilDaten[GREIFER_TEILE[basis()]] : datenVon(teil(id));
+
 // Markierungen (Vorschau beim Zeigen, gewaehlte Punkte)
 const vorschauGruppe = new THREE.Group(), punktGruppe = new THREE.Group();
 szene.add(vorschauGruppe, punktGruppe);
-const ORANGE = new THREE.MeshBasicMaterial({color: 0xf26b00, transparent: true, opacity: 0.75, depthTest: false});
+const ORANGE = new THREE.MeshBasicMaterial({color: 0xD4005E, transparent: true, opacity: 0.7, depthTest: false});   // DRS-Pink
 function leeren(g) { while (g.children.length) { const c = g.children.pop(); c.geometry?.dispose?.(); } }
 function stab(a, b, dicke, material) {
   const va = V(a), vb = V(b), laenge = va.distanceTo(vb);
@@ -493,8 +569,13 @@ function lagenAnwenden() {
       g.position.copy(V(l.ursprung_mm));
       g.quaternion.setFromAxisAngle(V(l.drehung.slice(0, 3)).normalize(), l.drehung[3]);
     } else {
-      // Parkplatz: 150 mm vor der vorderen Tischkante, nebeneinander
+      // Parkplatz: 150 mm vor der vorderen Tischkante, nebeneinander (Backensatz: neben dem Greifer)
       const b = datenVon(t).teil.box, tw = tischWerte();
+      if (BACKEN) {
+        g.quaternion.identity(); g.position.set(-90 - (b[0] + b[3]) / 2 - park * 60, -(b[1] + b[4]) / 2, 40 - b[2]); park++;
+        g.userData.mesh.material.color.setRGB(...standardFarbe(t));
+        continue;
+      }
       const vorne = TISCH.kanten.find(k => k.id === 'vorne');
       const [fx, fy] = tischDrehen(tw, 1, 0), [sx, sy] = tischDrehen(tw, 0, 1);
       const mx = (vorne.a[0] + vorne.b[0]) / 2 + fx * 150 - sx * (tw.breite_mm / 2 - 100 - park * 160);
@@ -511,16 +592,16 @@ function lagenAnwenden() {
 // Lokale Merkmale -> Welt (fuer Markierungen)
 function inWelt(id) {
   if (id === 'tisch' || id === 'roboterfuss') return p => p;
-  const g = objekte[id];
+  const g = objektVon(id);
   return p => V(p).applyQuaternion(g.quaternion).add(g.position).toArray();
 }
 function richtungInWelt(id) {
   if (id === 'tisch' || id === 'roboterfuss') return r => r;
-  const g = objekte[id];
+  const g = objektVon(id);
   return r => V(r).applyQuaternion(g.quaternion).toArray();
 }
-function merkmaleVon(id) { return (id === 'tisch' || id === 'roboterfuss') ? TISCH : datenVon(teil(id)).teil; }
-function groesseVon(id) { return (id === 'tisch' || id === 'roboterfuss') ? 1000 : datenVon(teil(id)).diag; }
+function merkmaleVon(id) { return (id === 'tisch' || id === 'roboterfuss') ? TISCH : datenVonId(id).teil; }
+function groesseVon(id) { return (id === 'tisch' || id === 'roboterfuss') ? 1000 : datenVonId(id).diag; }
 
 // Gewaehlte Punkte des ausgewaehlten Teils zeigen; am Gegenstueck X/Y des Versatzes
 function punkteZeigen() {
@@ -531,9 +612,9 @@ function punkteZeigen() {
   if (v.punkt) {
     const r = punktLage(merkmaleVon(t.id), v.punkt);
     if (r) { const w = inWelt(t.id), d = richtungInWelt(t.id), l = Math.max(12, groesseVon(t.id) * 0.25);
-      punktGruppe.add(kugel(w(r.o), l * 0.08, ORANGE), pfeil(w(r.o), d(r.z), l, 0xf26b00)); }
+      punktGruppe.add(kugel(w(r.o), l * 0.08, ORANGE), pfeil(w(r.o), d(r.z), l, 0xD4005E)); }
   }
-  if (v.an && v.an_punkt && (objekte[v.an] || v.an === 'tisch' || v.an === 'roboterfuss')) {
+  if (v.an && v.an_punkt && (objektVon(v.an) || v.an === 'tisch' || v.an === 'roboterfuss')) {
     const r = punktLage(merkmaleVon(v.an), v.an_punkt);
     if (r) {
       const w = inWelt(v.an), d = richtungInWelt(v.an), l = Math.max(15, Math.min(120, groesseVon(v.an) * 0.15));
@@ -568,11 +649,11 @@ function merkmalBei(hit, nurTeil) {
     lokal = hit.point.toArray(); lokal[2] = tischWerte().hoehe_mm;   // auch Treffer an der Plattenkante zaehlen zur Oberseite
     flaeche = 'oben';
   } else {
-    lokal = objekte[id].worldToLocal(hit.point.clone()).toArray();
-    flaeche = datenVon(teil(id)).dreieckFlaeche[hit.faceIndex];
+    lokal = objektVon(id).worldToLocal(hit.point.clone()).toArray();
+    flaeche = datenVonId(id).dreieckFlaeche[hit.faceIndex];
   }
   const r = bezug ? 30 : Math.max(1.5, groesseVon(id) * 0.04);
-  const name = bezug ? 'Tisch' : id;
+  const name = bezug ? 'Tisch' : id === 'greifer' ? 'Greifer' : id;
   const mitF = l => l.filter(e => e.flaechen.some(f => String(f.flaeche ?? f) === String(flaeche)));
   if (art === 'auto' || art === 'ecke') {
     const e = mitF(m.ecken).map(e => [Math.hypot(...sub(lokal, e.punkt)), e]).sort((a, b) => a[0] - b[0])[0];
@@ -603,10 +684,10 @@ function merkmalBei(hit, nurTeil) {
     if (bezug) { const mat = ORANGE.clone(), t = tischWerte(); mat.opacity = 0.25;
       const p = new THREE.Mesh(new THREE.PlaneGeometry(t.laenge_mm, t.breite_mm), mat);
       p.position.set(TISCH.mitte[0], TISCH.mitte[1], t.hoehe_mm + 0.5); p.rotation.z = -t.drehung_grad * Math.PI / 180; return p; }
-    const n = datenVon(teil(id)).flaechenNetz[f.id];
+    const n = datenVonId(id).flaechenNetz[f.id];
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(n.p, 3)); geo.setIndex(n.i);
     const ov = new THREE.Mesh(geo, ORANGE); ov.renderOrder = 10;
-    const g = new THREE.Group(); g.add(ov); g.position.copy(objekte[id].position); g.quaternion.copy(objekte[id].quaternion); return g; }};
+    const g = new THREE.Group(); g.add(ov); g.position.copy(objektVon(id).position); g.quaternion.copy(objektVon(id).quaternion); return g; }};
 }
 
 let zeigerRahmen = null;
@@ -627,7 +708,7 @@ renderer.domElement.addEventListener('pointerup', ev => {
   if (!unten || Math.hypot(ev.clientX - unten[0], ev.clientY - unten[1]) > 4) return;   // gezogen = Kamera drehen
   const hit = treffer(ev);
   if (!wahl) {   // Teil auswaehlen
-    if (hit && hit.object.userData.teilId) waehlen(hit.object.userData.teilId);
+    if (hit && hit.object.userData.teilId && hit.object.userData.teilId !== 'greifer') waehlen(hit.object.userData.teilId);
     return;
   }
   const mk = merkmalBei(hit, wahl === 'teil' ? auswahl : null);
@@ -648,6 +729,7 @@ function blickAuf(id) {
   steuerung.target.copy(mitte); kamera.position.copy(mitte.clone().add(richtung.multiplyScalar(abstand)));
 }
 function uebersicht() {
+  if (BACKEN) { steuerung.target.set(0, 0, 70); kamera.position.set(190, -230, 170); return; }
   const m = TISCH.mitte, groesse = Math.max(tischWerte().laenge_mm, tischWerte().breite_mm);
   steuerung.target.set(m[0], m[1], m[2]);
   kamera.position.set(m[0] + 1.25 * groesse, m[1] - 1.1 * groesse, m[2] + 0.9 * groesse);
@@ -660,7 +742,7 @@ function wahlStarten(was) {
   $('w-teil').classList.toggle('an', wahl === 'teil'); $('w-ziel').classList.toggle('an', wahl === 'ziel');
   $('hinweis3d').hidden = !wahl;
   if (wahl) $('hinweis3d').textContent = wahl === 'teil' ? 'Fläche, Bohrung, Kante oder Ecke am Teil anklicken'
-    : 'Gegenstück anklicken: Tisch, Roboterfuß oder ein anderes Teil';
+    : BACKEN ? 'Gegenstück anklicken: Backenträger des Greifers (z.B. ein Gewinde)' : 'Gegenstück anklicken: Tisch, Roboterfuß oder ein anderes Teil';
   leeren(vorschauGruppe);
 }
 function wahlBeenden() { wahl = null; wahlStarten(null); }
@@ -668,7 +750,7 @@ function wahlBeenden() { wahl = null; wahlStarten(null); }
 // ---------- Formular ----------
 function punktText(id, p) {
   if (!p) return '–';
-  const name = id === 'tisch' ? 'Tisch' : id === 'roboterfuss' ? 'Roboterfuß' : id;
+  const name = id === 'tisch' ? 'Tisch' : id === 'roboterfuss' ? 'Roboterfuß' : id === 'greifer' ? 'Greifer' : id;
   const art = {flaeche: 'Fläche', bohrung: 'Bohrung', kante: 'Kante', ecke: 'Ecke'}[p.art];
   return name + ': ' + art + ' ' + p.id + (p.art === 'bohrung' ? ' (Ende ' + (p.ende || 0) + ')' : '');
 }
@@ -762,7 +844,7 @@ function rechenbar() {
     for (const t of entwurf.teile) {
       if (ok.has(t.id) || !vollstaendig(t)) continue;
       const an = t.verbindung.an;
-      if (an === 'tisch' || an === 'roboterfuss' || ok.has(an)) { ok.add(t.id); neu = true; }
+      if (an === 'tisch' || an === 'roboterfuss' || an === 'greifer' || ok.has(an)) { ok.add(t.id); neu = true; }
     }
   }
   return entwurf.teile.filter(t => ok.has(t.id));
@@ -772,13 +854,49 @@ function rechnenSpaeter() { clearTimeout(rechenZeit); rechenZeit = setTimeout(re
 async function rechnen() {
   const teile = rechenbar();
   try {
-    lagen = teile.length ? (await api('baukasten_rechnen', {entwurf: {teile, tisch: tischWerte()}})).lagen : {};
+    const e = BACKEN ? {art: 'backensatz', basis: basis(), teile} : {teile, tisch: tischWerte()};
+    lagen = teile.length ? (await api('baukasten_rechnen', {entwurf: e})).lagen : {};
     const offen = entwurf.teile.length - teile.length;
     status(offen ? offen + ' Teil(e) noch ohne vollständige Verbindung.' : '');
   } catch (e) { status(e.message, true); }
-  lagenAnwenden(); formularZeigen();
+  lagenAnwenden(); formularZeigen(); if (BACKEN) tcpZeigen();
 }
+// TCP wie tcp_von_backen in erzeuge_rebel_modell.py: auf der Werkzeugachse, Hoehe aus den Backen
+function tcpZeigen() {
+  const t = entwurf.tcp || {bezug: 'spitze', mm: 0}, b = entwurf.teile[0], g = b && lagen[b.id] && objekte[b.id];
+  $('b-tcp-text').textContent = t.bezug === 'flansch' ? 'ab Flansch (mm)' : 'Versatz (mm)';
+  $('b-hub-text').textContent = 'leer = Datenblatt ' + HUB_DATENBLATT[basis()] + ' mm';
+  let z = t.bezug === 'flansch' ? Number(t.mm) || 0 : null;
+  if (z === null && g) {
+    const box = new THREE.Box3().setFromObject(g);   // Gruppe: deren Lage kommt so sicher in die Rechnung
+    z = (t.bezug === 'mitte' ? (box.min.z + box.max.z) / 2 : box.max.z) + (Number(t.mm) || 0);
+  }
+  tcpMarke.visible = z !== null; if (z !== null) tcpMarke.position.set(0, 0, z);
+  $('b-tcp-wert').textContent = z === null ? 'TCP: erst die Backe mit dem Greifer verbinden.'
+    : 'TCP ' + z.toFixed(1).replace('.', ',') + ' mm ab Flansch (in iRC: Werkzeug-Offset Z).';
+}
+function tcpAusFormular() {
+  entwurf.tcp = {bezug: $('b-tcp-bezug').value, mm: Number($('b-tcp-mm').value) || 0};
+  const h = Number($('b-hub').value);
+  if ($('b-hub').value !== '' && h > 0) entwurf.hub_mm = h; else delete entwurf.hub_mm;
+  tcpZeigen();
+}
+$('b-tcp-bezug').onchange = () => {   // beim Wechsel auf "ab Flansch" den bisherigen Wert vorschlagen
+  const vorher = $('b-tcp-wert').textContent.match(/TCP ([\d,]+) mm/);
+  if ($('b-tcp-bezug').value === 'flansch' && vorher) $('b-tcp-mm').value = vorher[1].replace(',', '.');
+  else if ((entwurf.tcp || {}).bezug === 'flansch') $('b-tcp-mm').value = 0;
+  tcpAusFormular();
+};
+['b-tcp-mm', 'b-hub'].forEach(i => $(i).addEventListener('input', tcpAusFormular));
+$('b-basis').onchange = async () => {
+  entwurf.basis = $('b-basis').value;
+  // die Merkmale (Bohrungen, Flaechen) des anderen Greifers haben andere Nummern: Gegenstueck neu waehlen
+  for (const t of entwurf.teile) if (t.verbindung && t.verbindung.an === 'greifer') t.verbindung.an_punkt = null;
+  await greiferZeigen(); formularZeigen(); await rechnen();
+  if (entwurf.teile.length) status('Greifer gewechselt: das Gegenstück am Backenträger bitte neu anklicken.');
+};
 async function hinzufuegen(name) {
+  if (BACKEN && entwurf.teile.length) { status('Ein Backensatz hat genau eine Backe; die zweite ist dieselbe, gedreht.', true); return; }
   let n = 1, basis = /^[A-Za-z]/.test(name) ? name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 30) : 't_' + name.slice(0, 28);
   while (teil(basis + (n > 1 ? '_' + n : ''))) n++;
   const t = {id: basis + (n > 1 ? '_' + n : ''), teil: name, art: 'aufbau', verbindung: null};
@@ -905,7 +1023,50 @@ function eaAendern(ev) {
 function freieNummer(liste, feld) { let n = 21; while (liste.some(e => e[feld] === n)) n++; return n; }
 $('ea-plus-taster').onclick = () => { const l = ea().taster; l.push({name: 'Taster ' + (l.length + 1), din: freieNummer(l, 'din'), art: 'schliesser', modus: 'tastend'}); eaZeigen(); };
 $('ea-plus-leuchte').onclick = () => { const l = ea().leuchten; l.push({name: 'Leuchte ' + (l.length + 1), dout: freieNummer(l, 'dout'), farbe: 'gruen', umkehren: false}); eaZeigen(); };
+// ---------- Backensatz speichern, laden, loeschen ----------
+let backensaetze = [];
+function backenInfo() {
+  const b = backensaetze.find(b => b.name === weltName), k = b && b.kenndaten;
+  $('backen-daten').textContent = !b ? 'Noch nicht gespeichert.'
+    : 'Gespeichert als Greifer „' + b.greifer + '“' + (k ? ': TCP ' + k.tcp_mm.toFixed(1) + ' mm ab Flansch, offen ' + k.offen_mm.toFixed(1)
+      + ' mm zwischen den Backen, Hub ' + k.hub_mm.toFixed(1) + ' mm je Backe.' : '.')
+      + (b.verwendet_in.length ? ' Verwendet in: ' + b.verwendet_in.join(', ') + '.' : '')
+      + (b.werkzeugpaket ? ' Werkzeugpaket: ZIP entpacken, installieren.cmd doppelklicken, iRC neu starten.' : '');
+  $('backen-paket').hidden = !(b && b.werkzeugpaket);
+  $('backen-paket').href = '/api/lehrer/werkzeugpaket?name=' + encodeURIComponent(weltName || '');
+  $('backen-loeschen').hidden = !b;
+}
+async function backenSpeichern() {
+  if (entwurf.teile.length !== 1 || rechenbar().length !== 1) { status('Erst eine Backe hinzufügen und mit dem Greifer verbinden.', true); return; }
+  if (!weltName) {
+    const n = $('weltdatei').value.trim().toLowerCase();
+    if (!/^[a-z][a-z0-9_]{0,19}$/.test(n)) { status('Bitte oben einen Namen eingeben (Buchstabe zuerst, a-z, 0-9 und _, bis 20 Zeichen).', true); $('weltdatei').focus(); return; }
+    weltName = n;
+  }
+  $('speichern').disabled = true; status('speichere, das Robotermodell wird neu erzeugt (einige Sekunden) ...');
+  try {
+    entwurf.titel = $('titel').value.trim() || weltName;
+    const r = await api('backensatz_speichern', {name: weltName, entwurf});
+    status('Gespeichert. In den Welten steht jetzt der Greifer „' + r.greifer + '“ zur Wahl (laufende Simulationen nach „Neu starten“).');
+    await weltenListe(weltName); $('datei-feld').hidden = true;
+  } catch (e) { status(e.message, true); if (!backensaetze.some(b => b.name === weltName)) weltName = null; }
+  finally { $('speichern').disabled = false; backenInfo(); }
+}
+$('backen-loeschen').onclick = async () => {
+  if (!confirm('Backensatz ' + weltName + ' löschen? Das Robotermodell wird ohne ihn neu erzeugt.')) return;
+  try { await api('backensatz_loeschen', {name: weltName}); status('Gelöscht.'); await weltenListe(null); await weltLaden(null); }
+  catch (e) { status(e.message, true); }
+};
+async function greiferListe() {   // Greifer-Varianten aus dem erzeugten Modell (mit den Backensaetzen)
+  const namen = await holen('/api/lehrer/greifer');
+  const texte = {egp40: 'EGP 40', egp40_finger: 'EGP 40 mit Fingern', egp25: 'EGP 25', egp25_finger: 'EGP 25 mit Fingern',
+                 vakuum: 'Sauger', kein: 'kein Greifer'};
+  const titel = Object.fromEntries((await holen('/api/lehrer/backensaetze')).map(b => [b.greifer, 'EGP ' + b.basis.slice(3) + ' mit ' + b.titel]));
+  $('greifer').innerHTML = namen.map(n => '<option value="' + n + '">' + esc(texte[n] || titel[n] || n) + '</option>').join('');
+}
+
 $('speichern').onclick = async () => {
+  if (BACKEN) { await backenSpeichern(); return; }
   if (!entwurf.teile.length) { status('Die Welt hat noch keine Teile.', true); return; }
   if (rechenbar().length !== entwurf.teile.length) { status('Erst alle Teile verbinden (in der Liste „offen“).', true); return; }
   if (!weltName) {
@@ -926,16 +1087,34 @@ $('speichern').onclick = async () => {
 
 // ---------- Laden ----------
 async function weltenListe(gewaehlt) {
+  if (BACKEN) {
+    backensaetze = await holen('/api/lehrer/backensaetze');
+    const eigene = backensaetze.filter(b => !b.fest);
+    $('welt').innerHTML = '<option value="">(neuer Backensatz)</option>' + eigene.map(b => '<option value="' + b.name + '"'
+      + (b.name === gewaehlt ? ' selected' : '') + '>' + esc(b.titel) + ' (' + b.name + ')</option>').join('');
+    return;
+  }
   const namen = await holen('/api/lehrer/entwuerfe');
   $('welt').innerHTML = '<option value="">(neue Welt)</option>' + namen.map(n => '<option' + (n === gewaehlt ? ' selected' : '') + '>' + n + '</option>').join('');
 }
 async function weltLaden(name) {
   for (const id of Object.keys(objekte)) objektEntfernen(id);
   lagen = {}; auswahl = null; weltName = name || null;
-  entwurf = name ? await holen('/api/lehrer/baukasten?welt=' + encodeURIComponent(name)) : {titel: '', aufgabe: '', greifer: 'egp25', teile: []};
-  $('titel').value = entwurf.titel || ''; $('greifer').value = entwurf.greifer || 'egp25';
+  if (BACKEN) {
+    entwurf = name ? (await holen('/api/lehrer/backensatz?name=' + encodeURIComponent(name))).entwurf
+                   : {titel: '', art: 'backensatz', basis: 'egp40', tcp: {bezug: 'spitze', mm: 0}, teile: []};
+  } else {
+    entwurf = name ? await holen('/api/lehrer/baukasten?welt=' + encodeURIComponent(name)) : {titel: '', aufgabe: '', greifer: 'egp40', teile: []};
+  }
+  $('titel').value = entwurf.titel || ''; $('greifer').value = entwurf.greifer || 'egp40';
   $('datei-feld').hidden = !!weltName; $('weltdatei').value = '';
-  tischZeichnen(); uebersicht(); eaZeigen();
+  if (BACKEN) {
+    const t = entwurf.tcp || {};
+    $('b-basis').value = basis(); $('b-tcp-bezug').value = t.bezug || 'spitze'; $('b-tcp-mm').value = t.mm ?? 0;
+    $('b-hub').value = entwurf.hub_mm ?? '';
+    await greiferZeigen(); uebersicht(); backenInfo(); tcpZeigen();
+  }
+  else { tischZeichnen(); uebersicht(); eaZeigen(); }
   for (const t of entwurf.teile) await objektBauen(t);
   formularZeigen(); await rechnen();
 }
@@ -947,8 +1126,8 @@ async function start() {
   const teile = await holen('/api/lehrer/teile');
   $('neues-teil').innerHTML = teile.map(t => '<option value="' + t.name + '">' + t.name + ' (' + t.groesse_mm.map(v => Math.round(v)).join('×') + ' mm)</option>').join('')
     || '<option value="">(Teilebibliothek leer)</option>';
-  const welt = new URLSearchParams(location.search).get('welt');
-  await platteLaden();
+  const welt = new URLSearchParams(location.search).get(BACKEN ? 'backen' : 'welt');
+  if (BACKEN) await greiferAufbauen(); else { await platteLaden(); await greiferListe(); }
   await weltenListe(welt);
   await weltLaden(welt);
 }

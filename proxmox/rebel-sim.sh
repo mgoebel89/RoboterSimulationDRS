@@ -33,7 +33,7 @@ fi
 
 # --- neuer Container ---
 ctid=$(frage "Nummer (CT-ID) des neuen Containers:" "$(pvesh get /cluster/nextid)")
-name=$(frage "Hostname (Schueler oeffnen spaeter http://<name>:8080):" "rebel-sim")
+name=$(frage "Hostname (Schueler oeffnen spaeter http://<name>):" "rebel-sim")
 kerne=$(frage "CPU-Kerne (4 reichen fuer 10 Simulationen):" "4")
 ram=$(frage "Arbeitsspeicher in MB (je Simulation etwa 400 MB, 6144 fuer 10):" "6144")
 platte=$(frage "Festplatte in GB:" "20")
@@ -86,8 +86,8 @@ ip_ist=$(pct exec "$ctid" -- hostname -I | awk '{print $1}')
 cat <<TEXT
 
 Fertig. Container $ctid ($name), Adresse $ip_ist
-  Schueler:     http://$ip_ist:8080
-  Lehrkraefte:  http://$ip_ist:8080/lehrer
+  Startseite:   http://$ip_ist   (Schueler waehlen dort ihre Welt,
+                Lehrkraefte melden sich dort an)
 Noch zu tun (siehe Anleitung im Repository, docs/ANLEITUNG.md):
   1. Robotermodell: auf einem PC mit iRC tools/irc_daten_export.ps1 ausfuehren, irc-daten.zip nach
      /root/ im Container kopieren, dann im Container: rebel-sim-modell /root/irc-daten.zip

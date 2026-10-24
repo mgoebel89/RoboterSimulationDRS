@@ -344,6 +344,59 @@ class TestLehrerSeiten(Grundlage):
                         "Benutzer mueller: lehrkraft, gesperrt", "Benutzer mueller geloescht"):
             self.assertIn(eintrag, was)
 
+    def test_backensatz(self):
+        from test_baukasten import wuerfel, SCHUNK
+        for name, m in (("vorrichtung", wuerfel(40, bohrung=8)), ("schunk_egp25", SCHUNK)):
+            os.makedirs(os.path.join(uebersicht.TEILE_DIR, name))
+            with open(os.path.join(uebersicht.TEILE_DIR, name, "teil.json"), "w", encoding="utf-8") as f:
+                json.dump(dict(m, quelle=name + ".step", groesse_mm=[20, 20, 20]), f)
+        alt = (uebersicht.BACKEN_DIR, uebersicht.WERKZEUG_DIR, uebersicht.modell_erzeugen, uebersicht.FESTE_BACKEN_DIR)
+        uebersicht.BACKEN_DIR = os.path.join(self.tmp.name, "backen")
+        uebersicht.WERKZEUG_DIR = os.path.join(self.tmp.name, "werkzeuge")
+        uebersicht.FESTE_BACKEN_DIR = os.path.join(self.tmp.name, "cad_backen")
+        aufrufe = []
+
+        def modell_erzeugen():   # statt tools/erzeuge_rebel_modell.py: Werkzeugpaket anlegen, Kenndaten melden
+            aufrufe.append(1)
+            for b in os.listdir(uebersicht.BACKEN_DIR):
+                os.makedirs(os.path.join(uebersicht.WERKZEUG_DIR, "egp25_" + b), exist_ok=True)
+                with open(os.path.join(uebersicht.WERKZEUG_DIR, "egp25_" + b, "Schunk_EGP25_X.xml"), "w") as f:
+                    f.write("<TOOL/>")
+            return {"egp25_" + b: {"tcp_mm": 130.7, "offen_mm": 11.0, "hub_mm": 5.4} for b in os.listdir(uebersicht.BACKEN_DIR)}
+        uebersicht.modell_erzeugen = modell_erzeugen
+        try:
+            self.konto("mueller", "lehrkraft")
+            self.anmelden("mueller")
+            entwurf = {"titel": "Test-Backen", "teile": [{"id": "backe", "teil": "vorrichtung", "art": "aufbau", "verbindung": {
+                "punkt": {"art": "bohrung", "id": 31, "ende": 0}, "an": "greifer",
+                "an_punkt": {"art": "bohrung", "id": 454, "ende": 0}, "versatz_mm": [0, 0, 0]}}]}
+            status, d = self.anfrage("POST", "/api/lehrer/baukasten_rechnen", {"entwurf": dict(entwurf, art="backensatz")})
+            self.assertEqual(status, 200, d)
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/backensatz_speichern", {"name": "Falsch", "entwurf": entwurf})[0], 409)
+            status, d = self.anfrage("POST", "/api/lehrer/backensatz_speichern", {"name": "robi3", "entwurf": entwurf})
+            self.assertEqual((status, d["greifer"], d["kenndaten"]["tcp_mm"]), (200, "egp25_robi3", 130.7), d)
+            liste = self.anfrage("GET", "/api/lehrer/backensaetze")[1]
+            self.assertEqual([(b["name"], b["fest"], b["werkzeugpaket"]) for b in liste], [("robi3", False, True)])
+            gelesen = self.anfrage("GET", "/api/lehrer/backensatz?name=robi3")[1]
+            self.assertEqual((gelesen["besitzer"], gelesen["entwurf"]["art"], gelesen["teil"]), ("lehrer:mueller", "backensatz", "vorrichtung"))
+            self.assertIn("Backensatz robi3", next(t for t in self.anfrage("GET", "/api/lehrer/teile")[1]
+                                                    if t["name"] == "vorrichtung")["verwendet_in"])
+            c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+            c.request("GET", "/api/lehrer/werkzeugpaket?name=robi3", headers={"Cookie": self.cookie})
+            paket = c.getresponse()
+            self.assertEqual((paket.status, paket.getheader("Content-Type"), paket.read(2)), (200, "application/zip", b"PK"))
+            c.close()
+            # in einer Welt verwendet: nicht loeschbar
+            with open(os.path.join(self.welten, "w.wbt"), "w", encoding="utf-8") as f:
+                f.write('#VRML_SIM R2025a utf8\nDEF REBEL IgusRebel6DOF {\n  greifer "egp25_robi3"\n}\n')
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/backensatz_loeschen", {"name": "robi3"})[0], 409)
+            os.remove(os.path.join(self.welten, "w.wbt"))
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/backensatz_loeschen", {"name": "robi3"})[0], 200)
+            self.assertEqual(self.anfrage("GET", "/api/lehrer/backensaetze")[1], [])
+            self.assertEqual(len(aufrufe), 2)
+        finally:
+            uebersicht.BACKEN_DIR, uebersicht.WERKZEUG_DIR, uebersicht.modell_erzeugen, uebersicht.FESTE_BACKEN_DIR = alt
+
     def test_teile_und_baukasten(self):
         from test_baukasten import wuerfel
         for name, m in (("wuerfel", wuerfel()), ("vorrichtung", wuerfel(40, bohrung=8))):
@@ -399,6 +452,132 @@ class TestLehrerSeiten(Grundlage):
         self.assertNotIn("%%STIL%%", seite)
         self.assertIn("baukasten_rechnen", seite)
         self.assertIn('href="/lehrer/baukasten"', self.anfrage("GET", "/lehrer")[1])
+
+    def test_welt_loeschen_und_greifer(self):
+        self.konto("mueller", "lehrkraft")
+        self.anmelden("mueller")
+        with open(os.path.join(self.welten, "magazin.wbt"), "w", encoding="utf-8") as f:
+            f.write('#VRML_SIM R2025a utf8\nDEF REBEL IgusRebel6DOF {\n  greifer "egp25"\n}\n')
+        lehrer.schreibe_json(os.path.join(self.welten, "magazin.baukasten.json"), {"greifer": "egp25", "teile": []})
+        alt = uebersicht.greifer_liste
+        uebersicht.greifer_liste = lambda: ["egp40", "egp25", "kein"]
+        try:
+            w = {w["datei"]: w for w in self.anfrage("GET", "/api/lehrer/welten")[1]}["magazin.wbt"]
+            self.assertEqual((w["greifer"], w["baukasten"], w["laeuft"]), ("egp25", True, []))
+            self.assertEqual([g["titel"] for g in self.anfrage("GET", "/api/lehrer/greifer_liste")[1]],
+                             ["Schunk EGP 40", "Schunk EGP 25", "kein Greifer"])
+            neu = {"datei": "magazin.wbt", "titel": "Magazin", "aufgabe": "A", "sichtbar": True, "greifer": "egp40"}
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/welt", neu)[0], 200)
+            self.assertEqual(lehrer.welt_greifer(self.welten, "magazin.wbt"), "egp40")
+            with open(os.path.join(self.welten, "magazin.baukasten.json"), encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["greifer"], "egp40")
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/welt", dict(neu, greifer="egp99"))[0], 409)
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/welt", dict(neu, datei="tisch.wbt", greifer="egp40"))[0], 409)   # kein Feld
+            # laeuft gerade: nicht loeschbar
+            self.v.starten("pc-a", "magazin.wbt")
+            self.assertEqual(self.anfrage("GET", "/api/lehrer/welten")[1][1]["laeuft"], ["01"])
+            status, d = self.anfrage("POST", "/api/lehrer/welt_loeschen", {"datei": "magazin.wbt"})
+            self.assertEqual(status, 409)
+            self.assertIn("Platz 01", d["fehler"])
+            self.anfrage("POST", "/api/lehrer/beenden", {"platz": "01"})
+            status, d = self.anfrage("POST", "/api/lehrer/welt_loeschen", {"datei": "magazin.wbt"})
+            self.assertEqual(status, 200, d)
+            self.assertEqual(sorted(d["dateien"]), ["magazin.baukasten.json", "magazin.json", "magazin.pdf", "magazin.png", "magazin.wbt"])
+            self.assertNotIn("magazin.wbt", [w["datei"] for w in self.anfrage("GET", "/api/lehrer/welten")[1]])
+            korb = os.listdir(os.path.join(self.welten, "papierkorb"))
+            self.assertEqual(len(korb), 1)
+            self.assertIn("magazin.wbt", os.listdir(os.path.join(self.welten, "papierkorb", korb[0])))
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/welt_loeschen", {"datei": "../tisch.wbt"})[0], 409)
+            self.assertIn("Welt magazin.wbt geloescht", self.anfrage("GET", "/api/lehrer/protokoll")[1][0]["was"])
+        finally:
+            uebersicht.greifer_liste = alt
+
+    def test_welt_export_und_import(self):
+        self.konto("mueller", "lehrkraft")
+        self.anmelden("mueller")
+        with open(os.path.join(self.welten, "magazin.wbt"), "w", encoding="utf-8") as f:
+            f.write('#VRML_SIM R2025a utf8\nEXTERNPROTO "../protos/Aufbau.proto"\nDEF REBEL IgusRebel6DOF {\n  greifer "egp40"\n}\n')
+        alt = uebersicht.BACKEN_DIR
+        uebersicht.BACKEN_DIR = os.path.join(self.tmp.name, "backen")
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+            c.request("GET", "/api/lehrer/welt_export?datei=magazin.wbt", headers={"Cookie": self.cookie})
+            r = c.getresponse()
+            paket = r.read()
+            self.assertEqual((r.status, r.getheader("Content-Type"), paket[:2]), (200, "application/zip", b"PK"))
+            self.assertIn("rebel-welt-magazin.zip", r.getheader("Content-Disposition"))
+            c.close()
+            status, d = self.anfrage("POST", "/api/lehrer/welt_import", roh=paket, typ="application/zip")
+            self.assertEqual((status, d.get("vorhanden"), d.get("vorschlag")), (409, "magazin", "magazin-2"), d)
+            status, d = self.anfrage("POST", "/api/lehrer/welt_import?name=magazin-2", roh=paket, typ="application/zip")
+            self.assertEqual((status, d["welt"], d["greifer"], d["hinweise"]), (200, "magazin-2.wbt", "egp40", []), d)
+            w = {w["datei"]: w for w in self.anfrage("GET", "/api/lehrer/welten")[1]}["magazin-2.wbt"]
+            self.assertEqual((w["titel"], w["sichtbar"], w["pdf"]), ("Magazin", False, "magazin-2.pdf"))
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/welt_import", roh=b"kein zip", typ="application/zip")[0], 409)
+            self.assertIn("Welt magazin-2.wbt importiert", self.anfrage("GET", "/api/lehrer/protokoll")[1][0]["was"])
+            self.assertEqual(self.anfrage("GET", "/api/lehrer/welt_export?datei=..%2Fx.wbt")[0], 409)
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/markdown", {"text": "**a**"})[1]["html"], "<p><strong>a</strong></p>")
+        finally:
+            uebersicht.BACKEN_DIR = alt
+
+    def test_logo_und_startseite(self):
+        self.konto()
+        self.konto("mueller", "lehrkraft")
+        status, seite = self.anfrage("GET", "/")
+        self.assertIn("Anmeldung Lehrkraft", seite)   # Startseite fuehrt zum Lehrerbereich
+        self.assertIn('href="/lehrer"', seite)
+        self.assertNotIn('<img src="/logo', seite)
+        self.anmelden("mueller")
+        self.assertIn("Lehrerbereich</a>", self.anfrage("GET", "/")[1])
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_hochladen?name=x", roh=PNG, typ="application/octet-stream"),
+                         (409, {"fehler": "Das Logo ändern nur Admins."}))
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_waehlen", {"name": ""})[0], 409)
+        self.anmelden()
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_hochladen?name=DRS%20quer.png", roh=PNG,
+                                      typ="application/octet-stream"), (200, {"ok": True, "datei": "drs_quer.png"}))
+        boese = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_hochladen?name=b", roh=boese, typ="application/octet-stream")[0], 409)
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_hochladen?name=b", roh=PDF, typ="application/octet-stream")[0], 409)
+        gut = b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10z"/></svg>'
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_hochladen?name=drs", roh=gut, typ="application/octet-stream")[1]["datei"],
+                         "drs.svg")
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/logos")[1], {"logos": ["drs.svg", "drs_quer.png"], "gewaehlt": None})
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_waehlen", {"name": "fehlt.png"})[0], 409)
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_waehlen", {"name": "drs.svg"})[0], 200)
+        # Einstellungen speichern behaelt das Logo
+        self.anfrage("POST", "/api/lehrer/einstellungen", {"max_simulationen": 4, "leerlauf_minuten": 10})
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/logos")[1]["gewaehlt"], "drs.svg")
+        for pfad in ("/", "/lehrer", "/lehrer/baukasten"):
+            self.assertIn('<img src="/logo?drs.svg-', self.anfrage("GET", pfad)[1], pfad)
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        c.request("GET", "/logo")
+        r = c.getresponse()
+        self.assertEqual((r.status, r.getheader("Content-Type"), r.read()), (200, "image/svg+xml", gut))
+        self.assertIn("sandbox", r.getheader("Content-Security-Policy"))
+        c.close()
+        self.assertEqual(self.anfrage("GET", "/logos/drs_quer.png")[0], 200)
+        self.assertEqual(self.anfrage("GET", "/logos/..%2Fbenutzer.json")[0], 404)
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/logo_loeschen", {"name": "drs.svg"})[0], 200)
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/logos")[1], {"logos": ["drs_quer.png"], "gewaehlt": None})
+        self.assertEqual(self.anfrage("GET", "/logo")[0], 404)
+
+    def test_alter_port_leitet_um(self):
+        self.assertEqual(uebersicht.ziel_umleitung("192.168.7.1:8080", "/lehrer?anmelden=1", 80), "http://192.168.7.1/lehrer?anmelden=1")
+        self.assertEqual(uebersicht.ziel_umleitung("[::1]:8080", "/", 80), "http://[::1]/")
+        self.assertEqual(uebersicht.ziel_umleitung("rebel-sim:8080", "/", 8081), "http://rebel-sim:8081/")
+        self.assertEqual(uebersicht.ziel_umleitung("bo se\r\n", "x", 80), "http://localhost/")
+        server = uebersicht.ThreadingHTTPServer(("127.0.0.1", 0), uebersicht.Umleitung)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+            c.request("GET", "/lehrer", headers={"Host": "rebel-sim:8080"})
+            r = c.getresponse()
+            self.assertEqual((r.status, r.getheader("Location")), (301, "http://rebel-sim/lehrer" if uebersicht.PORT == 80
+                                                                  else "http://rebel-sim:%d/lehrer" % uebersicht.PORT))
+            c.close()
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_einstellungen(self):
         self.konto()

@@ -23,12 +23,13 @@ Inhalt
 - Für jeden Schüler-PC startet im Container eine **Webots-Simulation**. Sie verbindet sich mit der iRC-Steuerung
   des Schüler-PCs (CRI, Port 3921) und **hört nur mit**: Der Roboter in Webots fährt genauso wie in iRC,
   greift echte Werkstücke und legt sie ab. iRC behält die Kontrolle.
-- Die Schüler sehen die Simulation im **Browser** unter `http://<container>:8080`. Der PC wird an seiner IP erkannt,
-  jeder sieht nur seine eigene Simulation.
+- Alle öffnen im **Browser** die Startseite `http://<container>` (Port 80; der frühere Port 8080 leitet dorthin um).
+  Schüler starten dort ihre Welt, Lehrkräfte melden sich über „Anmeldung Lehrkraft“ an. Der PC wird an seiner IP
+  erkannt, jeder Schüler sieht nur seine eigene Simulation.
 - **Taster und Sensoren** setzen über die App-Schnittstelle von iRC (Port 5000) echte digitale Eingänge.
 
 ```
-iRC auf dem Schüler-PC ──CRI (3921)──▶ Webots je Platz im Container ──Browser (8080)──▶ Schüler
+iRC auf dem Schüler-PC ──CRI (3921)──▶ Webots je Platz im Container ──Browser (80)──▶ Schüler
         ▲                                   │
         └──── App-Schnittstelle (5000) ◀────┘
 ```
@@ -41,7 +42,8 @@ iRC auf dem Schüler-PC ──CRI (3921)──▶ Webots je Platz im Container �
   Gemessen: je Simulation etwa 400 MB RAM und 5 % eines Kerns.
 
 **Netz** (wichtig für die IT)
-- Schul-PCs → Container: **TCP 8080** (Webseite und 3D-Ansicht; nur dieser eine Port).
+- Schul-PCs → Container: **TCP 80** (Startseite, Lehrerbereich und 3D-Ansicht; nur dieser eine Port,
+  8080 nur noch als Umleitung für alte Lesezeichen).
 - Container → Schul-PCs: **TCP 3921** (iRC-Steuerung) und **TCP 5000** (App-Schnittstelle von iRC).
   Die Windows-Firewall-Regel „robotcontrol“, die iRC mitbringt, muss auch im **Domänenprofil** gelten.
 - Zwischen Schul-PCs und Container **kein NAT/Proxy**, sonst stimmt die Erkennung an der IP nicht.
@@ -76,9 +78,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/mgoebel89/RoboterSimulat
 rebel-sim-admin <name>
 ```
 
-Danach erreichbar:
-- Schüler: `http://<container>:8080`
-- Lehrkräfte: `http://<container>:8080/lehrer`
+Danach erreichbar: **`http://<container>`** – Startseite mit allen freigegebenen Welten (Schüler) und dem
+Knopf „Anmeldung Lehrkraft“ (oder direkt `http://<container>/lehrer`).
 
 ## 4. Robotermodell aus iRC erzeugen
 
@@ -115,8 +116,10 @@ Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Mode
 
 1. **iRC V15** installieren, ReBeL-Projekt laden. Die iRC-Oberfläche startet ihre Steuerung selbst auf Port 3921,
    eine CRI-Einstellung ist nicht nötig.
-2. **Werkzeug** in iRC wählen: `Schunk_EGP25_RebelMountingPlate` (bzw. das Werkzeug der Welt, z.B.
-   „EGP-25 Robi2-Backen“). Dann meldet iRC den TCP und der Abgleich zeigt „TCP“.
+2. **Werkzeug** in iRC wählen: `Schunk_EGP40_RebelMountingPlate` (Standardgreifer EGP 40) bzw. das Werkzeug
+   der Welt. Für eigene Backen das **Werkzeugpaket** aus dem Lehrerbereich (Backensätze) laden, entpacken und
+   `installieren.cmd` doppelklicken: Es kopiert XML und Modelle nach `%APPDATA%\RobotControl\V15\Data\Tools`.
+   iRC neu starten, Werkzeug wählen. Dann meldet iRC denselben TCP wie die Simulation und der Abgleich zeigt „TCP“.
 3. **App „WebotsSim“** (nur für Welten mit Tastern oder Sensoren): In iRC unter **Apps** die Datei
    [`deploy/irc_app/WebotsSim.zip`](../deploy/irc_app/WebotsSim.zip) installieren und die App **aktivieren**.
    Sie enthält kein Programm; sie erlaubt der Simulation nur, in der iRC-Simulation Eingänge zu setzen.
@@ -124,7 +127,7 @@ Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Mode
 
 ## 6. Im Unterricht: Schülerseite
 
-1. **Zuerst iRC starten**, dann im Browser `http://<container>:8080` öffnen.
+1. **Zuerst iRC starten**, dann im Browser `http://<container>` öffnen.
 2. Welt wählen und **„Simulation starten“**. Oben steht, wie viele Simulationen noch frei sind.
 
 ![Weltwahl der Schüler](bilder/schueler_weltwahl.jpg)
@@ -135,12 +138,14 @@ Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Mode
 ![Schüleransicht](bilder/schueler_ansicht_taster.jpg)
 
 **Knöpfe oben**
-- **Aufgabe** blendet den Aufgabentext (und ggf. das Arbeitsblatt als PDF) ein.
+- **Aufgabe** öffnet rechts eine Seitenleiste mit dem Aufgabentext (und ggf. dem Arbeitsblatt als PDF); das 3D-Bild
+  wird schmaler, nicht verdeckt. Beim Start ist sie zu; × oder erneuter Klick schließt sie.
 - **Teile zurück** legt alle Werkstücke sofort wieder auf ihre Startlage, ohne Neustart.
 - **Neu starten** startet Webots neu (nur nötig, wenn etwas hängt; dauert einige Sekunden).
 - **Welt wechseln**, **Beenden**.
 
-**Greifer Schunk EGP 25:** DOut32 EIN (DOut31 AUS) schließt, DOut31 EIN (DOut32 AUS) öffnet.
+**Greifer Schunk EGP 40** (und EGP 25): DOut32 EIN (DOut31 AUS) schließt, DOut31 EIN (DOut32 AUS) öffnet.
+Der EGP 40 öffnet ohne eigene Backen 16 mm weit, Hub je Backe 6 mm (Datenblatt; EGP 25: 11 mm, 3 mm).
 Gegriffen wird, was zwischen die offenen Backen passt und auf Backenhöhe liegt; das Teil rutscht in die Mitte.
 
 **Einteachen:** iRC und Browser nebeneinander legen.
@@ -153,12 +158,26 @@ Die Simulation endet automatisch nach 15 Minuten ohne iRC und zu den eingestellt
 
 ## 7. Lehrerbereich
 
-`http://<container>:8080/lehrer`, Anmeldung mit dem Lehrerkonto.
+Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehrer`), Anmeldung mit dem Lehrerkonto.
 
-- **Simulationen:** alle laufenden Simulationen mit Ampel (iRC verbunden?), Ansehen, Steuern,
-  **Teile zurück**, **Neu starten**, **Beenden**, Alle beenden.
-- **Welten:** Titel, Aufgabentext, **für Schüler freigeben**, Vorschaubild erzeugen oder hochladen, Arbeitsblatt (PDF).
-  Nur freigegebene Welten sehen die Schüler.
+- **Simulationen:** alle laufenden Simulationen mit Ampel (iRC verbunden?), **Ansehen** (3D-Ansicht des Platzes mit
+  Teile zurück, Neu starten, Beenden), **Teile zurück**, **Neu starten**, **Beenden**, Alle beenden. Den Roboter selbst
+  bewegt immer iRC am Schüler-PC; eine Steuerung aus dem Browser gibt es bewusst nicht (sie würde iRC aussperren).
+- **Welten:** Liste mit Suche. Der Knopf „freigegeben/gesperrt“ schaltet direkt um; ein Klick auf die Zeile öffnet
+  die Welt: Titel, Aufgabentext, **Greifer**, Freigabe, Vorschaubild, Arbeitsblatt (PDF) und **Welt löschen**.
+  Gelöschte Welten kommen in den Papierkorb `worlds/papierkorb/` (zum Zurückholen die Dateien wieder nach `worlds/`
+  kopieren). Eine Welt, die gerade läuft, lässt sich nicht löschen.
+- **Aufgabentext in Markdown:** `# Überschrift`, `**fett**`, `*kursiv*`, `- Aufzählung`, `1. Schritt`, `> Hinweis`,
+  `` `DOut31` ``, `[Link](https://…)`, Tabellen mit `| A | B |` und darunter `|---|---|`. „Vorschau“ im Dialog zeigt
+  den Text so, wie ihn die Schüler sehen. Alte Texte ohne Markdown bleiben unverändert lesbar.
+- **Welten exportieren und importieren** (z.B. zuhause bauen, in der Schule einspielen): Im Welt-Dialog
+  **Exportieren (ZIP)** lädt ein Paket mit der Welt, Vorschaubild, Arbeitsblatt, allen verwendeten Teilen der
+  Teilebibliothek (mit STEP) und einem eigenen Backensatz. In der anderen Instanz unter Welten **Welt importieren**.
+  - Gleichnamige und gleiche Teile werden weiterverwendet; unterscheiden sie sich, kommt das neue als `name-2` dazu.
+  - Gibt es die Welt schon: unter neuem Namen importieren oder die vorhandene ersetzen (sie kommt in den Papierkorb).
+  - Bringt das Paket einen neuen Backensatz mit, wird das Robotermodell neu erzeugt; das Werkzeugpaket für iRC gibt
+    es danach unter Backensätze.
+  - Importierte Welten sind zuerst für Schüler gesperrt.
 
 ![Welten im Lehrerbereich](bilder/lehrer_welten.jpg)
 
@@ -169,7 +188,8 @@ Die Simulation endet automatisch nach 15 Minuten ohne iRC und zu den eingestellt
 
 - **Baukasten:** siehe nächster Abschnitt.
 - **Protokoll:** wer wann was gemacht hat.
-- **Einstellungen** (nur Admins): höchstens gleichzeitige Simulationen, Ende ohne iRC, Stundenenden.
+- **Einstellungen** (nur Admins): höchstens gleichzeitige Simulationen, Ende ohne iRC, Stundenenden und das
+  **Logo** oben links (PNG, JPG oder SVG hochladen und anklicken; „kein Logo“ zeigt nur den Schriftzug).
 - **Benutzer** (nur Admins): Konten mit den Rollen Admin oder Lehrkraft, vorläufige Passwörter.
 
 ![Einstellungen](bilder/lehrer_einstellungen.jpg)
@@ -198,6 +218,15 @@ Im Lehrerbereich auf **Baukasten**: Welten aus Teilen der Teilebibliothek zusamm
 ![Verbindung eines Teils](bilder/baukasten_verbindung.jpg)
 
 Hängt ein Teil an einem anderen, wandert es mit, wenn sich das andere ändert.
+
+**Backensätze** (Lehrerbereich → Backensätze): eigene Greiferbacken aus der Teilebibliothek an den Schunk-Greifer setzen.
+1. **Greifer** wählen: Schunk EGP 40 (Standard) oder EGP 25. Der Greifer steht offen im Werkzeugsystem von iRC.
+2. Backe hinzufügen, Punkt an der Backe und Gegenstück am Backenträger anklicken (EGP 40: zwei M3-Gewinde in
+   Greifrichtung). Eine Backe genügt, die zweite ist dieselbe, um die Werkzeugachse gedreht.
+3. **TCP** einstellen: Backenspitze oder Mitte der Backe, jeweils mit Versatz entlang der Werkzeugachse, oder ein
+   fester Abstand ab Flansch. Das gelbe Kreuz zeigt ihn im Bild. Optional den **Hub je Backe** eintragen (leer = Datenblatt).
+4. **Speichern**: Das Robotermodell wird neu erzeugt, der Greifer `egp40_<name>` steht in den Welten zur Wahl.
+   Das **Werkzeugpaket für iRC** (ZIP mit XML, Modellen und `installieren.cmd`) bringt denselben TCP nach iRC.
 
 ## 9. Taster, Leuchtmelder und Sensoren
 
@@ -257,6 +286,7 @@ Einstellungen, iRC-Daten).
 | Taster ohne Wirkung, Hinweis „nicht freigeschaltet“ | App WebotsSim in iRC installieren und aktivieren; Port 5000 zum Schüler-PC freigeben. |
 | iRC startet nicht, „Datenverzeichnispfad…“ | Windows-Konto ohne Umlaut verwenden. |
 | Falscher PC erkannt / „nicht deine Simulation“ | NAT oder Proxy zwischen Schul-PC und Container. |
-| 3D-Ansicht bleibt leer | Browser ohne Internet (WebotsView.js) oder Port 8080 gesperrt. |
+| 3D-Ansicht bleibt leer | Browser ohne Internet (WebotsView.js) oder Port 80 gesperrt. |
 | Greifer greift ins Leere | Einteach-Hilfe beachten: Teil zu breit für die Backen, Greifer drehen (A6) oder Höhe anpassen. |
+| Teil wird nach dem Zurücklegen nicht mehr gegriffen | Es wurde zu tief in einem Aufbau abgelegt (z.B. unter dem Boden einer Magazintasche). Die Simulation hebt es jetzt auf die Auflage und schreibt ins Protokoll, um wie viel; den Ablegepunkt in iRC höher setzen. |
 | Abgleich zeigt große Abweichung | In iRC das passende Werkzeug wählen (TCP), sonst vergleicht der Abgleich mit dem Flansch. |

@@ -3,7 +3,7 @@
 Liest:
   - Kinematik (Glied-Laengen) aus Data/Robots/<Typ>/<Typ>.xml
   - Glieder-Modelle Joint0.obj .. Joint6.obj (+ *Coll.obj) und Rebel.mtl
-  - Greifer Schunk EGP 25 aus Data/Tools/Schunk_EGP25_RebelMountingPlate*.xml
+  - Greifer Schunk EGP 40 und EGP 25 aus Data/Tools/Schunk_EGP*_RebelMountingPlate*.xml
     (TCP aus dem Werkzeug, Modell im offenen Zustand, Backen werden abgetrennt)
 Schreibt:
   - protos/meshes/*.obj   (nach Material bzw. Bauteil getrennt, in Metern)
@@ -233,11 +233,20 @@ def split_components(src, scale=0.001):
     return result
 
 
-# Greifer aus iRC: Name im Proto -> Werkzeugdatei in Data/Tools
+# Greifer aus iRC: Name im Proto -> Werkzeugdatei in Data/Tools. Der erste ist der Standard im Proto.
 EGP_VARIANTEN = [
+    ("egp40", "Schunk_EGP40_RebelMountingPlate.xml"),
+    ("egp40_finger", "Schunk_EGP40_RebelMountingPlate_Finger.xml"),
     ("egp25", "Schunk_EGP25_RebelMountingPlate.xml"),
     ("egp25_finger", "Schunk_EGP25_RebelMountingPlate_Finger.xml"),
 ]
+# Hub je Backe laut Schunk-Datenblatt (m). Das iRC-Modell schliesst weiter, bis sich die Traeger beruehren.
+HUB_DATENBLATT = {"egp25": 0.003, "egp40": 0.006}
+
+
+def egp_titel(key):
+    """'egp40_finger' -> 'EGP 40' (die iRC-Datei des EGP 40 heisst intern auch 'EGP-25')."""
+    return "EGP " + key[3:5]
 
 
 def _merge(parts):
@@ -268,32 +277,55 @@ def lade_egp(irc, xml_name, scale=0.001):
 
 # --- Backensaetze: eigene Backen (aus STEP, siehe tools/step_zu_netz.py) am EGP ---
 
-BACKEN_DIR = os.path.join(PROJECT, "cad", "backen")
+BACKEN_DIR = os.path.join(PROJECT, "cad", "backen")   # mitgelieferte Backensaetze (Repository)
+# im Baukasten gebaute (Container, nicht im Repository); dieselben Umgebungsvariablen wie tools/uebersicht.py
+LAUFZEIT_BACKEN_DIR = os.environ.get("BACKEN_DIR", os.path.join(PROJECT, "backen"))
+TEILE_DIR = os.environ.get("TEILE_DIR", os.path.join(PROJECT, "teile"))
 WERKZEUG_DIR = os.path.join(PROJECT, "werkzeuge")
 ACHSE = {"x": (1, 0, 0), "y": (0, 1, 0), "z": (0, 0, 1)}
 
 
-def lade_backensaetze(backen_dir=BACKEN_DIR):
-    """Alle cad/backen/<name>/backensatz.json mit vorhandenem Netz."""
-    saetze = []
-    if not os.path.isdir(backen_dir):
-        return saetze
-    for name in sorted(os.listdir(backen_dir)):
-        pfad = os.path.join(backen_dir, name, "backensatz.json")
-        if not os.path.exists(pfad):
+def netz_pfad(satz):
+    """Netz der Backe: aus der Teilebibliothek ("teil", Baukasten) oder neben backensatz.json ("netz")."""
+    if satz.get("teil"):
+        return os.path.join(TEILE_DIR, satz["teil"], "netz.obj")
+    return os.path.join(satz["ordner"], satz["netz"])
+
+
+def lade_backensaetze(backen_dirs=(BACKEN_DIR, LAUFZEIT_BACKEN_DIR)):
+    """Alle <ordner>/<name>/backensatz.json mit vorhandenem Netz; ein Name zaehlt nur einmal."""
+    saetze, namen = [], set()
+    for backen_dir in ([backen_dirs] if isinstance(backen_dirs, str) else backen_dirs):
+        if not os.path.isdir(backen_dir):
             continue
-        with open(pfad, encoding="utf-8") as f:
-            satz = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
-        satz["ordner"] = os.path.dirname(pfad)
-        if not os.path.exists(os.path.join(satz["ordner"], satz["netz"])):
-            print("WARNUNG: %s: Netz %s fehlt, Backensatz uebersprungen" % (name, satz["netz"]))
-            continue
-        saetze.append(satz)
+        for name in sorted(os.listdir(backen_dir)):
+            pfad = os.path.join(backen_dir, name, "backensatz.json")
+            if not os.path.exists(pfad):
+                continue
+            with open(pfad, encoding="utf-8") as f:
+                satz = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+            satz["ordner"] = os.path.dirname(pfad)
+            if satz["name"] in namen:
+                print("WARNUNG: Backensatz %s doppelt, %s uebersprungen" % (satz["name"], pfad))
+                continue
+            if not os.path.exists(netz_pfad(satz)):
+                print("WARNUNG: %s: Netz %s fehlt, Backensatz uebersprungen" % (name, netz_pfad(satz)))
+                continue
+            namen.add(satz["name"])
+            saetze.append(satz)
     return saetze
 
 
 def backen_lage(satz):
-    """Drehmatrix (Spalten = CAD-Achsen im Werkzeugsystem) und Verschiebung in mm der linken Backe."""
+    """Drehmatrix (Spalten = CAD-Achsen im Werkzeugsystem) und Verschiebung in mm der linken Backe.
+    Entweder "matrix" (3x3 zeilenweise, aus dem Baukasten) oder "achsen" (Zuordnung wie {"x": "-z", ...})."""
+    if "matrix" in satz:
+        m = [[float(v) for v in zeile] for zeile in satz["matrix"]]
+        det = (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+               + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
+        if abs(det - 1) > 1e-4:
+            sys.exit("Backensatz %s: 'matrix' ist keine Drehung" % satz["name"])
+        return m, satz["verschiebung_mm"]
     spalten = []
     for achse in "xyz":
         ziel = satz["achsen"][achse].strip()
@@ -309,7 +341,7 @@ def backen_lage(satz):
 
 def backe_platzieren(satz, scale=0.001):
     """Netz der Backe fuer links und rechts ins Werkzeugsystem setzen (Einheit nach scale)."""
-    verts, normals, faces = split_obj(os.path.join(satz["ordner"], satz["netz"]), scale)["default"]
+    verts, normals, faces = split_obj(netz_pfad(satz), scale)["default"]
     m, t = backen_lage(satz)
 
     def dreh(p):
@@ -321,6 +353,16 @@ def backe_platzieren(satz, scale=0.001):
     rechts_v = [(-x, -y, z) for x, y, z in links_v]
     rechts_n = [(-x, -y, z) for x, y, z in links_n]
     return (links_v, links_n, faces), (rechts_v, rechts_n, faces)
+
+
+def tcp_von_backen(satz, greif_v):
+    """TCP (m ab Flansch) eines Backensatzes: "spitze" (Standard) oder "mitte" der Backen in Werkzeugrichtung,
+    jeweils plus "tcp_versatz_mm" (positiv = vom Flansch weg), oder eine Zahl = mm ab Flansch."""
+    art = satz.get("tcp", "spitze")
+    if art in ("spitze", "mitte"):
+        z0, z1 = min(p[2] for p in greif_v), max(p[2] for p in greif_v)
+        return (z1 if art == "spitze" else (z0 + z1) / 2) + float(satz.get("tcp_versatz_mm") or 0) / 1000.0
+    return float(art) / 1000.0
 
 
 def convert_egp(irc, key, xml_name, satz=None):
@@ -337,11 +379,12 @@ def convert_egp(irc, key, xml_name, satz=None):
         dateien[name] = fname
     traeger_v = links[0] + rechts[0]
     spalt_traeger = min(abs(p[0]) for p in traeger_v)   # halbe Innenweite der offenen Traeger
-    hub = spalt_traeger - 0.0001                        # geschlossen liegen die Traeger aneinander
+    # geschlossen liegen die Traeger im iRC-Modell aneinander; echt ist der Hub kleiner (Datenblatt)
+    hub = min(spalt_traeger - 0.0001, HUB_DATENBLATT.get(key[:5], 1.0))
     if satz is None:
         tcp = float(root.find("OFFSET").get("OffsetZ")) / 1000.0
         greif_v = traeger_v
-        titel = "%s aus iRC (%s)" % (root.find("INFO").get("NAME"), xml_name)
+        titel = "%s aus iRC (%s)" % (egp_titel(key), xml_name)
     else:
         b_links, b_rechts = backe_platzieren(satz)
         for name, teil in (("backe_links", b_links), ("backe_rechts", b_rechts)):
@@ -349,9 +392,11 @@ def convert_egp(irc, key, xml_name, satz=None):
             write_obj(os.path.join(MESH_DIR, fname), *teil)
             dateien[name] = fname
         greif_v = b_links[0] + b_rechts[0]
-        tcp = max(p[2] for p in greif_v) if satz.get("tcp", "spitze") == "spitze" else float(satz["tcp"]) / 1000.0
+        tcp = tcp_von_backen(satz, greif_v)
+        if satz.get("hub_mm"):
+            hub = float(satz["hub_mm"]) / 1000.0
         hub = min(hub, min(abs(p[0]) for p in greif_v) - 0.0001)   # Backen beruehren sich zuerst
-        titel = "%s mit %s%s" % (root.find("INFO").get("NAME"), satz["titel"],
+        titel = "%s mit %s%s" % (egp_titel(key), satz["titel"],
                                  " (Lage provisorisch)" if satz.get("provisorisch") else "")
     spalt = min(abs(p[0]) for p in greif_v)             # halbe Innenweite bei offenem Greifer
     daten = {
@@ -395,7 +440,10 @@ def werkzeugpaket(irc, key, xml_name, satz, daten):
     hub_mm = daten["hub"] * 1000
     ordner = os.path.join(WERKZEUG_DIR, key)
     os.makedirs(ordner, exist_ok=True)
-    basis = "Schunk_EGP25_%s" % satz["name"].capitalize()
+    for alt in os.listdir(ordner):   # Dateien eines frueheren Stands (z.B. andere Groesse) nicht mitnehmen
+        os.remove(os.path.join(ordner, alt))
+    groesse = satz["basis"][3:5]
+    basis = "Schunk_EGP%s_%s" % (groesse, satz["name"].capitalize())
 
     def verschoben(teil, dx):
         v, n, f = teil
@@ -407,14 +455,14 @@ def werkzeugpaket(irc, key, xml_name, satz, daten):
         write_obj(os.path.join(ordner, "%s_%s.obj" % (basis, zustand)), *_merge(teile))
     tcp_mm = daten["tcp"] * 1000
     xml = ET.tostring(root, encoding="unicode")
-    xml = re.sub(r'<INFO NAME="[^"]*"', '<INFO NAME="EGP-25 %s"' % satz["titel"], xml)
+    xml = re.sub(r'<INFO NAME="[^"]*"', '<INFO NAME="EGP-%s %s"' % (groesse, satz["titel"]), xml)
     xml = re.sub(r'OffsetZ="[^"]*"', 'OffsetZ="%.1f"' % tcp_mm, xml)
     xml = re.sub(r'FileStandard="[^"]*"', 'FileStandard="%s_Offen.obj"' % basis, xml)
     xml = re.sub(r'FileActive="[^"]*"', 'FileActive="%s_Geschlossen.obj"' % basis, xml)
-    kopf = ("<!-- Erzeugt von rebel-webots-sim (tools/erzeuge_rebel_modell.py): Schunk EGP 25 mit %s.\n"
-            "     TCP %.1f mm = mittig zwischen den Backen auf Hoehe der Backenspitze.%s\n"
+    kopf = ("<!-- Erzeugt von rebel-webots-sim (tools/erzeuge_rebel_modell.py): Schunk EGP %s mit %s.\n"
+            "     TCP %.1f mm ab Flansch, mittig zwischen den Backen.%s\n"
             "     Enthaelt Modelldaten von igus: nur fuer den Unterricht, nicht weitergeben. -->\n"
-            % (satz["titel"], tcp_mm, "\n     LAGE DER BACKEN PROVISORISCH, noch nicht am echten Greifer gemessen."
+            % (groesse, satz["titel"], tcp_mm, "\n     LAGE DER BACKEN PROVISORISCH, noch nicht am echten Greifer gemessen."
                if satz.get("provisorisch") else ""))
     with open(os.path.join(ordner, basis + ".xml"), "w", encoding="utf-8") as f:
         f.write(kopf + xml + "\n")
@@ -558,10 +606,20 @@ def main():
     for old in os.listdir(MESH_DIR):
         if old.startswith("egp") and old.endswith(".obj"):
             os.remove(os.path.join(MESH_DIR, old))
-    egp = [(key, convert_egp(args.irc, key, xml)) for key, xml in EGP_VARIANTEN]
-    xml_von = dict(EGP_VARIANTEN)
+    # aeltere iRC-Exporte (irc_daten_export.ps1) enthalten nur den EGP 25
+    vorhanden = [(key, xml) for key, xml in EGP_VARIANTEN if os.path.exists(os.path.join(args.irc, "Data", "Tools", xml))]
+    for key, xml in EGP_VARIANTEN:
+        if (key, xml) not in vorhanden:
+            print("WARNUNG: %s fehlt in den iRC-Daten, Greifer %s uebersprungen" % (xml, key))
+    if not vorhanden:
+        sys.exit("Kein Schunk-Greifer in %s/Data/Tools" % args.irc)
+    egp = [(key, convert_egp(args.irc, key, xml)) for key, xml in vorhanden]
+    xml_von = dict(vorhanden)
     for satz in lade_backensaetze():
         key = "%s_%s" % (satz["basis"], satz["name"])
+        if satz["basis"] not in xml_von:
+            print("WARNUNG: Backensatz %s braucht den Greifer %s, der fehlt" % (satz["name"], satz["basis"]))
+            continue
         text, daten = convert_egp(args.irc, key, xml_von[satz["basis"]], satz)
         egp.append((key, (text, daten)))
         ordner, basis = werkzeugpaket(args.irc, key, xml_von[satz["basis"]], satz, daten)

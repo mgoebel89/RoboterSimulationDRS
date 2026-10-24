@@ -33,6 +33,6 @@ systemctl daemon-reload
 systemctl enable rebel-sim-web.service
 systemctl restart rebel-sim-web.service
 
-echo "Fertig. Schueler oeffnen http://<container>:8080 und starten ihre Simulation selbst."
-echo "Lehrerbereich: http://<container>:8080/lehrer. Ersten Admin anlegen: sudo -u rebelsim python3 $BASIS/tools/lehrer.py admin <name>"
+echo "Fertig. Schueler oeffnen http://<container> und starten ihre Simulation selbst."
+echo "Lehrerbereich: http://<container>/lehrer (auch ueber die Startseite). Ersten Admin anlegen: sudo -u rebelsim python3 $BASIS/tools/lehrer.py admin <name>"
 echo "Einstellungen: /etc/rebel-sim/verwalter.json. Fester Platz: rebel-sim-platz anlegen 99 192.168.3.11 rebel_tisch.wbt dauerhaft"

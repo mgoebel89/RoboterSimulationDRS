@@ -1,4 +1,6 @@
-"""Webseite der ReBeL-Simulation (laeuft im Container, Port 8080).
+"""Webseite der ReBeL-Simulation (laeuft im Container, Port 80; der alte Port 8080 leitet um).
+
+Startseite / fuer alle: freigegebene Welten zum Starten und der Zugang zum Lehrerbereich.
 
 Schueler (erkannt an der IP ihres PCs, siehe verwalter.py):
   /               ohne Simulation: Weltenliste mit "Simulation starten";
@@ -12,14 +14,15 @@ Schueler (erkannt an der IP ihres PCs, siehe verwalter.py):
 Lehrkraft (lehrer_ips in verwalter.json, im Container selbst immer):
   /lehrer         Liste aller Simulationen mit Ampel, aktualisiert sich selbst
   /status.json    Zustand aller Simulationen (fuer die Seite und fuer Skripte)
-  /platz/07       3D-Ansicht von Platz 07 (?steuern=1: mit Pause/Reset)
+  /platz/07       3D-Ansicht von Platz 07 mit Teile zurueck, Neu starten, Beenden (nur zuschauen:
+                  den Roboter bewegt immer iRC am Schueler-PC)
 
 Fuer alle, aber nur fuer die eigene Simulation (Lehrkraft: alle):
   /sim/07/...     Durchleitung zum Webots-Stream von Platz 07 (WebSocket und
                   Dateien wie Meshes). Noetig, weil aktuelle Browser
                   Verbindungen von einer http-Seite zu einem ANDEREN Port im
                   lokalen Netz sperren ("Local Network Access"). So kommt
-                  alles vom selben Ursprung, und im Netz muss nur Port 8080
+                  alles vom selben Ursprung, und im Netz muss nur Port 80
                   offen sein.
 
 Plaetze kommen aus /etc/rebel-sim/*.env (angelegt vom Verwalter bzw. mit
@@ -42,6 +45,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import baukasten
 import lehrer
 import verwalter
+import welt_paket
+import aufgabe_md
 
 KONFIG_DIR = os.environ.get("KONFIG_DIR", "/etc/rebel-sim")
 STATUS_DIR = os.environ.get("STATUS_DIR", "/run/rebel-sim")
@@ -50,7 +55,7 @@ ZUSTAND_DIR = lehrer.ZUSTAND_DIR
 TEILE_DIR = os.environ.get("TEILE_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "teile"))
 WELT_NAME = re.compile(r"[a-z0-9_-]{1,50}")
 TEIL_NAME = re.compile(r"[a-z0-9_-]{1,60}")
-PORT = int(os.environ.get("UEBERSICHT_PORT", "8080"))
+PORT = int(os.environ.get("UEBERSICHT_PORT", "80"))
 WEBOTS_VIEW_JS = os.environ.get("WEBOTS_VIEW_JS", "https://cyberbotics.com/wwi/R2025a/WebotsView.js")
 STREAM_HOST = os.environ.get("STREAM_HOST", "127.0.0.1")
 VERALTET_NACH_S = 5.0
@@ -154,43 +159,91 @@ def gesamtstatus(plaetze=None, aktiv_fn=None, status_dir=None):
     return ergebnis
 
 
+# Gestaltung nach dem Corporate Design der David-Roentgen-Schule: Hauptfarben DRS-Blau und Schwarz,
+# Akzente Gruen, Pink, Gelb; Schrift DIN Pro bzw. Calibri; Flaechen mit EINER abgerundeten Ecke;
+# das blaue DRS-Dreieck hebt Ueberschriften hervor. Das Logo waehlt ein Admin unter Einstellungen.
 STIL = """
-:root { --bg:#f4f5f7; --karte:#fff; --text:#1d2330; --leise:#5b6475; --orange:#f26b00;
-        --gruen:#2e9e5b; --gelb:#e0a800; --rot:#d64545; }
+:root { --blau:#00639C; --blau-dunkel:#004a75; --blau-hell:#E6F3FA; --gruen:#B1C800; --pink:#D4005E; --gelb:#F8B442;
+        --schwarz:#1a1a1a; --grau:#a6a6a6; --grau-hell:#d1d1d1; --linie:#e2e5e9; --bg:#f4f5f6; --karte:#fff;
+        --text:#1a1a1a; --leise:#666; --rot:#D4005E; --ecke:14px; --knopf:#eceef1; }
 * { box-sizing:border-box; }
-body { margin:0; font-family:system-ui,Segoe UI,sans-serif; background:var(--bg); color:var(--text); }
-header { background:#1d2330; color:#fff; padding:14px 20px; display:flex; gap:12px; align-items:center; }
-header b { color:var(--orange); }
+body { margin:0; font-family:'DIN Pro', Calibri, 'Segoe UI', Arial, sans-serif; background:var(--bg); color:var(--text); }
+header { background:var(--karte); color:var(--text); padding:8px 20px; display:flex; gap:8px 12px; align-items:center;
+  border-bottom:3px solid var(--blau); min-height:58px; flex-wrap:wrap; }
+header > * { white-space:nowrap; }
+.marke { display:flex; align-items:center; gap:14px; color:var(--blau); text-decoration:none; font-weight:700;
+  font-size:1.15em; white-space:nowrap; }
+.marke img { height:40px; width:auto; display:block; }
+.dreieck { width:.75em; height:.75em; fill:var(--blau); flex:none; vertical-align:-.05em; margin-right:.35em; }
+header .unter { color:var(--leise); }
 main { padding:20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; }
-.platz { background:var(--karte); border-radius:10px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.12);
-         display:flex; flex-direction:column; gap:6px; }
-.kopf { display:flex; align-items:center; gap:10px; font-size:1.25em; font-weight:600; }
+.platz { background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:14px; border:1px solid var(--linie);
+  box-shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04); display:flex; flex-direction:column; gap:6px; }
+.kopf { display:flex; align-items:center; gap:10px; font-size:1.25em; font-weight:700; }
 .punkt { width:16px; height:16px; border-radius:50%; flex:none; }
-.gruen { background:var(--gruen); } .gelb { background:var(--gelb); } .rot { background:var(--rot); }
+.gruen { background:var(--gruen); } .gelb { background:var(--gelb); } .rot { background:var(--pink); }
 .leise { color:var(--leise); font-size:.9em; }
-a.knopf { margin-top:6px; text-align:center; background:var(--orange); color:#fff; text-decoration:none;
-          padding:8px; border-radius:6px; font-weight:600; }
+a.knopf { margin-top:6px; text-align:center; background:var(--blau); color:#fff; text-decoration:none;
+          padding:8px; border-radius:3px; font-weight:700; }
+a.knopf:hover { background:var(--blau-dunkel); }
 .leer { padding:40px; color:var(--leise); grid-column:1/-1; }
+.md { line-height:1.45; } .md > :first-child { margin-top:0; } .md > :last-child { margin-bottom:0; }
+.md p, .md ul, .md ol, .md blockquote, .md table { margin:0 0 .65em; } .md ul, .md ol { padding-left:1.3em; }
+.md h3, .md h4, .md h5 { margin:.9em 0 .35em; color:var(--blau); } .md h3 { font-size:1.08em; } .md h4, .md h5 { font-size:1em; }
+.md code { background:var(--bg); border:1px solid var(--linie); border-radius:3px; padding:0 4px; font-size:.92em; }
+.md blockquote { border-left:4px solid var(--gelb); background:#fff8ea; padding:6px 10px; }
+.md table { border-collapse:collapse; } .md th, .md td { border:1px solid var(--linie); padding:3px 7px; text-align:left; }
+.md th { background:var(--bg); } .md hr { border:0; border-top:1px solid var(--linie); margin:.8em 0; }
+.md a { color:var(--blau); }
 """
+
+# Blaues DRS-Dreieck (Gestaltungselement), als Inline-SVG
+DREIECK = ('<svg class="dreieck" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.6 .9C1 .6.6.9.6 1.6v6.8c0 .7.4 1 '
+           '1 .7l6.9-3.4c.6-.3.6-1.1 0-1.4z"/></svg>')
+
+
+def logo_url():
+    """Adresse des gewaehlten Logos (mit Stand, damit ein neues sofort erscheint) oder None."""
+    name = lehrer.gewaehltes_logo(ZUSTAND_DIR)
+    if not name:
+        return None
+    try:
+        stand = int(os.path.getmtime(os.path.join(lehrer.logo_dir(ZUSTAND_DIR), name)))
+    except OSError:
+        stand = 0
+    return "/logo?%s-%d" % (urllib.parse.quote(name), stand)
+
+
+def marke():
+    """Linker Teil der Kopfzeile: Logo (falls gewaehlt) und Name, fuehrt zur Startseite."""
+    url = logo_url()
+    bild = '<img src="%s" alt="Logo">' % html.escape(url) if url else ""
+    return '<a class="marke" href="/" title="Startseite">%s<span>%sReBeL-Simulation</span></a>' % (bild, DREIECK)
 
 ANMELDUNG = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ReBeL - Lehrerbereich</title><style>%%STIL%%
-.anmelden { max-width:340px; margin:60px auto; background:var(--karte); border-radius:10px; padding:22px;
-  box-shadow:0 1px 3px rgba(0,0,0,.12); display:flex; flex-direction:column; gap:10px; }
-.anmelden input { font:inherit; font-size:1.1em; padding:8px 10px; border:1px solid #c6ccd6; border-radius:6px; }
-.anmelden button { font:inherit; font-weight:600; background:var(--orange); color:#fff; border:0; border-radius:6px;
+.anmelden { max-width:360px; margin:60px auto; background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:24px;
+  border:1px solid var(--linie); box-shadow:0 4px 12px rgba(0,0,0,.05); display:flex; flex-direction:column; gap:10px; }
+.anmelden h1 { margin:0 0 6px; font-size:1.25em; color:var(--blau); }
+.anmelden input { font:inherit; font-size:1.1em; padding:8px 10px; border:1px solid var(--grau-hell); border-radius:3px; }
+.anmelden input:focus { outline:2px solid var(--blau); outline-offset:-1px; }
+.anmelden button { font:inherit; font-weight:700; background:var(--blau); color:#fff; border:0; border-radius:3px;
   padding:10px; cursor:pointer; margin-top:6px; }
+.anmelden button:hover { background:var(--blau-dunkel); }
+.anmelden a { color:var(--blau); font-size:.92em; }
 #fehler { color:var(--rot); min-height:1.2em; }
 </style></head>
-<body><header><b>ReBeL</b> Lehrerbereich</header>
+<body><header>%%MARKE%% <span class="unter">Lehrerbereich</span></header>
 <form class="anmelden" id="form">
+  <h1>%%DREIECK%%Anmelden</h1>
   <label for="name">Benutzername</label>
   <input id="name" autocomplete="username" autocapitalize="none" autofocus>
   <label for="passwort">Passwort</label>
   <input id="passwort" type="password" autocomplete="current-password">
   <button>Anmelden</button>
   <div id="fehler"></div>%%HINWEIS%%
+  <a href="/">Zurück zur Startseite</a>
 </form>
 <script>
 document.getElementById('form').onsubmit = async ev => {
@@ -211,56 +264,84 @@ LEHRER_SEITE = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ReBeL - Lehrerbereich</title><style>%%STIL%%
 header { flex-wrap:wrap; }
-nav { display:flex; gap:6px; margin-left:16px; flex-wrap:wrap; }
-nav button, header .rechts { color:#fff; background:#3a4256; border:0; border-radius:6px; padding:7px 12px;
-  font:inherit; cursor:pointer; }
-nav button.an { background:var(--orange); }
-nav a.nav-link { color:#fff; background:#3a4256; border-radius:6px; padding:7px 12px; text-decoration:none; }
-#ich { margin-left:auto; color:#cfd6e4; font-size:.9em; }
+nav { display:flex; gap:4px; margin-left:12px; flex-wrap:wrap; }
+nav button, nav a.nav-link, header .rechts { color:var(--text); background:transparent; border:0; border-radius:3px;
+  padding:7px 11px; font:inherit; cursor:pointer; text-decoration:none; }
+nav button:hover, nav a.nav-link:hover, header .rechts:hover { background:var(--blau-hell); color:var(--blau); }
+nav button.an { background:var(--blau); color:#fff; font-weight:700; }
+#ich { margin-left:auto; color:var(--leise); font-size:.9em; }
 .leiste { display:flex; gap:12px; align-items:center; padding:16px 20px 0; flex-wrap:wrap; }
 .knopfreihe { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
-.knopfreihe a, .knopfreihe button, .leiste button, .feld button, label.knopf-datei, td button {
-  font:inherit; font-size:.88em; border:0; border-radius:6px; padding:7px 10px; cursor:pointer;
-  background:#e6e9ef; color:var(--text); text-decoration:none; }
-button.haupt { background:var(--orange) !important; color:#fff !important; font-weight:600; }
-button.warnen { background:var(--rot) !important; color:#fff !important; }
+.knopfreihe a, .knopfreihe button, .leiste button, .leiste a, .feld button, label.knopf-datei, td button, td a.klein {
+  font:inherit; font-size:.88em; border:0; border-radius:3px; padding:7px 10px; cursor:pointer;
+  background:var(--knopf); color:var(--text); text-decoration:none; display:inline-block; }
+.knopfreihe a:hover, .knopfreihe button:hover, .leiste button:hover, .feld button:hover, label.knopf-datei:hover,
+  td button:hover, td a.klein:hover { background:var(--blau-hell); color:var(--blau); }
+button.haupt, a.haupt { background:var(--blau) !important; color:#fff !important; font-weight:700; }
+button.haupt:hover, a.haupt:hover { background:var(--blau-dunkel) !important; }
+button.warnen { background:var(--pink) !important; color:#fff !important; }
+button:disabled { opacity:.55; cursor:default; }
 .hilfe { font-size:.88em; color:var(--leise); }
-.welt { padding:0; overflow:hidden; }
-.welt .bild { aspect-ratio:4/3; background:#dfe3ea center/cover no-repeat; display:flex; align-items:center;
-  justify-content:center; color:var(--leise); font-weight:600; }
-.welt .text { padding:12px 14px 14px; display:flex; flex-direction:column; gap:8px; }
-.welt input[type=text], .welt textarea, .feld input, .feld select, td select { font:inherit; padding:6px 8px;
-  border:1px solid #c6ccd6; border-radius:6px; width:100%; }
+.feld input, .feld select, .feld textarea, td select { font:inherit; padding:6px 8px;
+  border:1px solid var(--grau-hell); border-radius:3px; width:100%; background:#fff; }
+.feld input:focus, .feld select:focus, .feld textarea:focus { outline:2px solid var(--blau); outline-offset:-1px; }
+.feld input[type=checkbox], .feld input[type=radio] { width:auto; }
 td select { width:auto; }
-.welt textarea { min-height:8em; resize:vertical; }
-.welt .datei { font-size:.8em; color:var(--leise); }
+.feld textarea { min-height:9em; resize:vertical; font-family:Consolas, 'Cascadia Mono', monospace; font-size:.9em; }
+.feld button.an { background:var(--blau); color:#fff; }
 .spalte { padding:20px; display:flex; flex-direction:column; gap:16px; max-width:860px; }
-.feld { background:var(--karte); border-radius:10px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.12);
-  display:flex; flex-direction:column; gap:8px; overflow-x:auto; }
-.feld h2 { margin:0; font-size:1.05em; }
+.spalte.breit { max-width:1200px; }
+.feld { background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:14px 16px; border:1px solid var(--linie);
+  box-shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04); display:flex; flex-direction:column; gap:8px; overflow-x:auto; }
+.feld h2 { margin:0; font-size:1.05em; color:var(--blau); }
 .zeile { display:flex; gap:8px; flex-wrap:wrap; } .zeile > * { flex:1; min-width:140px; }
 table { border-collapse:collapse; width:100%; font-size:.92em; }
-th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #e6e9ef; vertical-align:middle; }
-td.knoepfe { white-space:nowrap; }
-.gesperrt { color:var(--rot); font-weight:600; }
-#meldung { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#1d2330; color:#fff;
-  padding:10px 16px; border-radius:8px; z-index:20; box-shadow:0 2px 10px rgba(0,0,0,.3); }
+th { font-weight:700; color:var(--leise); font-size:.85em; text-transform:uppercase; letter-spacing:.03em; }
+th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--linie); vertical-align:middle; }
+td.knoepfe { white-space:nowrap; text-align:right; }
+.gesperrt { color:var(--rot); font-weight:700; }
+/* Weltenliste */
+table.welten td { padding:8px; }
+table.welten tr.zeile-welt { cursor:pointer; } table.welten tr.zeile-welt:hover td { background:var(--blau-hell); }
+.mini { width:84px; height:63px; border-radius:8px 0 0 0; background:var(--bg) center/cover no-repeat; display:flex;
+  align-items:center; justify-content:center; font-size:.7em; color:var(--grau); border:1px solid var(--linie); }
+.welt-titel { font-weight:700; } .welt-datei { font-size:.8em; color:var(--leise); }
+.welt-aufgabe { font-size:.85em; color:var(--leise); max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chip { display:inline-block; font-size:.8em; font-weight:700; padding:3px 9px; border-radius:10px; border:0; cursor:pointer;
+  font-family:inherit; white-space:nowrap; }
+.chip.frei { background:var(--gruen); color:var(--schwarz); } .chip.zu { background:var(--knopf); color:var(--leise); }
+.chip.laeuft { background:var(--gelb); color:var(--schwarz); cursor:default; }
+.filter { display:flex; gap:8px; align-items:center; }
+.filter input { font:inherit; padding:6px 9px; border:1px solid var(--grau-hell); border-radius:3px; min-width:220px; }
+/* Logos */
+.logos { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px; }
+.logo-wahl { border:2px solid var(--linie); border-radius:var(--ecke) 0 0 0; padding:10px; display:flex; flex-direction:column;
+  gap:8px; align-items:stretch; cursor:pointer; background:#fff; }
+.logo-wahl.an { border-color:var(--blau); box-shadow:0 0 0 3px var(--blau-hell); }
+.logo-wahl .bildchen { height:64px; display:flex; align-items:center; justify-content:center; }
+.logo-wahl img { max-height:64px; max-width:100%; }
+.logo-wahl .unten { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:.85em; }
+#meldung { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--schwarz); color:#fff;
+  padding:10px 16px; border-radius:var(--ecke) 0 0 0; z-index:30; box-shadow:0 2px 10px rgba(0,0,0,.3); }
 #meldung.fehler { background:var(--rot); }
 [hidden] { display:none !important; }   /* sonst gewinnt z.B. display:flex gegen hidden */
-#pw-dialog { position:fixed; inset:0; background:rgba(29,35,48,.6); z-index:15; display:flex; align-items:center;
+.dialog { position:fixed; inset:0; background:rgba(26,26,26,.55); z-index:15; display:flex; align-items:center;
   justify-content:center; padding:16px; }
-#pw-dialog .feld { width:min(380px, 100%); }
+.dialog > .feld { width:min(380px, 100%); max-height:calc(100vh - 32px); overflow:auto; }
+.dialog > .feld.gross { width:min(720px, 100%); }
+.dialog .vorschau { width:100%; aspect-ratio:4/3; max-height:260px; border-radius:var(--ecke) 0 0 0; background:var(--bg) center/contain no-repeat;
+  border:1px solid var(--linie); display:flex; align-items:center; justify-content:center; color:var(--grau); }
 input[type=file] { display:none; }
 </style></head>
-<body><header><b>ReBeL</b> Lehrerbereich
+<body><header>%%MARKE%% <span class="unter">Lehrerbereich</span>
 <nav><button data-tab="sim" class="an">Simulationen</button><button data-tab="welten">Welten</button>
-<button data-tab="teile">Teile</button><a class="nav-link" href="/lehrer/baukasten">Baukasten</a><button data-tab="protokoll">Protokoll</button><button data-tab="einst" class="nur-admin">Einstellungen</button>
+<button data-tab="teile">Teile</button><a class="nav-link" href="/lehrer/baukasten">Baukasten</a><a class="nav-link" href="/lehrer/baukasten?modus=backen">Backensätze</a><button data-tab="protokoll">Protokoll</button><button data-tab="einst" class="nur-admin">Einstellungen</button>
 <button data-tab="benutzer" class="nur-admin">Benutzer</button></nav>
 <span id="ich"></span><button class="rechts" id="pw-knopf">Passwort</button>
 <button class="rechts" id="abmelden">Abmelden</button></header>
 <div id="meldung" hidden></div>
 
-<div id="pw-dialog" hidden><div class="feld"><h2 id="pw-titel">Passwort ändern</h2>
+<div id="pw-dialog" class="dialog" hidden><div class="feld"><h2 id="pw-titel">Passwort ändern</h2>
   <div class="hilfe" id="pw-hinweis"></div>
   <label>Bisheriges Passwort <input id="pw-alt" type="password" autocomplete="current-password"></label>
   <label>Neues Passwort (mindestens 8 Zeichen) <input id="pw-neu" type="password" autocomplete="new-password"></label>
@@ -275,10 +356,55 @@ input[type=file] { display:none; }
 </section>
 
 <section id="tab-welten" hidden>
-  <div class="leiste hilfe">Neue Welten als .wbt-Datei in /opt/rebel-sim/worlds ablegen. Nur freigegebene Welten
-    sehen die Schüler. Änderungen gelten für neu gestartete Simulationen.</div>
-  <main id="welten"></main>
+  <div class="spalte breit">
+    <div class="filter"><input id="w-suche" type="search" placeholder="Welten durchsuchen ...">
+      <span class="hilfe" id="w-anzahl"></span>
+      <label class="knopf-datei" style="margin-left:auto" title="Welt-Paket (ZIP) aus „Exportieren“ einer anderen Instanz">Welt importieren
+        <input type="file" id="w-import" accept=".zip,application/zip"></label>
+      <a class="haupt" href="/lehrer/baukasten" style="padding:7px 12px;border-radius:3px;text-decoration:none">Neue Welt im Baukasten</a></div>
+    <div class="feld"><table class="welten"><thead><tr><th></th><th>Welt</th><th>Greifer</th><th>Schüler</th><th></th></tr></thead>
+      <tbody id="welten"></tbody></table>
+      <div class="hilfe">Zeile anklicken zum Bearbeiten. Nur freigegebene Welten sehen die Schüler auf der Startseite;
+        Änderungen gelten für neu gestartete Simulationen. Gelöschte Welten landen im Papierkorb
+        (<code>worlds/papierkorb</code> im Container).</div></div>
+  </div>
 </section>
+
+<div id="welt-dialog" class="dialog" hidden><div class="feld gross">
+  <h2 id="wd-titel">Welt</h2><div class="welt-datei" id="wd-datei"></div>
+  <label>Titel <input id="wd-name" maxlength="100"></label>
+  <div class="zeile" style="align-items:center"><span style="flex:1">Aufgabentext (Markdown)</span>
+    <span style="flex:0;white-space:nowrap"><button id="wd-md-text" class="an">Text</button><button id="wd-md-vorschau">Vorschau</button></span></div>
+  <textarea id="wd-aufgabe" maxlength="5000" spellcheck="true"></textarea>
+  <div id="wd-md-bild" class="md feld" style="min-height:9em;box-shadow:none" hidden></div>
+  <div class="hilfe"><code># Überschrift</code> · <code>**fett**</code> · <code>*kursiv*</code> · <code>- Aufzählung</code> ·
+    <code>1. Schritt</code> · <code>&gt; Hinweis</code> · <code>`DOut31`</code> · <code>[Link](https://…)</code> ·
+    Tabelle: <code>| A | B |</code> und darunter <code>|---|---|</code>. Leerzeile = neuer Absatz.</div>
+  <div class="zeile"><label>Greifer <select id="wd-greifer"></select></label>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="wd-sichtbar"> für Schüler freigegeben</label></div>
+  <div class="hilfe" id="wd-greifer-hilfe"></div>
+  <div class="zeile">
+    <div><div class="vorschau" id="wd-bild">kein Vorschaubild</div>
+      <div class="knopfreihe"><button id="wd-vorschau">Vorschaubild erzeugen</button>
+        <label class="knopf-datei">Bild hochladen<input type="file" class="wd-datei" accept="image/png,image/jpeg"></label></div></div>
+    <div><div class="hilfe">Arbeitsblatt (PDF, optional)</div>
+      <div class="knopfreihe" id="wd-pdf"></div>
+      <div class="hilfe" id="wd-laeuft" style="margin-top:12px"></div>
+      <div class="knopfreihe" id="wd-baukasten"></div></div>
+  </div>
+  <div class="knopfreihe" style="margin-top:10px"><button class="haupt" id="wd-speichern">Speichern</button>
+    <button id="wd-abbrechen">Schließen</button>
+    <a id="wd-export" title="Welt mit allen Teilen und dem Backensatz als ZIP, z.B. für die Instanz in der Schule">Exportieren (ZIP)</a>
+    <button class="warnen" id="wd-loeschen" style="margin-left:auto">Welt löschen</button></div>
+</div></div>
+
+<div id="import-dialog" class="dialog" hidden><div class="feld"><h2>Welt importieren</h2>
+  <div id="im-text"></div>
+  <label>Neuer Name <input id="im-name" autocapitalize="none"></label>
+  <div class="hilfe">a-z, 0-9, - und _. „Ersetzen“ legt die vorhandene Welt in den Papierkorb.</div>
+  <div class="knopfreihe"><button class="haupt" id="im-neu">Als neue Welt importieren</button>
+    <button class="warnen" id="im-ersetzen">Vorhandene ersetzen</button><button id="im-abbrechen">Abbrechen</button></div>
+</div></div>
 
 <section id="tab-teile" hidden>
   <div class="spalte">
@@ -306,6 +432,13 @@ input[type=file] { display:none; }
       <label>Beenden nach so vielen Minuten ohne iRC <input id="e-leer" type="number" min="1" max="240"></label>
       <label>Alle beenden um (Stundenende, z.B. 09:30, 11:15) <input id="e-uhr" type="text" placeholder="keine"></label>
       <div><button class="haupt" id="e-speichern">Speichern</button></div></div>
+    <div class="feld"><h2>Logo</h2>
+      <div class="hilfe">Erscheint oben links auf allen Seiten (Startseite, Simulation, Lehrerbereich). Anklicken wählt es aus.
+        PNG, JPG oder SVG, am besten das Logo „quer“ auf weißem Grund.</div>
+      <div class="logos" id="logos"></div>
+      <div class="zeile"><label>Name <input id="l-name" placeholder="z.B. drs_quer" autocapitalize="none"></label>
+        <label class="knopf-datei" style="flex:0;align-self:end;white-space:nowrap">Logo hochladen<input type="file" id="l-datei" accept="image/png,image/jpeg,image/svg+xml,.svg"></label></div>
+    </div>
   </div>
 </section>
 
@@ -336,7 +469,8 @@ let meldungZeit, ich = {};
 function melden(text, fehler) {
   const m = $('meldung');
   m.textContent = text; m.className = fehler ? 'fehler' : ''; m.hidden = false;
-  clearTimeout(meldungZeit); meldungZeit = setTimeout(() => m.hidden = true, fehler ? 6000 : 2500);
+  // lange Meldungen (z.B. Bericht des Imports) bleiben laenger stehen
+  clearTimeout(meldungZeit); meldungZeit = setTimeout(() => m.hidden = true, Math.max(fehler ? 6000 : 2500, text.length * 70));
 }
 async function api(aktion, daten) {
   const r = await fetch('/api/lehrer/' + aktion, {method: 'POST', body: JSON.stringify(daten || {}),
@@ -403,7 +537,6 @@ function karte(p) {
     + '<div class="leise">' + esc(gelenke) + '</div>'
     + (p.hilfe ? '<div class="leise">' + esc(p.hilfe) + '</div>' : '')
     + '<div class="knopfreihe"><a href="/platz/' + esc(p.platz) + '" target="_blank">Ansehen</a>'
-    + '<a href="/platz/' + esc(p.platz) + '?steuern=1" target="_blank" title="mit Pause und Reset von Webots">Steuern</a>'
     + '<button data-teile="' + esc(p.platz) + '" title="Werkstücke auf die Startlage, ohne Neustart">Teile zurück</button>'
     + '<button data-reset="' + esc(p.platz) + '" title="Webots neu starten">Neu starten</button>'
     + '<button data-ende="' + esc(p.platz) + '" class="warnen">Beenden</button></div></div>';
@@ -436,52 +569,144 @@ $('alle-beenden').onclick = async () => {
   const d = await api('alle_beenden'); melden(d.anzahl + ' Simulation(en) beendet.'); simulationen();
 };
 
-// --- Welten ---
+// --- Welten: Liste, Klick oeffnet den Dialog ---
+let weltListe = [], greiferNamen = [], weltOffen = null;
+const greiferText = n => (greiferNamen.find(g => g.name === n) || {}).titel || n || '–';
 async function welten() {
-  const liste = await (await fetch('/api/lehrer/welten', {cache: 'no-store'})).json();
-  const ausBaukasten = await (await fetch('/api/lehrer/entwuerfe', {cache: 'no-store'})).json();
-  const t = Date.now();
-  $('welten').innerHTML = liste.map(w => '<div class="platz welt" data-datei="' + esc(w.datei) + '">'
-    + (w.bild ? '<div class="bild" style="background-image:url(\\'/welten/' + esc(w.bild) + '?' + t + '\\')"></div>'
-              : '<div class="bild">kein Vorschaubild</div>')
-    + '<div class="text"><div class="datei">' + esc(w.datei) + '</div>'
-    + '<label><input type="checkbox" class="w-sichtbar"' + (w.sichtbar ? ' checked' : '') + '> für Schüler freigegeben</label>'
-    + '<input type="text" class="w-titel" maxlength="100" placeholder="Titel" value="' + esc(w.titel) + '">'
-    + '<textarea class="w-aufgabe" maxlength="5000" placeholder="Aufgabentext">' + esc(w.aufgabe) + '</textarea>'
-    + '<div class="knopfreihe"><button class="haupt w-speichern">Speichern</button>'
-    + (ausBaukasten.includes(w.datei.replace(/[.]wbt$/, '')) ? '<a href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, ''))
-       + '">Im Baukasten öffnen</a>' : '') + '</div>'
-    + '<div class="knopfreihe"><button class="w-vorschau">Vorschaubild erzeugen</button>'
-    + '<label class="knopf-datei">Bild hochladen<input type="file" class="w-datei" accept="image/png,image/jpeg"></label></div>'
-    + '<div class="knopfreihe">' + (w.pdf ? '<a href="/welten/' + esc(w.pdf) + '" target="_blank">Arbeitsblatt ansehen</a>'
-        + '<button class="w-pdf-weg">Arbeitsblatt entfernen</button>' : '')
-    + '<label class="knopf-datei">Arbeitsblatt (PDF) ' + (w.pdf ? 'ersetzen' : 'hochladen')
-    + '<input type="file" class="w-datei" accept="application/pdf"></label></div></div></div>').join('')
-    || '<div class="leer">Keine Welten gefunden.</div>';
+  [weltListe, greiferNamen] = await Promise.all([fetch('/api/lehrer/welten', {cache: 'no-store'}).then(r => r.json()),
+                                                 fetch('/api/lehrer/greifer_liste', {cache: 'no-store'}).then(r => r.json())]);
+  weltenZeigen();
+  if (weltOffen) { const w = weltListe.find(w => w.datei === weltOffen); if (w) weltDialog(w, true); }
 }
+function weltenZeigen() {
+  const such = $('w-suche').value.trim().toLowerCase(), t = Date.now();
+  const liste = weltListe.filter(w => !such || (w.titel + ' ' + w.datei + ' ' + w.aufgabe).toLowerCase().includes(such));
+  $('w-anzahl').textContent = liste.length + ' von ' + weltListe.length + ' Welten, ' + weltListe.filter(w => w.sichtbar).length + ' freigegeben';
+  $('welten').innerHTML = liste.map(w => '<tr class="zeile-welt" data-datei="' + esc(w.datei) + '">'
+    + '<td style="width:96px">' + (w.bild ? '<div class="mini" style="background-image:url(\\'/welten/' + esc(w.bild) + '?' + t + '\\')"></div>'
+                                          : '<div class="mini">kein Bild</div>') + '</td>'
+    + '<td><div class="welt-titel">' + esc(w.titel) + '</div><div class="welt-datei">' + esc(w.datei)
+    + (w.baukasten ? ' · Baukasten' : '') + (w.pdf ? ' · Arbeitsblatt' : '') + '</div>'
+    + '<div class="welt-aufgabe">' + esc(w.aufgabe_kurz || '') + '</div></td>'
+    + '<td>' + esc(greiferText(w.greifer)) + '</td>'
+    + '<td><button class="chip ' + (w.sichtbar ? 'frei' : 'zu') + '" data-freigabe title="Klick schaltet um">'
+    + (w.sichtbar ? 'freigegeben' : 'gesperrt') + '</button>'
+    + (w.laeuft.length ? ' <span class="chip laeuft" title="läuft gerade">Platz ' + w.laeuft.map(esc).join(', ') + '</span>' : '') + '</td>'
+    + '<td class="knoepfe">' + (w.baukasten ? '<a class="klein" href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, ''))
+       + '">Baukasten</a> ' : '') + '<button data-bearbeiten>Bearbeiten</button></td></tr>').join('')
+    || '<tr><td colspan="5" class="hilfe">' + (weltListe.length ? 'Keine Welt passt zur Suche.' : 'Noch keine Welten.') + '</td></tr>';
+}
+$('w-suche').oninput = weltenZeigen;
 $('welten').onclick = async ev => {
-  const karte = ev.target.closest('[data-datei]'), b = ev.target.closest('button');
-  if (!karte || !b) return;
-  const datei = karte.dataset.datei;
-  if (b.classList.contains('w-speichern')) {
-    await api('welt', {datei, titel: karte.querySelector('.w-titel').value, aufgabe: karte.querySelector('.w-aufgabe').value,
-                       sichtbar: karte.querySelector('.w-sichtbar').checked});
-    melden('Gespeichert.');
-  } else if (b.classList.contains('w-vorschau')) {
-    b.disabled = true; b.textContent = 'Webots rechnet ...';
-    try { await api('vorschau', {datei}); melden('Vorschaubild erzeugt.'); } finally { welten(); }
-  } else if (b.classList.contains('w-pdf-weg') && confirm('Arbeitsblatt entfernen?')) {
-    await api('datei_loeschen', {datei, art: 'pdf'}); welten();
+  const zeile = ev.target.closest('[data-datei]'); if (!zeile || ev.target.closest('a')) return;
+  const w = weltListe.find(w => w.datei === zeile.dataset.datei);
+  if (ev.target.closest('[data-freigabe]')) {
+    await api('welt', {datei: w.datei, titel: w.titel, aufgabe: w.aufgabe, sichtbar: !w.sichtbar});
+    melden(w.titel + (w.sichtbar ? ': für Schüler gesperrt.' : ': für Schüler freigegeben.')); welten(); return;
   }
+  weltDialog(w);
 };
-$('welten').onchange = async ev => {
-  if (!ev.target.classList.contains('w-datei') || !ev.target.files.length) return;
-  const datei = ev.target.closest('[data-datei]').dataset.datei, f = ev.target.files[0];
-  const r = await fetch('/api/lehrer/upload?datei=' + encodeURIComponent(datei), {method: 'POST', body: f,
+function weltDialog(w, nurDateien) {
+  weltOffen = w.datei;
+  if (!nurDateien) {   // beim Neuladen nach Bild/PDF die Eingaben nicht ueberschreiben
+    $('wd-titel').textContent = w.titel; $('wd-name').value = w.titel; $('wd-aufgabe').value = w.aufgabe || '';
+    $('wd-sichtbar').checked = w.sichtbar;
+    const namen = greiferNamen.map(g => g.name);
+    $('wd-greifer').innerHTML = (w.greifer && !namen.includes(w.greifer) ? '<option value="' + esc(w.greifer) + '">' + esc(w.greifer) + ' (unbekannt)</option>' : '')
+      + greiferNamen.map(g => '<option value="' + esc(g.name) + '">' + esc(g.titel) + '</option>').join('');
+    $('wd-greifer').value = w.greifer || ''; $('wd-greifer').disabled = !w.greifer;
+    $('wd-greifer-hilfe').textContent = w.greifer ? 'In iRC dasselbe Werkzeug wählen, sonst stimmt der TCP nicht.'
+                                                  : 'Diese Welt hat kein Greifer-Feld am ReBeL.';
+  }
+  $('wd-datei').textContent = w.datei + (w.baukasten ? ' · im Baukasten gebaut' : '');
+  const bild = $('wd-bild');
+  bild.style.backgroundImage = w.bild ? 'url(\\'/welten/' + w.bild + '?' + Date.now() + '\\')' : ''; bild.textContent = w.bild ? '' : 'kein Vorschaubild';
+  $('wd-pdf').innerHTML = (w.pdf ? '<a href="/welten/' + esc(w.pdf) + '" target="_blank">ansehen</a><button data-pdf-weg>entfernen</button>' : '')
+    + '<label class="knopf-datei">' + (w.pdf ? 'ersetzen' : 'hochladen') + '<input type="file" class="wd-datei" accept="application/pdf"></label>';
+  $('wd-laeuft').textContent = w.laeuft.length ? 'Läuft gerade auf Platz ' + w.laeuft.join(', ') + ' – Löschen geht erst nach dem Beenden.' : '';
+  $('wd-loeschen').disabled = w.laeuft.length > 0;
+  $('wd-export').href = '/api/lehrer/welt_export?datei=' + encodeURIComponent(w.datei);
+  $('wd-baukasten').innerHTML = w.baukasten ? '<a href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, '')) + '">Im Baukasten öffnen</a>' : '';
+  $('welt-dialog').hidden = false;
+}
+function weltDialogZu() { $('welt-dialog').hidden = true; weltOffen = null; mdModus(false); }
+// Aufgabe: Text bearbeiten oder Vorschau (gerendert wie bei den Schuelern, tools/aufgabe_md.py)
+async function mdModus(vorschau) {
+  $('wd-md-text').classList.toggle('an', !vorschau); $('wd-md-vorschau').classList.toggle('an', vorschau);
+  $('wd-aufgabe').hidden = vorschau; $('wd-md-bild').hidden = !vorschau;
+  if (vorschau) $('wd-md-bild').innerHTML = (await api('markdown', {text: $('wd-aufgabe').value})).html
+    || '<span class="hilfe">(leer)</span>';
+}
+$('wd-md-text').onclick = () => mdModus(false);
+$('wd-md-vorschau').onclick = () => mdModus(true);
+$('wd-abbrechen').onclick = weltDialogZu;
+$('welt-dialog').addEventListener('click', ev => { if (ev.target === $('welt-dialog')) weltDialogZu(); });
+$('wd-speichern').onclick = async () => {
+  const w = weltListe.find(w => w.datei === weltOffen);
+  await api('welt', {datei: w.datei, titel: $('wd-name').value, aufgabe: $('wd-aufgabe').value, sichtbar: $('wd-sichtbar').checked,
+                     greifer: $('wd-greifer').disabled ? undefined : $('wd-greifer').value});
+  melden('Gespeichert.'); weltDialogZu(); welten();
+};
+$('wd-vorschau').onclick = async () => {
+  const b = $('wd-vorschau'); b.disabled = true; b.textContent = 'Webots rechnet ...';
+  try { await api('vorschau', {datei: weltOffen}); melden('Vorschaubild erzeugt.'); }
+  finally { b.disabled = false; b.textContent = 'Vorschaubild erzeugen'; welten(); }
+};
+$('wd-pdf').onclick = async ev => {
+  if (ev.target.closest('[data-pdf-weg]') && confirm('Arbeitsblatt entfernen?')) { await api('datei_loeschen', {datei: weltOffen, art: 'pdf'}); welten(); }
+};
+$('welt-dialog').addEventListener('change', async ev => {
+  if (!ev.target.classList.contains('wd-datei') || !ev.target.files.length) return;
+  const f = ev.target.files[0];
+  const r = await fetch('/api/lehrer/upload?datei=' + encodeURIComponent(weltOffen), {method: 'POST', body: f,
     headers: {'Content-Type': f.type || 'application/octet-stream', 'X-Lehrer': '1'}});
   const d = await r.json().catch(() => ({}));
   if (r.ok) melden('Hochgeladen: ' + d.datei); else melden(d.fehler || 'Hochladen fehlgeschlagen.', true);
   welten();
+});
+// Import: ZIP hochladen; gibt es die Welt schon, fragt der Dialog nach neuem Namen oder Ersetzen
+let importDatei = null, importVorhanden = null;
+async function importSenden(name, ersetzen) {
+  const q = new URLSearchParams();
+  if (name) q.set('name', name);
+  if (ersetzen) q.set('ersetzen', '1');
+  melden('importiere ' + importDatei.name + ' ...');
+  const r = await fetch('/api/lehrer/welt_import?' + q, {method: 'POST', body: importDatei,
+    headers: {'Content-Type': 'application/zip', 'X-Lehrer': '1'}});
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 409 && d.vorhanden) {
+    importVorhanden = d.vorhanden;
+    $('im-text').textContent = 'Die Welt „' + d.vorhanden + '“ gibt es hier schon. Unter neuem Namen importieren oder die vorhandene ersetzen?';
+    $('im-name').value = d.vorschlag; $('import-dialog').hidden = false; $('meldung').hidden = true;
+    return;
+  }
+  if (!r.ok) { melden(d.fehler || 'Import fehlgeschlagen.', true); return; }
+  $('import-dialog').hidden = true;
+  const teile = d.teile_neu.length ? ', neue Teile: ' + d.teile_neu.join(', ') : '';
+  const umbenannt = Object.entries(d.teile_umbenannt).map(([a, n]) => a + ' → ' + n).join(', ');
+  melden('Importiert: „' + d.titel + '“ (' + d.welt + ')' + teile + (umbenannt ? ' (abweichend, daher umbenannt: ' + umbenannt + ')' : '')
+         + (d.backensatz_neu ? ', Backensatz ' + d.backensatz : '') + '. Für Schüler noch gesperrt.'
+         + (d.hinweise.length ? ' Achtung: ' + d.hinweise.join(' ') : ''), d.hinweise.length > 0);
+  await welten();
+  $('w-suche').value = ''; weltenZeigen();
+}
+$('w-import').onchange = () => {
+  importDatei = $('w-import').files[0]; $('w-import').value = '';
+  if (importDatei) importSenden(null, false);
+};
+$('im-neu').onclick = () => importSenden($('im-name').value.trim().toLowerCase(), false);
+$('im-ersetzen').onclick = () => {
+  if (confirm('Vorhandene Welt „' + importVorhanden + '“ ersetzen? Sie wandert in den Papierkorb.')) importSenden(importVorhanden, true);
+};
+$('im-abbrechen').onclick = () => { $('import-dialog').hidden = true; };
+$('wd-loeschen').onclick = async () => {
+  const w = weltListe.find(w => w.datei === weltOffen);
+  const dateien = ['.wbt', '.json'].concat(w.baukasten ? ['.baukasten.json'] : [], w.bild ? [w.bild.slice(w.bild.lastIndexOf('.'))] : [],
+                                           w.pdf ? ['.pdf'] : []).map(e => w.datei.replace(/[.]wbt$/, '') + e);
+  if (!confirm('Welt „' + w.titel + '“ löschen?\\n\\nSie verschwindet aus der Liste und von der Startseite der Schüler.\\n'
+               + 'Diese Dateien wandern in den Papierkorb (worlds/papierkorb im Container):\\n  ' + dateien.join('\\n  '))) return;
+  await api('welt_loeschen', {datei: w.datei});
+  melden('Welt „' + w.titel + '“ gelöscht (im Papierkorb).'); weltDialogZu(); welten();
 };
 
 // --- Teile ---
@@ -526,7 +751,35 @@ async function einstellungen() {
   $('e-max').value = e.max_simulationen;
   $('e-leer').value = e.leerlauf_minuten;
   $('e-uhr').value = (e.ende_uhrzeiten || []).join(', ');
+  logosZeigen();
 }
+async function logosZeigen() {
+  const d = await (await fetch('/api/lehrer/logos', {cache: 'no-store'})).json(), t = Date.now();
+  $('logos').innerHTML = '<div class="logo-wahl' + (d.gewaehlt ? '' : ' an') + '" data-logo=""><div class="bildchen hilfe">kein Logo</div>'
+    + '<div class="unten"><span>nur Schriftzug</span></div></div>'
+    + d.logos.map(n => '<div class="logo-wahl' + (n === d.gewaehlt ? ' an' : '') + '" data-logo="' + esc(n) + '">'
+      + '<div class="bildchen"><img src="/logos/' + encodeURIComponent(n) + '?' + t + '" alt=""></div>'
+      + '<div class="unten"><span>' + esc(n) + '</span><button data-weg title="Logo löschen">Löschen</button></div></div>').join('');
+}
+$('logos').onclick = async ev => {
+  const k = ev.target.closest('[data-logo]'); if (!k) return;
+  const name = k.dataset.logo;
+  if (ev.target.closest('[data-weg]')) {
+    if (!confirm('Logo ' + name + ' löschen?')) return;
+    await api('logo_loeschen', {name}); melden('Logo gelöscht.');
+  } else { await api('logo_waehlen', {name}); melden(name ? 'Logo gewählt.' : 'Kein Logo mehr.'); }
+  location.reload();   // die Kopfzeile zeigt das neue Logo
+};
+$('l-datei').onchange = async () => {
+  const f = $('l-datei').files[0]; if (!f) return;
+  const name = $('l-name').value.trim() || f.name;
+  const r = await fetch('/api/lehrer/logo_hochladen?name=' + encodeURIComponent(name), {method: 'POST', body: f,
+    headers: {'Content-Type': 'application/octet-stream', 'X-Lehrer': '1'}});
+  const d = await r.json().catch(() => ({}));
+  $('l-datei').value = '';
+  if (r.ok) { melden('Hochgeladen: ' + d.datei + ' – zum Verwenden anklicken.'); $('l-name').value = ''; logosZeigen(); }
+  else melden(d.fehler || 'Hochladen fehlgeschlagen.', true);
+};
 $('e-speichern').onclick = async () => {
   await api('einstellungen', {max_simulationen: $('e-max').value, leerlauf_minuten: $('e-leer').value,
                               ende_uhrzeiten: $('e-uhr').value});
@@ -593,26 +846,37 @@ VIEWER = """<!doctype html>
 <style>%(stil)s
 html,body { height:100%%; } body { display:flex; flex-direction:column; }
 header { flex-wrap:wrap; }
-.ansicht { flex:1; min-height:0; position:relative; }
+.ansicht { flex:1; min-height:0; display:flex; }
+.bildflaeche { flex:1; min-width:0; position:relative; }
 webots-view { display:block; width:100%%; height:100%%; position:relative; }
-#hinweis { font-size:.9em; color:#cfd6e4; }
+#hinweis { font-size:.9em; color:var(--leise); }
 .knoepfe { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-.knoepfe a, .knoepfe button { color:#fff; background:#3a4256; border:0; border-radius:6px; padding:6px 10px;
+.knoepfe a, .knoepfe button { color:var(--text); background:var(--knopf); border:0; border-radius:3px; padding:7px 11px;
   font:inherit; font-size:.9em; cursor:pointer; text-decoration:none; }
-.knoepfe button.warnen { background:var(--rot); }
-#irc { font-size:.9em; padding:3px 8px; border-radius:6px; background:#3a4256; }
-#irc.gruen { background:var(--gruen); } #irc.gelb { background:var(--gelb); color:#1d2330; } #irc.rot { background:var(--rot); }
-#aufgabe { position:absolute; top:10px; right:10px; z-index:5; width:min(380px, calc(100%% - 20px)); max-height:calc(100%% - 20px);
-  overflow:auto; background:var(--karte); border-radius:10px; padding:14px; box-shadow:0 2px 10px rgba(0,0,0,.3);
-  white-space:pre-line; }
-#aufgabe h2 { margin:0 0 8px; font-size:1.1em; }
+.knoepfe a:hover, .knoepfe button:hover { background:var(--blau-hell); color:var(--blau); }
+.knoepfe button.warnen { background:var(--pink); color:#fff; }
+#irc { font-size:.9em; padding:4px 10px; border-radius:10px; background:var(--knopf); font-weight:700; }
+#irc.gruen { background:var(--gruen); color:var(--schwarz); } #irc.gelb { background:var(--gelb); color:var(--schwarz); }
+#irc.rot { background:var(--pink); color:#fff; }
+/* Aufgabe: Seitenleiste rechts, erst auf Klick; das 3D-Bild wird schmaler statt verdeckt */
+#aufgabe { width:min(400px, 42vw); flex:none; overflow:auto; background:var(--karte); border-left:3px solid var(--blau);
+  padding:14px 18px 18px; }
+#aufgabe .kopf { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
+#aufgabe h2 { margin:0; font-size:1.15em; color:var(--blau); flex:1; }
+#aufgabe .zu { border:0; background:var(--knopf); border-radius:3px; font:inherit; font-size:1.1em; line-height:1;
+  padding:5px 9px; cursor:pointer; }
+#aufgabe .pdf { display:inline-block; margin-top:6px; color:var(--blau); font-weight:700; }
+.knoepfe button.an { background:var(--blau); color:#fff; }
+[hidden] { display:none !important; }
+@media (max-width: 760px) { .ansicht { position:relative; }
+  #aufgabe { position:absolute; inset:0; width:auto; z-index:8; border-left:0; } }
 .ansichten { position:absolute; right:10px; bottom:52px; z-index:5; display:flex; gap:4px; flex-wrap:wrap;
-  background:rgba(29,35,48,.75); padding:5px; border-radius:8px; }
+  background:rgba(26,26,26,.72); padding:5px; border-radius:var(--ecke) 0 0 0; }
 .ansichten button { color:#fff; background:transparent; border:0; border-radius:5px; padding:5px 9px;
   font:inherit; font-size:.85em; cursor:pointer; }
-.ansichten button.an { background:var(--orange); }
+.ansichten button.an { background:var(--blau); }
 .ea { position:absolute; bottom:52px; z-index:5; display:flex; flex-direction:column; gap:5px; max-width:44%%;
-  background:rgba(29,35,48,.78); padding:8px; border-radius:10px; color:#fff; font-size:.88em; }
+  background:rgba(26,26,26,.75); padding:8px; border-radius:var(--ecke) 0 0 0; color:#fff; font-size:.88em; }
 .ea.links { left:10px; bottom:100px; } .ea.rechts { right:10px; bottom:100px; }   /* unten links steht die Einteach-Hilfe */
 .ea .taster, .ea .leuchte { display:flex; align-items:center; gap:8px; background:transparent; color:#fff; border:0;
   font:inherit; padding:2px 4px; text-align:left; touch-action:none; user-select:none; -webkit-user-select:none; }
@@ -621,7 +885,7 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 .ea .kappe { width:30px; height:30px; flex:none; border-radius:50%%; background:#c9ced8; border:3px solid #5d6577;
   box-shadow:0 3px 0 #2c3242; transition:transform .05s; }
 .ea .taster.druck .kappe, .ea .taster.an .kappe { transform:translateY(2px); box-shadow:0 1px 0 #2c3242; }
-.ea .taster.an .kappe { background:var(--orange); }
+.ea .taster.an .kappe { background:var(--gelb); }
 .ea .lampe { width:22px; height:22px; flex:none; border-radius:50%%; background:#3b4152; border:2px solid #5d6577; }
 .ea .leuchte.an .lampe { border-color:#fff; }
 .ea .sensor { display:flex; align-items:center; gap:8px; padding:2px 4px; }
@@ -635,13 +899,13 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 #ea-meldung { color:#ffd27a; font-size:.85em; max-width:240px; }
 .ea.nur-sehen .taster { cursor:default; pointer-events:none; }
 </style></head>
-<body><header><b>ReBeL</b> %(titel)s <span id="hinweis">verbinde ...</span>
+<body><header>%(marke)s <span class="unter">%(titel)s</span> <span id="hinweis">verbinde ...</span>
 <div class="knoepfe">%(knoepfe)s</div></header>
-<div class="ansicht">%(aufgabe)s<webots-view></webots-view>
+<div class="ansicht"><div class="bildflaeche"><webots-view></webots-view>
 <div class="ansichten" title="Blickrichtung. Mit der Maus: linke Taste drehen, rechte schieben, nach einem Klick Rad zoomen.">
 <button data-ansicht="standard" class="an">Standard</button><button data-ansicht="vorne">Vorne</button>
 <button data-ansicht="seite">Seite</button><button data-ansicht="oben">Oben</button>
-<button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button></div>%(ea)s</div>
+<button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button></div>%(ea)s</div>%(aufgabe)s</div>
 <script type="module">
 import "%(webots_js)s";
 import MeshLoader from "%(wwi)s/MeshLoader.js";
@@ -726,6 +990,23 @@ view.addEventListener('mousedown', () => {
 });
 </script>%(schueler_js)s%(ea_js)s</body></html>"""
 
+# Zusatz fuer die Ansicht der Lehrkraft: Knoepfe fuer genau diesen Platz
+LEHRER_VIEWER_JS = """<script>
+async function lehrerAktion(aktion, frage) {
+  if (frage && !confirm(frage)) return false;
+  const r = await fetch('/api/lehrer/' + aktion, {method: 'POST', body: JSON.stringify({platz: '%%PLATZ%%'}),
+    headers: {'Content-Type': 'application/json', 'X-Lehrer': '1'}});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(d.fehler || 'Das hat nicht geklappt.'); return false; }
+  return true;
+}
+document.getElementById('l-teile').onclick = () => lehrerAktion('teile_zuruecksetzen');
+document.getElementById('l-reset').onclick = () => lehrerAktion('zuruecksetzen', 'Simulation auf Platz %%PLATZ%% neu starten?');
+document.getElementById('l-ende').onclick = async () => {
+  if (await lehrerAktion('beenden', 'Simulation auf Platz %%PLATZ%% beenden?')) location.href = '/lehrer';
+};
+</script>"""
+
 # Zusatz fuer die Schuelerseite: Zustand von iRC anzeigen und die Knoepfe bedienen
 SCHUELER_JS = """<script>
 async function api(was) {
@@ -734,9 +1015,13 @@ async function api(was) {
   if (!r.ok) { alert(d.fehler || 'Das hat nicht geklappt.'); return false; }
   return true;
 }
-document.getElementById('knopf-aufgabe').onclick = () => {
-  const a = document.getElementById('aufgabe'); a.hidden = !a.hidden;
-};
+function aufgabeZeigen(an) {
+  document.getElementById('aufgabe').hidden = !an;
+  document.getElementById('knopf-aufgabe').classList.toggle('an', an);
+  window.dispatchEvent(new Event('resize'));   // 3D-Ansicht an die neue Breite anpassen
+}
+document.getElementById('knopf-aufgabe').onclick = () => aufgabeZeigen(document.getElementById('aufgabe').hidden);
+document.getElementById('aufgabe-zu').onclick = () => aufgabeZeigen(false);
 document.getElementById('knopf-teile').onclick = () => api('teile_zuruecksetzen');
 document.getElementById('knopf-reset').onclick = async () => {
   if (confirm('Simulation neu starten? Das dauert einige Sekunden. Nur nötig, wenn etwas hängt.')) await api('zuruecksetzen');
@@ -758,23 +1043,32 @@ zustand(); setInterval(zustand, 3000);
 WAHL = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ReBeL-Simulation</title><style>%(stil)s
-main { grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+main { grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); padding-top:12px; }
 .welt { padding:0; overflow:hidden; }
-.welt .bild { aspect-ratio:4/3; background:#dfe3ea center/cover no-repeat; display:flex; align-items:center;
-  justify-content:center; color:var(--leise); font-weight:600; }
+.welt .bild { aspect-ratio:4/3; background:var(--bg) center/cover no-repeat; display:flex; align-items:center;
+  justify-content:center; color:var(--grau); font-weight:700; border-bottom:1px solid var(--linie); }
 .welt .text { padding:12px 14px 14px; display:flex; flex-direction:column; gap:6px; flex:1; }
 .welt h2 { margin:0; font-size:1.15em; }
-.aufgabe { white-space:pre-line; font-size:.92em; max-height:9.5em; overflow:auto; }
-button.knopf { margin-top:auto; background:var(--orange); color:#fff; border:0; padding:9px; border-radius:6px;
-  font:inherit; font-weight:600; cursor:pointer; }
-button.knopf:disabled { background:#b9bfca; cursor:default; }
-.balken { margin:16px 20px 0; padding:12px 14px; border-radius:10px; background:var(--karte);
-  box-shadow:0 1px 3px rgba(0,0,0,.12); }
-.balken.warnen { border-left:5px solid var(--gelb); }
-header .pc { margin-left:auto; font-size:.9em; color:#cfd6e4; }
+.welt a { color:var(--blau); font-size:.92em; }
+.aufgabe { font-size:.92em; max-height:9.5em; overflow:auto; color:#333; }
+button.knopf { margin-top:auto; background:var(--blau); color:#fff; border:0; padding:10px; border-radius:3px;
+  font:inherit; font-weight:700; cursor:pointer; }
+button.knopf:hover { background:var(--blau-dunkel); }
+button.knopf:disabled { background:var(--grau-hell); color:var(--leise); cursor:default; }
+.balken { margin:16px 20px 0; padding:12px 16px; border-radius:var(--ecke) 0 0 0; background:var(--karte);
+  border:1px solid var(--linie); border-left:5px solid var(--blau); }
+.balken.warnen { border-left-color:var(--gelb); }
+.balken a { color:var(--blau); }
+h1.abschnitt { margin:22px 20px 0; font-size:1.3em; color:var(--text); }
+header .pc { margin-left:auto; font-size:.9em; color:var(--leise); }
+header a.lehrer { color:var(--blau); text-decoration:none; font-weight:700; border:2px solid var(--blau); border-radius:3px;
+  padding:6px 12px; font-size:.92em; white-space:nowrap; }
+header a.lehrer:hover { background:var(--blau); color:#fff; }
 </style></head>
-<body><header><b>ReBeL</b> Simulation &ndash; Welt wählen<span class="pc">Dein PC: %(pc)s</span></header>
+<body><header>%(marke)s <span class="unter">Welt wählen</span><span class="pc">Dein PC: %(pc)s</span>
+<a class="lehrer" href="/lehrer">%(lehrer)s</a></header>
 %(balken)s
+<h1 class="abschnitt">%(dreieck)sVerfügbare Welten</h1>
 <main>%(karten)s</main>
 <script>
 document.querySelectorAll('button[data-welt]').forEach(b => b.onclick = async () => {
@@ -1000,13 +1294,18 @@ def ea_html(ea, steuern):
     return "".join(teile)
 
 
-def seite_viewer(platz, steuern=False, welt=None):
-    """3D-Ansicht. Mit welt (Angaben aus lese_welten) ist es die Schuelerseite
-    mit Aufgabe und Knoepfen, sonst die Ansicht fuer die Lehrkraft."""
+def seite_viewer(platz, welt=None):
+    """3D-Ansicht, immer nur zuschauend (den Roboter bewegt iRC, Webots hoert nur mit). Mit welt
+    (Angaben aus lese_welten) ist es die Schuelerseite mit Aufgabe und Knoepfen, sonst die Ansicht
+    fuer die Lehrkraft mit Teile zurueck, Neu starten und Beenden fuer diesen Platz."""
     if welt is None:
-        titel = "Platz %s" % html.escape(platz["platz"])
-        knoepfe = '<a href="/lehrer">Uebersicht</a>'
-        aufgabe = schueler_js = ""
+        titel = "Platz %s &middot; PC %s" % (html.escape(platz["platz"]), html.escape(platz["irc_host"]))
+        knoepfe = ('<button id="l-teile" title="Alle Werkstücke zurück auf ihre Startlage">Teile zurück</button>'
+                   '<button id="l-reset" title="Webots neu starten, wenn etwas hängt">Neu starten</button>'
+                   '<button id="l-ende" class="warnen">Beenden</button>'
+                   '<a href="/lehrer">Lehrerbereich</a>')
+        aufgabe = ""
+        schueler_js = LEHRER_VIEWER_JS.replace("%%PLATZ%%", html.escape(platz["platz"]))
     else:
         titel = html.escape(welt["titel"])
         knoepfe = ('<span id="irc">...</span>'
@@ -1015,25 +1314,26 @@ def seite_viewer(platz, steuern=False, welt=None):
                    '<button id="knopf-reset" title="Webots neu starten, wenn etwas hängt">Neu starten</button>'
                    '<a href="/?wechseln=1">Welt wechseln</a>'
                    '<button id="knopf-ende" class="warnen">Beenden</button>')
-        pdf = ('\n<a href="/welten/%s" target="_blank">Arbeitsblatt (PDF) öffnen</a>' % html.escape(welt["pdf"])
+        pdf = ('<a class="pdf" href="/welten/%s" target="_blank">Arbeitsblatt (PDF) öffnen</a>' % html.escape(welt["pdf"])
                if welt["pdf"] else "")
-        aufgabe = '<div id="aufgabe"><h2>%s</h2>%s%s</div>' % (
-            titel, html.escape(welt["aufgabe"] or "Keine Aufgabe hinterlegt."), pdf)
+        aufgabe = ('<aside id="aufgabe" hidden><div class="kopf"><h2>%s</h2><button id="aufgabe-zu" class="zu" '
+                   'title="Aufgabe ausblenden">&times;</button></div><div class="md">%s</div>%s</aside>' % (
+                       titel, aufgabe_md.zu_html(welt["aufgabe"] or "Keine Aufgabe hinterlegt."), pdf))
         schueler_js = SCHUELER_JS
     ea = ea_von_welt(platz["welt"])
     ea_teil = ea_html(ea, welt is not None)
     ea_js = (EA_JS.replace("%%STEUERN%%", "true" if welt is not None else "false")
              .replace("%%PLATZ%%", html.escape(platz["platz"]))) if ea_teil else ""
-    return VIEWER % {"stil": STIL, "platz": html.escape(platz["platz"]), "titel": titel, "ea": ea_teil, "ea_js": ea_js,
+    return VIEWER % {"stil": STIL, "marke": marke(), "platz": html.escape(platz["platz"]), "titel": titel, "ea": ea_teil, "ea_js": ea_js,
                      "ansichten": json.dumps(kamera_ansichten(platz["welt"])),
                      "knoepfe": knoepfe, "aufgabe": aufgabe, "schueler_js": schueler_js,
                      "irc_host": html.escape(platz["irc_host"]), "stream_port": platz["stream_port"],
-                     "welt": html.escape(platz["welt"]), "broadcast": "false" if steuern else "true",
+                     "welt": html.escape(platz["welt"]), "broadcast": "true",
                      "webots_js": WEBOTS_VIEW_JS, "wwi": WEBOTS_VIEW_JS.rsplit("/", 1)[0]}
 
 
-def seite_wahl(pc, welten, eigener, frei, max_sim, meldung=None):
-    """Weltenliste fuer den Schueler. eigener: laufende Simulation (Welt wechseln)."""
+def seite_wahl(pc, welten, eigener, frei, max_sim, meldung=None, lehrkraft=False):
+    """Startseite: Weltenliste fuer den Schueler, Zugang zum Lehrerbereich. eigener: laufende Simulation (Welt wechseln)."""
     balken = []
     if meldung:
         balken.append('<div class="balken warnen">Deine Simulation wurde beendet: %s.</div>' % html.escape(meldung))
@@ -1060,11 +1360,13 @@ def seite_wahl(pc, welten, eigener, frei, max_sim, meldung=None):
         knopf = ('<button class="knopf" data-welt="%s"%s>%s</button>'
                  % (html.escape(w["datei"]), " disabled" if gesperrt or aktuell else "",
                     "läuft gerade" if aktuell else ("Diese Welt nehmen" if eigener else "Simulation starten")))
-        karten.append('<div class="platz welt">%s<div class="text"><h2>%s</h2><div class="aufgabe">%s</div>%s%s'
-                      '</div></div>' % (bild, html.escape(w["titel"]), html.escape(w["aufgabe"]), pdf, knopf))
+        karten.append('<div class="platz welt">%s<div class="text"><h2>%s</h2><div class="aufgabe md">%s</div>%s%s'
+                      '</div></div>' % (bild, html.escape(w["titel"]), aufgabe_md.zu_html(w["aufgabe"]), pdf, knopf))
     if not karten:
         karten.append('<div class="leer">Es sind noch keine Welten freigegeben.</div>')
-    return WAHL % {"stil": STIL, "pc": html.escape(pc), "balken": "\n".join(balken), "karten": "\n".join(karten)}
+    return WAHL % {"stil": STIL, "marke": marke(), "dreieck": DREIECK, "pc": html.escape(pc),
+                   "lehrer": "Lehrerbereich" if lehrkraft else "Anmeldung Lehrkraft",
+                   "balken": "\n".join(balken), "karten": "\n".join(karten)}
 
 
 def _welten():
@@ -1153,7 +1455,9 @@ def teile_liste():
                       "volumen_mm3": t.get("volumen_mm3"),
                       "anzahl": {k: len(t.get(k, [])) for k in ("flaechen", "bohrungen", "kanten", "ecken")},
                       "verwendet_in": [w for w, e in entwuerfe().items() if any(x.get("teil") == name for x in e["teile"])
-                                       or (name == baukasten.BASISPLATTE and (e.get("tisch") or {}).get("art") == "profil")]})
+                                       or (name == baukasten.BASISPLATTE and (e.get("tisch") or {}).get("art") == "profil")]
+                      + ["Backensatz " + b["name"] for b in backensaetze_liste() if b["teil"] == name]
+                      + (["Backensatz-Editor (Greifer)"] if name in baukasten.GREIFER_TEILE.values() else [])})
     return liste
 
 
@@ -1184,6 +1488,230 @@ def teil_einlesen(name, inhalt):
             meldung = "Das Teil ist zu gross oder zu fein (Speichergrenze). Ohne Gewinde und Kleinteile exportieren."
         raise lehrer.LehrerFehler("Einlesen fehlgeschlagen: %s" % meldung.replace("Fehler: ", ""))
     return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+# --- Backensaetze (Phase 4): Backe am Schunk EGP 40/25 im Baukasten, daraus Greifer-Variante egp40_<name> ---
+
+PROJEKT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+BACKEN_DIR = os.environ.get("BACKEN_DIR", os.path.join(PROJEKT_DIR, "backen"))       # aus dem Baukasten (auch fuer den Generator)
+FESTE_BACKEN_DIR = os.path.join(PROJEKT_DIR, "cad", "backen")                       # aus dem Repository
+WERKZEUG_DIR = os.path.join(PROJEKT_DIR, "werkzeuge")
+PROTO_DATEI = os.path.join(PROJEKT_DIR, "protos", "IgusRebel6DOF.proto")
+IRC_DATEN = os.environ.get("IRC_DATEN", "/var/lib/rebel-sim/irc")
+MODELL_SPERRE = threading.Lock()
+
+
+def backensaetze_liste():
+    """Alle Backensaetze: mitgelieferte (fest) und im Baukasten gebaute, mit Verwendung in Welten."""
+    welten = {}
+    for w in verwalter.lese_welten(WELTEN_DIR):
+        try:
+            with open(os.path.join(WELTEN_DIR, w["datei"]), encoding="utf-8", errors="replace") as f:
+                m = re.search(r'\bgreifer\s+"([^"]+)"', f.read(20000))
+            if m:
+                welten.setdefault(m.group(1), []).append(w["datei"][:-4])
+        except OSError:
+            pass
+    liste = []
+    for ordner, fest in ((FESTE_BACKEN_DIR, True), (BACKEN_DIR, False)):
+        try:
+            namen = sorted(os.listdir(ordner))
+        except OSError:
+            continue
+        for name in namen:
+            try:
+                with open(os.path.join(ordner, name, "backensatz.json"), encoding="utf-8") as f:
+                    satz = json.load(f)
+            except (OSError, ValueError):
+                continue
+            schluessel = "%s_%s" % (satz.get("basis", "egp25"), satz["name"])
+            liste.append({"name": satz["name"], "titel": satz.get("titel", satz["name"]), "greifer": schluessel,
+                          "fest": fest, "teil": satz.get("teil"), "kenndaten": satz.get("kenndaten"),
+                          "basis": satz.get("basis", "egp25"),
+                          "werkzeugpaket": os.path.isdir(os.path.join(WERKZEUG_DIR, schluessel)),
+                          "verwendet_in": welten.get(schluessel, [])})
+    return liste
+
+
+def backensatz_lesen(name):
+    """Gespeicherter Backensatz aus dem Baukasten (mit "entwurf") oder None."""
+    if not baukasten.BACKENSATZ_NAME.fullmatch(name or ""):
+        return None
+    try:
+        with open(os.path.join(BACKEN_DIR, name, "backensatz.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def greifer_liste():
+    """Greifer-Varianten, die das erzeugte ReBeL-Modell kennt (Feld "greifer" im Proto)."""
+    try:
+        with open(PROTO_DATEI, encoding="utf-8") as f:
+            m = re.search(r"field SFString\{([^}]*)\} greifer", f.read(5000))
+    except OSError:
+        m = None
+    return re.findall(r'"([^"]+)"', m.group(1)) if m else ["egp40", "egp40_finger", "egp25", "egp25_finger", "vakuum", "kein"]
+
+
+GREIFER_TEXTE = {"egp40": "Schunk EGP 40", "egp40_finger": "Schunk EGP 40 mit iRC-Fingern", "egp25": "Schunk EGP 25",
+                 "egp25_finger": "Schunk EGP 25 mit iRC-Fingern", "vakuum": "Sauger", "kein": "kein Greifer"}
+
+
+def greifer_titel_liste():
+    """[{name, titel}] aller Greifer des Modells, Backensaetze mit ihrem Titel."""
+    titel = {b["greifer"]: "EGP %s mit %s" % (b["basis"][3:], b["titel"]) for b in backensaetze_liste()}
+    return [{"name": n, "titel": GREIFER_TEXTE.get(n) or titel.get(n) or n} for n in greifer_liste()]
+
+
+def welten_fuer_lehrer():
+    """Welten mit Greifer, Herkunft (Baukasten) und den Plaetzen, auf denen sie gerade laufen."""
+    laeuft = {}
+    for p in lese_plaetze():
+        laeuft.setdefault(p["welt"], []).append(p["platz"])
+    aus_baukasten = entwuerfe()
+    return [dict(w, greifer=lehrer.welt_greifer(WELTEN_DIR, w["datei"]), baukasten=w["datei"][:-4] in aus_baukasten,
+                 aufgabe_kurz=aufgabe_md.kurz(w["aufgabe"]),
+                 laeuft=laeuft.get(w["datei"], [])) for w in _welten()]
+
+
+def welt_exportieren(datei):
+    """Welt mit Teilen und eigenem Backensatz als ZIP (welt_paket.exportieren)."""
+    greifer = lehrer.welt_greifer(WELTEN_DIR, datei) if re.fullmatch(r"[a-z0-9_-]{1,50}\.wbt", datei or "") else None
+    b = next((b for b in backensaetze_liste() if b["greifer"] == greifer and not b["fest"]), None)
+    return welt_paket.exportieren(WELTEN_DIR, TEILE_DIR, datei, (b["name"], os.path.join(BACKEN_DIR, b["name"])) if b else None)
+
+
+def welt_importieren(inhalt, name, ersetzen, wer_name):
+    """Paket einspielen; bringt es einen neuen Backensatz mit, das Robotermodell neu erzeugen."""
+    ziel = (name or "") + ".wbt"
+    if ersetzen and name and any(p["welt"] == ziel for p in lese_plaetze()):
+        raise welt_paket.PaketFehler("Die Welt %s läuft gerade. Erst die Simulation beenden." % name)
+    bericht = welt_paket.importieren(inhalt, WELTEN_DIR, TEILE_DIR, BACKEN_DIR, neuer_name=name, ersetzen=ersetzen,
+                                     besitzer="lehrer:%s" % wer_name,
+                                     fest_backen=[b["name"] for b in backensaetze_liste() if b["fest"]])
+    bericht["hinweise"] = []
+    if bericht["backensatz_neu"]:
+        try:
+            modell_erzeugen()
+        except baukasten.BaukastenFehler as e:
+            bericht["hinweise"].append(str(e))
+    if bericht["greifer"] and bericht["greifer"] not in greifer_liste():
+        bericht["hinweise"].append("Den Greifer %s kennt das Robotermodell hier nicht; im Welt-Dialog einen anderen wählen."
+                                   % bericht["greifer"])
+    return bericht
+
+
+def seite(text):
+    """Gemeinsame Bausteine in eine Seitenvorlage einsetzen (Stil, Kopfzeile mit Logo)."""
+    return text.replace("%%STIL%%", STIL).replace("%%MARKE%%", marke()).replace("%%DREIECK%%", DREIECK)
+
+
+def modell_erzeugen():
+    """ReBeL-Modell mit allen Backensaetzen neu erzeugen (tools/erzeuge_rebel_modell.py, braucht die iRC-Daten).
+    Rueckgabe: {greifer: {"tcp_mm", "offen_mm", "hub_mm"}}."""
+    if not os.path.isdir(os.path.join(IRC_DATEN, "Data")):
+        raise baukasten.BaukastenFehler("Die iRC-Daten fehlen im Container (einmal rebel-sim-modell <irc-daten.zip>).")
+    with MODELL_SPERRE:
+        r = subprocess.run([sys.executable, os.path.join(PROJEKT_DIR, "tools", "erzeuge_rebel_modell.py"),
+                            "--irc", IRC_DATEN, "--robot", "REBEL-6DOF-03"], capture_output=True, text=True, timeout=300)
+    if r.returncode != 0:
+        raise baukasten.BaukastenFehler("Modell konnte nicht erzeugt werden: %s" % (r.stderr or r.stdout).strip()[-300:])
+    ergebnis = {m.group(1): {"tcp_mm": float(m.group(2)), "offen_mm": float(m.group(3)), "hub_mm": float(m.group(4))}
+                for m in re.finditer(r"Greifer (\S+): TCP ([\d.]+) mm, Backen offen ([\d.]+) mm auseinander, "
+                                     r"Hub je Backe ([\d.]+) mm", r.stdout)}
+    ergebnis["_warnungen"] = re.findall(r"WARNUNG: (.*)", r.stdout)
+    return ergebnis
+
+
+def backensatz_speichern(name, entwurf, wer_name):
+    """Backe am Greifer loesen, backensatz.json schreiben, Modell und Werkzeugpaket neu erzeugen."""
+    if not isinstance(entwurf, dict):
+        raise baukasten.BaukastenFehler("Kein Entwurf.")
+    if any(b["fest"] and b["name"] == name for b in backensaetze_liste()):
+        raise baukasten.BaukastenFehler("Den Namen %s hat schon ein mitgelieferter Backensatz." % name)
+    entwurf = dict(entwurf, art="backensatz")
+    lade = baukasten.teile_lader(TEILE_DIR)
+    lagen = baukasten.loese(entwurf, lade)
+    satz = baukasten.backensatz_aus_entwurf(name, entwurf, lagen, lade)
+    alt = backensatz_lesen(name) or {}
+    schluessel, alt_schluessel = "%s_%s" % (satz["basis"], name), "%s_%s" % (alt.get("basis", "egp25"), name)
+    if alt and alt_schluessel != schluessel:
+        # anderer Greifer: der alte Name verschwindet aus dem Modell, Welten mit ihm wuerden nicht mehr laden
+        b = next((b for b in backensaetze_liste() if b["greifer"] == alt_schluessel and not b["fest"]), None)
+        if b and b["verwendet_in"]:
+            raise baukasten.BaukastenFehler("Der Greifer %s steckt noch in: %s. Dort erst einen anderen Greifer wählen "
+                                            "oder den Backensatz unter neuem Namen speichern." % (alt_schluessel, ", ".join(b["verwendet_in"])))
+    satz.update(entwurf=entwurf, besitzer=alt.get("besitzer") or "lehrer:%s" % wer_name)
+    os.makedirs(os.path.join(BACKEN_DIR, name), exist_ok=True)
+    datei = os.path.join(BACKEN_DIR, name, "backensatz.json")
+    lehrer.schreibe_json(datei, satz)
+    if alt and alt_schluessel != schluessel:
+        import shutil
+        shutil.rmtree(os.path.join(WERKZEUG_DIR, alt_schluessel), ignore_errors=True)
+    modell = modell_erzeugen()
+    kenndaten = modell.get(schluessel)
+    satz["kenndaten"] = kenndaten
+    lehrer.schreibe_json(datei, satz)
+    if kenndaten is None:
+        raise baukasten.BaukastenFehler("Gespeichert, aber das Robotermodell kennt den Greifer %s nicht: %s"
+                                        % (schluessel, "; ".join(modell.get("_warnungen") or ["unbekannter Grund"])))
+    return {"lagen": baukasten.zusammenfassung(entwurf, lagen), "greifer": schluessel, "kenndaten": kenndaten}
+
+
+def backensatz_loeschen(name):
+    b = next((b for b in backensaetze_liste() if b["name"] == name and not b["fest"]), None)
+    if b is None:
+        raise baukasten.BaukastenFehler("Den Backensatz %s gibt es nicht (mitgelieferte lassen sich nicht loeschen)." % name)
+    if b["verwendet_in"]:
+        raise baukasten.BaukastenFehler("Der Greifer %s steckt noch in: %s" % (b["greifer"], ", ".join(b["verwendet_in"])))
+    import shutil
+    shutil.rmtree(os.path.join(BACKEN_DIR, name))
+    shutil.rmtree(os.path.join(WERKZEUG_DIR, b["greifer"]), ignore_errors=True)
+    modell_erzeugen()
+
+
+# Liegt im Werkzeugpaket: kopiert XML + OBJ in den Datenordner, den iRC V15 wirklich liest (%APPDATA%,
+# nicht der Installationsordner). Zeilenenden CRLF fuer cmd.exe.
+INSTALLIEREN_CMD = "\r\n".join([
+    "@echo off",
+    "rem Werkzeug fuer igus Robot Control V15 installieren (aus der ReBeL-Simulation)",
+    "set ZIEL=%APPDATA%\\RobotControl\\V15\\Data\\Tools",
+    "if not exist \"%ZIEL%\" (",
+    "  echo iRC-Datenordner nicht gefunden: %ZIEL%",
+    "  echo iRC V15 einmal starten und dieses Skript dann erneut ausfuehren.",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    "copy /Y \"%~dp0*.xml\" \"%ZIEL%\" >nul && copy /Y \"%~dp0*.obj\" \"%ZIEL%\" >nul",
+    "if errorlevel 1 (echo Kopieren ging nicht. & pause & exit /b 1)",
+    "echo Fertig: Werkzeug nach %ZIEL% kopiert.",
+    "echo iRC neu starten und unter Werkzeug \"%WERKZEUG%\" waehlen.",
+    "pause",
+    ""])
+
+
+def werkzeugpaket_zip(name):
+    """Werkzeug fuer iRC (XML + OBJ + installieren.cmd) als ZIP. Rueckgabe (dateiname, bytes)."""
+    import io
+    import zipfile
+    b = next((b for b in backensaetze_liste() if b["name"] == name), None)
+    ordner = os.path.join(WERKZEUG_DIR, b["greifer"]) if b else None
+    if not ordner or not os.path.isdir(ordner):
+        return None
+    puffer = io.BytesIO()
+    werkzeug = b["greifer"]
+    with zipfile.ZipFile(puffer, "w", zipfile.ZIP_DEFLATED) as z:
+        for datei in sorted(os.listdir(ordner)):
+            z.write(os.path.join(ordner, datei), datei)
+            if datei.endswith(".xml"):
+                try:
+                    with open(os.path.join(ordner, datei), encoding="utf-8") as f:
+                        werkzeug = re.search(r'<INFO NAME="([^"]+)"', f.read()).group(1)
+                except (OSError, AttributeError):
+                    pass
+        z.writestr("installieren.cmd", INSTALLIEREN_CMD.replace("%WERKZEUG%", re.sub(r"[^A-Za-z0-9 ._-]", "_", werkzeug)))
+    return "Werkzeug_%s.zip" % b["greifer"], puffer.getvalue()
 
 
 def entwuerfe():
@@ -1334,18 +1862,27 @@ class Handler(BaseHTTPRequestHandler):
                     self._antwort(200, f.read(), DATEI_TYPEN[datei.rsplit(".", 1)[1]])
             except OSError:
                 self._text(404, "nicht gefunden")
+        elif pfad == "/logo" or re.fullmatch(r"/logos/[a-z0-9_-]{1,40}\.(png|jpg|svg)", pfad):
+            name = lehrer.gewaehltes_logo(ZUSTAND_DIR) if pfad == "/logo" else pfad.rsplit("/", 1)[1]
+            try:
+                with open(os.path.join(lehrer.logo_dir(ZUSTAND_DIR), name or "-"), "rb") as f:
+                    # SVG direkt geoeffnet: keine Skripte (sandbox), in <img> laufen sie ohnehin nie
+                    self._antwort(200, f.read(), lehrer.LOGO_TYPEN[name.rsplit(".", 1)[1]],
+                                  kopf=[("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")])
+            except (OSError, KeyError):
+                self._text(404, "kein Logo")
         elif pfad == "/lehrer/baukasten":
             if not self._lehrer():
                 self._antwort(302, "", kopf=[("Location", "/lehrer")])
             else:
                 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "baukasten_seite.html"),
                           encoding="utf-8") as f:
-                    self._antwort(200, f.read().replace("%%STIL%%", STIL))
+                    self._antwort(200, seite(f.read()))
         elif pfad == "/lehrer":
             if self._lehrer() and "anmelden=1" not in abfrage:
-                self._antwort(200, LEHRER_SEITE.replace("%%STIL%%", STIL))
+                self._antwort(200, seite(LEHRER_SEITE))
             else:
-                self._antwort(200, ANMELDUNG.replace("%%STIL%%", STIL).replace(
+                self._antwort(200, seite(ANMELDUNG).replace(
                     "%%HINWEIS%%", "" if lehrer.hat_benutzer(ZUSTAND_DIR) else KEINE_BENUTZER))
         elif pfad == "/status.json" or pfad.startswith("/platz/") or pfad.startswith("/api/lehrer/"):
             if not self._lehrer():
@@ -1357,7 +1894,11 @@ class Handler(BaseHTTPRequestHandler):
                     p["titel"] = titel.get(p["welt"], p["welt"])
                 self._json(200, liste)
             elif pfad == "/api/lehrer/welten":
-                self._json(200, _welten())
+                self._json(200, welten_fuer_lehrer())
+            elif pfad == "/api/lehrer/greifer_liste":
+                self._json(200, greifer_titel_liste())
+            elif pfad == "/api/lehrer/logos":
+                self._json(200, {"logos": lehrer.logos(ZUSTAND_DIR), "gewaehlt": lehrer.gewaehltes_logo(ZUSTAND_DIR)})
             elif pfad == "/api/lehrer/ich":
                 self._json(200, dict(self._wer(), benutzer_vorhanden=lehrer.hat_benutzer(ZUSTAND_DIR)))
             elif pfad == "/api/lehrer/protokoll":
@@ -1385,12 +1926,34 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200 if e else 404, e or {"fehler": "Kein Baukasten-Entwurf %s." % welt})
             elif pfad == "/api/lehrer/entwuerfe":
                 self._json(200, sorted(entwuerfe()))
+            elif pfad == "/api/lehrer/backensaetze":
+                self._json(200, backensaetze_liste())
+            elif pfad == "/api/lehrer/backensatz":
+                b = backensatz_lesen(urllib.parse.parse_qs(abfrage).get("name", [""])[0])
+                self._json(200 if b else 404, b or {"fehler": "Backensatz nicht gefunden."})
+            elif pfad == "/api/lehrer/greifer":
+                self._json(200, greifer_liste())
+            elif pfad == "/api/lehrer/welt_export":
+                try:
+                    name, daten = welt_exportieren(urllib.parse.parse_qs(abfrage).get("datei", [""])[0])
+                except welt_paket.PaketFehler as e:
+                    self._json(409, {"fehler": str(e)})
+                else:
+                    self._antwort(200, daten, "application/zip",
+                                  kopf=[("Content-Disposition", 'attachment; filename="%s"' % name)])
+            elif pfad == "/api/lehrer/werkzeugpaket":
+                paket = werkzeugpaket_zip(urllib.parse.parse_qs(abfrage).get("name", [""])[0])
+                if paket is None:
+                    self._json(404, {"fehler": "Kein Werkzeugpaket (erst den Backensatz speichern)."})
+                else:
+                    self._antwort(200, paket[1], "application/zip",
+                                  kopf=[("Content-Disposition", 'attachment; filename="%s"' % paket[0])])
             elif re.fullmatch(r"/platz/\d{1,2}", pfad):
                 platz = self._platz(pfad.rsplit("/", 1)[1])
                 if platz is None:
                     self._text(404, "Platz %s ist nicht angelegt." % pfad.rsplit("/", 1)[1])
                 else:
-                    self._antwort(200, seite_viewer(platz, steuern="steuern=1" in abfrage))
+                    self._antwort(200, seite_viewer(platz))
             else:
                 self._text(404, "nicht gefunden")
         else:
@@ -1406,12 +1969,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         max_sim = int(_einstellungen()["max_simulationen"])
         self._antwort(200, seite_wahl(pc, [w for w in welten if w["sichtbar"]], eigener,
-                                      VERWALTER.frei(), max_sim, VERWALTER.meldungen.get(pc)))
+                                      VERWALTER.frei(), max_sim, VERWALTER.meldungen.get(pc),
+                                      lehrkraft=lehrer.sitzung_pruefen(ZUSTAND_DIR, self._token()) is not None))
 
     def do_POST(self):  # noqa: N802
         pfad, _, abfrage = self.path.partition("?")
-        if pfad in ("/api/lehrer/upload", "/api/lehrer/teil_hochladen"):
-            self._hochladen(abfrage, teil=pfad.endswith("teil_hochladen"))
+        if pfad in ("/api/lehrer/upload", "/api/lehrer/teil_hochladen", "/api/lehrer/logo_hochladen", "/api/lehrer/welt_import"):
+            self._hochladen(abfrage, art=pfad.rsplit("/", 1)[1])
             return
         try:
             laenge = int(self.headers.get("Content-Length", "0"))
@@ -1498,8 +2062,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"fehler": "nicht gefunden"})
 
     # Was eine Lehrkraft darf; alles andere nur Admins
-    FUER_LEHRKRAFT = {"zuruecksetzen", "teile_zuruecksetzen", "beenden", "alle_beenden", "welt", "datei_loeschen", "vorschau", "passwort",
-                      "teil_loeschen", "baukasten_rechnen", "baukasten_speichern"}
+    FUER_LEHRKRAFT = {"zuruecksetzen", "teile_zuruecksetzen", "beenden", "alle_beenden", "welt", "welt_loeschen", "markdown",
+                      "datei_loeschen", "vorschau", "passwort",
+                      "teil_loeschen", "baukasten_rechnen", "baukasten_speichern", "backensatz_speichern",
+                      "backensatz_loeschen"}
 
     def _lehrer_aktion(self, aktion, daten):
         """Aktionen der Lehrerseite. Gibt Zusatzdaten fuer die Antwort zurueck."""
@@ -1524,9 +2090,28 @@ class Handler(BaseHTTPRequestHandler):
             zusatz = {"anzahl": VERWALTER.alle_beenden()}
             protokoll = "alle Simulationen beendet (%d)" % zusatz["anzahl"]
         elif aktion == "welt":
-            w = lehrer.speichere_weltangaben(WELTEN_DIR, daten.get("datei"), daten.get("titel"),
+            datei, greifer = daten.get("datei"), daten.get("greifer")
+            w = lehrer.speichere_weltangaben(WELTEN_DIR, datei, daten.get("titel"),
                                              daten.get("aufgabe"), daten.get("sichtbar"))
-            protokoll = "Welt %s gespeichert (%s)" % (daten.get("datei"), "freigegeben" if w["sichtbar"] else "gesperrt")
+            protokoll = "Welt %s gespeichert (%s)" % (datei, "freigegeben" if w["sichtbar"] else "gesperrt")
+            if greifer and greifer != lehrer.welt_greifer(WELTEN_DIR, datei):
+                lehrer.setze_greifer(WELTEN_DIR, datei, greifer, greifer_liste())
+                protokoll += ", Greifer %s" % greifer
+        elif aktion == "welt_loeschen":
+            datei = str(daten.get("datei", ""))
+            plaetze = [p["platz"] for p in lese_plaetze() if p["welt"] == datei]
+            if plaetze:
+                raise lehrer.LehrerFehler("Die Welt läuft gerade auf Platz %s. Erst die Simulation beenden." % ", ".join(plaetze))
+            zusatz = {"dateien": lehrer.loesche_welt(WELTEN_DIR, datei)}
+            protokoll = "Welt %s geloescht (Papierkorb: %s)" % (datei, ", ".join(zusatz["dateien"]))
+        elif aktion == "markdown":
+            zusatz = {"html": aufgabe_md.zu_html(str(daten.get("text", ""))[:5000])}
+        elif aktion == "logo_waehlen":
+            lehrer.waehle_logo(ZUSTAND_DIR, str(daten.get("name") or ""))
+            protokoll = "Logo: %s" % (daten.get("name") or "keins")
+        elif aktion == "logo_loeschen":
+            lehrer.loesche_logo(ZUSTAND_DIR, str(daten.get("name", "")))
+            protokoll = "Logo %s geloescht" % daten.get("name")
         elif aktion == "datei_loeschen":
             lehrer.loesche_weltdatei(WELTEN_DIR, daten.get("datei"), daten.get("art"))
             protokoll = "Welt %s: %s entfernt" % (daten.get("datei"), daten.get("art"))
@@ -1585,6 +2170,14 @@ class Handler(BaseHTTPRequestHandler):
             welt = str(daten.get("welt", ""))
             zusatz = {"lagen": self._baukasten(baukasten_speichern, welt, daten.get("entwurf"), ich["name"])}
             protokoll = "Baukasten-Welt %s gespeichert" % welt
+        elif aktion == "backensatz_speichern":
+            name = str(daten.get("name", ""))
+            zusatz = self._baukasten(backensatz_speichern, name, daten.get("entwurf"), ich["name"])
+            protokoll = "Backensatz %s gespeichert, Greifer %s" % (name, zusatz["greifer"])
+        elif aktion == "backensatz_loeschen":
+            name = str(daten.get("name", ""))
+            self._baukasten(backensatz_loeschen, name)
+            protokoll = "Backensatz %s geloescht" % name
         else:
             raise lehrer.LehrerFehler("Unbekannte Aktion.")
         if protokoll:
@@ -1599,24 +2192,60 @@ class Handler(BaseHTTPRequestHandler):
         except baukasten.BaukastenFehler as fehler:
             raise lehrer.LehrerFehler(str(fehler))
 
-    def _hochladen(self, abfrage, teil=False):
+    def _hochladen(self, abfrage, art="upload"):
+        teil = art == "teil_hochladen"
         ich = self._wer()
+
+        def ablehnen(code, fehler):
+            # erst den Rest der Anfrage lesen (bis zur Grenze), sonst bricht die Verbindung beim Browser ab
+            try:
+                rest = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                rest = -1
+            if 0 <= rest <= welt_paket.MAX_PAKET:
+                while rest > 0:
+                    rest -= len(self.rfile.read(min(rest, 1 << 20)) or b"x" * rest)
+            else:
+                self.close_connection = True
+            self._json(code, {"fehler": fehler})
         if ich is None or self.headers.get("X-Lehrer") != "1":
-            self._json(403, {"fehler": "Nur für die Lehrkraft."})
+            ablehnen(403, "Nur für die Lehrkraft.")
             return
         if ich.get("muss_aendern"):
-            self._json(409, {"fehler": "Bitte zuerst ein eigenes Passwort festlegen."})
+            ablehnen(409, "Bitte zuerst ein eigenes Passwort festlegen.")
             return
         datei = urllib.parse.parse_qs(abfrage).get("datei", [""])[0]
         try:
             laenge = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             laenge = -1
-        if not 0 < laenge <= lehrer.MAX_DATEI:
+        grenze = welt_paket.MAX_PAKET if art == "welt_import" else lehrer.MAX_DATEI
+        if not 0 < laenge <= grenze:
             self.close_connection = True
-            self._json(413, {"fehler": "Die Datei fehlt oder ist groesser als 20 MB."})
+            self._json(413, {"fehler": "Die Datei fehlt oder ist groesser als %d MB." % (grenze // (1024 * 1024))})
             return
         try:
+            if art == "welt_import":
+                werte = urllib.parse.parse_qs(abfrage)
+                try:
+                    bericht = welt_importieren(self.rfile.read(laenge), werte.get("name", [""])[0] or None,
+                                               werte.get("ersetzen", [""])[0] == "1", ich["name"])
+                except welt_paket.WeltVorhanden as e:
+                    self._json(409, {"fehler": str(e), "vorhanden": e.name, "vorschlag": e.vorschlag})
+                    return
+                lehrer.protokolliere(ZUSTAND_DIR, ich["name"], "Welt %s importiert (Teile neu: %s%s)" % (
+                    bericht["welt"], ", ".join(bericht["teile_neu"]) or "keine",
+                    ", Backensatz %s" % bericht["backensatz"] if bericht["backensatz_neu"] else ""))
+                self._json(200, dict(bericht, ok=True))
+                return
+            if art == "logo_hochladen":
+                inhalt = self.rfile.read(laenge)   # erst ganz lesen, dann pruefen (sonst bricht die Verbindung ab)
+                if ich["rolle"] != "admin":
+                    raise lehrer.LehrerFehler("Das Logo ändern nur Admins.")
+                name = lehrer.speichere_logo(ZUSTAND_DIR, urllib.parse.parse_qs(abfrage).get("name", [""])[0], inhalt)
+                lehrer.protokolliere(ZUSTAND_DIR, ich["name"], "Logo %s hochgeladen" % name)
+                self._json(200, {"ok": True, "datei": name})
+                return
             if teil:
                 name = urllib.parse.parse_qs(abfrage).get("name", [""])[0]
                 ergebnis = teil_einlesen(name, self.rfile.read(laenge))
@@ -1627,8 +2256,37 @@ class Handler(BaseHTTPRequestHandler):
             name = lehrer.speichere_weltdatei(WELTEN_DIR, datei, self.rfile.read(laenge))
             lehrer.protokolliere(ZUSTAND_DIR, ich["name"], "Welt %s: %s hochgeladen" % (datei, name))
             self._json(200, {"ok": True, "datei": name})
-        except lehrer.LehrerFehler as fehler:
+        except (lehrer.LehrerFehler, welt_paket.PaketFehler) as fehler:
             self._json(409, {"fehler": str(fehler)})
+
+    def log_message(self, fmt, *args):
+        pass
+
+
+def ziel_umleitung(host_kopf, pfad, port):
+    """Adresse auf dem Hauptport fuer eine Anfrage an einen alten Port (z.B. 8080 -> 80)."""
+    host = (host_kopf or "").strip()
+    if host.startswith("["):   # IPv6 [::1]:8080
+        host = host[:host.find("]") + 1]
+    else:
+        host = host.split(":")[0]
+    if not re.fullmatch(r"[A-Za-z0-9.\-\[\]:]{1,100}", host):
+        host = "localhost"
+    return "http://%s%s%s" % (host, "" if port == 80 else ":%d" % port, pfad if pfad.startswith("/") else "/")
+
+
+class Umleitung(BaseHTTPRequestHandler):
+    """Alter Port (8080): alles auf die Startseite am Hauptport weiterleiten."""
+    def _weiter(self):
+        laenge = self.headers.get("Content-Length")
+        if laenge and laenge.isdigit() and int(laenge) <= 20000:
+            self.rfile.read(int(laenge))
+        self.send_response(301)
+        self.send_header("Location", ziel_umleitung(self.headers.get("Host"), self.path, PORT))
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    do_GET = do_POST = do_HEAD = _weiter
 
     def log_message(self, fmt, *args):
         pass
@@ -1638,6 +2296,14 @@ def main():
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print("Uebersicht auf Port %d (Konfiguration %s, Status %s, Welten %s)"
           % (PORT, KONFIG_DIR, STATUS_DIR, os.path.abspath(WELTEN_DIR)), flush=True)
+    for alt in (int(p) for p in os.environ.get("UMLEITEN_VON", "").replace(",", " ").split() if p.isdigit()):
+        try:
+            umleitung = ThreadingHTTPServer(("0.0.0.0", alt), Umleitung)
+        except OSError as e:
+            print("Umleitung von Port %d geht nicht: %s" % (alt, e), flush=True)
+            continue
+        threading.Thread(target=umleitung.serve_forever, daemon=True).start()
+        print("Port %d leitet auf Port %d um" % (alt, PORT), flush=True)
     threading.Thread(target=VERWALTER.laufen, daemon=True).start()
     server.serve_forever()
 

@@ -8,6 +8,7 @@ import math
 
 LZ0, LZ1, LX2, LX3, LX4, LX6 = 0.100, 0.1522, 0.24152, 0.1222, 0.1778, 0.129
 FLANSCH_DICKE = 0.0012
+TCP_EGP40 = 0.103          # Schunk EGP 40 mit ReBeL-Adapterplatte, wie in iRC (Standardgreifer)
 TCP_EGP25 = 0.085          # Schunk EGP 25 mit ReBeL-Adapterplatte, wie in iRC
 TCP_EGP25_FINGER = 0.105   # dasselbe mit den iRC-Standardfingern
 TCP_EGP25_ROBI2 = 0.1307   # mit den Robi2-Backen, Backenspitze (Lage provisorisch, cad/backen/robi2)

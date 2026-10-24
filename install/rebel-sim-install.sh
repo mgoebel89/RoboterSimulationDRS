@@ -104,6 +104,6 @@ fi
 schritt "Neustart der Webseite"
 systemctl restart rebel-sim-web
 ip=$(hostname -I | awk '{print $1}')
-gruen "Fertig. Schueler: http://$ip:8080   Lehrkraefte: http://$ip:8080/lehrer"
+gruen "Fertig. Startseite fuer Schueler und Lehrkraefte: http://$ip"
 [ -s /var/lib/rebel-sim/benutzer.json ] || gelb "Noch kein Lehrerkonto: rebel-sim-admin <name>   (fragt nach dem Passwort)"
 echo "Laufende Simulationen nutzen neuen Programmcode erst nach 'Neu starten'."

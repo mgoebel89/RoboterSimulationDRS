@@ -97,7 +97,7 @@ DEF BASISPLATTE Aufbau {
   farbe 0.32 0.34 0.37
 }
 DEF REBEL IgusRebel6DOF {
-  greifer "egp25"
+  greifer "egp40"
 }
 Aufbau {
   translation 0.350000 0.030000 0.003000

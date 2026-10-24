@@ -6,8 +6,10 @@ Simulationen und pflegt Welten. Alles, was ueber die Webseite geaendert wird,
 liegt in Dateien, die der Dienstbenutzer schreiben darf:
   /var/lib/rebel-sim/benutzer.json       Konten (Passwoerter als PBKDF2) und Geheimnis fuer die Cookies
   /var/lib/rebel-sim/protokoll.log       wer wann was getan hat
-  /var/lib/rebel-sim/einstellungen.json  Aenderungen an verwalter.json (Leerlauf, Stundenende, ...)
+  /var/lib/rebel-sim/einstellungen.json  Aenderungen an verwalter.json (Leerlauf, Stundenende, ...) und Logo
+  /var/lib/rebel-sim/logos/              hochgeladene Logos (PNG, JPG, SVG)
   /opt/rebel-sim/worlds/<welt>.json/.pdf/.png  Titel, Aufgabe, Freigabe, Arbeitsblatt, Vorschau
+  /opt/rebel-sim/worlds/papierkorb/      geloeschte Welten (zum Zurueckholen wieder nach worlds/ kopieren)
 
 Im Container (ersten Admin anlegen, oder Passwort vergessen):
   sudo -u rebelsim python3 /opt/rebel-sim/tools/lehrer.py admin <name>
@@ -305,7 +307,9 @@ def pruefe_einstellungen(daten):
 def speichere_einstellungen(zustand_dir, daten):
     werte = pruefe_einstellungen(daten)
     os.makedirs(zustand_dir, exist_ok=True)
-    schreibe_json(einstellungen_datei(zustand_dir), werte)
+    alle = _lies_json(einstellungen_datei(zustand_dir))   # z.B. das gewaehlte Logo bleibt
+    alle.update(werte)
+    schreibe_json(einstellungen_datei(zustand_dir), alle)
     return werte
 
 
@@ -356,6 +360,121 @@ def loesche_weltdatei(welten_dir, datei, art):
     for e in endungen:
         if os.path.exists(basis + e):
             os.remove(basis + e)
+
+
+# Alles, was zu einer Welt gehoert (Baukasten-Entwurf, Angaben, Vorschau, Arbeitsblatt)
+WELT_ENDUNGEN = (".wbt", ".json", ".baukasten.json", ".png", ".jpg", ".pdf")
+
+
+def loesche_welt(welten_dir, datei, jetzt=None):
+    """Welt mit allen Dateien in den Papierkorb (worlds/papierkorb/<welt>-<zeit>/) verschieben.
+    Zurueckholen: die Dateien wieder nach worlds/ kopieren. Rueckgabe: verschobene Dateinamen."""
+    basis = _welt_basis(welten_dir, datei)
+    name = os.path.basename(basis)
+    ziel = os.path.join(welten_dir, "papierkorb", "%s-%s" % (name, time.strftime("%Y%m%d-%H%M%S", time.localtime(jetzt))))
+    os.makedirs(ziel, exist_ok=True)
+    verschoben = []
+    for e in WELT_ENDUNGEN:
+        if os.path.exists(basis + e):
+            os.replace(basis + e, os.path.join(ziel, name + e))
+            verschoben.append(name + e)
+    return verschoben
+
+
+GREIFER_FELD = re.compile(r'(\bgreifer\s+")([^"]*)(")')
+
+
+def welt_greifer(welten_dir, datei):
+    """Greifer der Welt (Feld greifer im ReBeL der .wbt) oder None."""
+    try:
+        with open(_welt_basis(welten_dir, datei) + ".wbt", encoding="utf-8", errors="replace") as f:
+            m = GREIFER_FELD.search(f.read())
+    except (OSError, LehrerFehler):
+        return None
+    return m.group(2) if m else None
+
+
+def setze_greifer(welten_dir, datei, greifer, erlaubt):
+    """Greifer einer Welt umstellen (in der .wbt und, falls vorhanden, im Baukasten-Entwurf)."""
+    basis = _welt_basis(welten_dir, datei)
+    if greifer not in erlaubt:
+        raise LehrerFehler("Den Greifer %r kennt das Robotermodell nicht." % greifer)
+    with open(basis + ".wbt", encoding="utf-8") as f:
+        text = f.read()
+    if not GREIFER_FELD.search(text):
+        raise LehrerFehler("In %s steht kein Greifer (Feld greifer am ReBeL fehlt)." % datei)
+    tmp = basis + ".wbt.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(GREIFER_FELD.sub(lambda m: m.group(1) + greifer + m.group(3), text, count=1))
+    os.replace(tmp, basis + ".wbt")
+    if os.path.exists(basis + ".baukasten.json"):
+        entwurf = _lies_json(basis + ".baukasten.json")
+        entwurf["greifer"] = greifer
+        schreibe_json(basis + ".baukasten.json", entwurf)
+
+
+# --- Logo (Einstellungen): hochgeladene Bilder in /var/lib/rebel-sim/logos, gewaehlt in einstellungen.json ---
+
+LOGO_NAME = re.compile(r"[a-z0-9_-]{1,40}\.(png|jpg|svg)")
+LOGO_TYPEN = {"png": "image/png", "jpg": "image/jpeg", "svg": "image/svg+xml"}
+
+
+def logo_dir(zustand_dir):
+    return os.path.join(zustand_dir, "logos")
+
+
+def logos(zustand_dir):
+    try:
+        return sorted(n for n in os.listdir(logo_dir(zustand_dir)) if LOGO_NAME.fullmatch(n))
+    except OSError:
+        return []
+
+
+def gewaehltes_logo(zustand_dir):
+    """Dateiname des gewaehlten Logos (muss noch vorhanden sein) oder None."""
+    name = _lies_json(einstellungen_datei(zustand_dir)).get("logo")
+    return name if name in logos(zustand_dir) else None
+
+
+def speichere_logo(zustand_dir, name, inhalt):
+    """Logo hochladen: PNG, JPG oder SVG (ohne Skripte). Rueckgabe: Dateiname."""
+    name = re.sub(r"[^a-z0-9_-]", "_", str(name or "").lower().rsplit(".", 1)[0])[:40].strip("_") or "logo"
+    if len(inhalt) > 2 * 1024 * 1024:
+        raise LehrerFehler("Das Logo ist groesser als 2 MB.")
+    endung = next((e[1:] for magie, e in DATEIARTEN if inhalt.startswith(magie) and e != ".pdf"), None)
+    if endung is None:
+        kopf = inhalt[:2048].decode("utf-8", "replace").lstrip("﻿ \r\n\t").lower()
+        if not (kopf.startswith("<svg") or kopf.startswith("<?xml")) or "<svg" not in inhalt.decode("utf-8", "replace").lower():
+            raise LehrerFehler("Nur PNG, JPG oder SVG.")
+        text = inhalt.decode("utf-8", "replace").lower()
+        if re.search(r"<script|\bon[a-z]+\s*=|javascript:|<foreignobject", text):
+            raise LehrerFehler("Das SVG enthaelt Skripte oder Ereignisse; bitte als einfaches SVG oder PNG speichern.")
+        endung = "svg"
+    os.makedirs(logo_dir(zustand_dir), exist_ok=True)
+    datei = "%s.%s" % (name, endung)
+    tmp = os.path.join(logo_dir(zustand_dir), datei + ".tmp")
+    with open(tmp, "wb") as f:
+        f.write(inhalt)
+    os.replace(tmp, os.path.join(logo_dir(zustand_dir), datei))
+    return datei
+
+
+def waehle_logo(zustand_dir, name):
+    """Logo fuer alle Seiten waehlen ("" = keins). Bleibt in einstellungen.json neben den anderen Werten."""
+    if name and name not in logos(zustand_dir):
+        raise LehrerFehler("Dieses Logo gibt es nicht.")
+    werte = _lies_json(einstellungen_datei(zustand_dir))
+    werte["logo"] = name or ""
+    os.makedirs(zustand_dir, exist_ok=True)
+    schreibe_json(einstellungen_datei(zustand_dir), werte)
+
+
+def loesche_logo(zustand_dir, name):
+    if name not in logos(zustand_dir):
+        raise LehrerFehler("Dieses Logo gibt es nicht.")
+    os.remove(os.path.join(logo_dir(zustand_dir), name))
+    if _lies_json(einstellungen_datei(zustand_dir)).get("logo") == name:
+        waehle_logo(zustand_dir, "")
 
 
 def main():

@@ -1,7 +1,7 @@
 """Weltbaukasten: Teile ueber Verbindungspunkte platzieren (wie Mate Connectors in Onshape).
 
 Ein Entwurf (worlds/<welt>.baukasten.json) beschreibt eine Welt:
-  {"titel": "...", "besitzer": "lehrer:gob", "greifer": "egp25",
+  {"titel": "...", "besitzer": "lehrer:gob", "greifer": "egp40",
    "teile": [{"id": "magazin", "teil": "magazin_v2", "art": "aufbau" | "werkstueck",
               "farbe": [r, g, b], "masse_kg": 0.05,
               "verbindung": {"punkt": <Punkt am Teil>, "an": "tisch" | "roboterfuss" | <id>,
@@ -484,6 +484,78 @@ def ea_sensoren(entwurf):
             for i, t in enumerate(t for t in entwurf.get("teile", []) if t.get("art") == "sensor")]
 
 
+# --- Backensaetze (Phase 4): eigene Backe am Backentraeger eines Schunk EGP ---
+# Der Greifer aus der Teilebibliothek (Schunk-CAD, Traeger offen wie im iRC-Modell) steht im Werkzeugsystem
+# von iRC: Ursprung Flansch, z vom Flansch weg, Backen bewegen sich entlang x. Schunk-x bleibt x,
+# Schunk-y wird z (+8 mm Adapterplatte), Schunk-z wird -y. Bei EGP 25 und EGP 40 gleich.
+GREIFER_TEILE = {"egp40": "schunk_egp40", "egp25": "schunk_egp25"}
+GREIFER_TEIL = GREIFER_TEILE["egp25"]   # Entwuerfe ohne "basis" stammen aus der Zeit vor dem EGP 40
+GREIFER_LAGE = Lage([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]], [0.0, 0.0, 8.0])
+BACKENSATZ_NAME = re.compile(r"[a-z][a-z0-9_]{0,19}")
+
+
+def greifer_basis(entwurf):
+    basis = entwurf.get("basis") or "egp25"
+    if basis not in GREIFER_TEILE:
+        raise BaukastenFehler("Greifer %r gibt es nicht (EGP 40 oder EGP 25)." % basis)
+    return basis
+
+
+def tcp_werte(entwurf):
+    """TCP eines Backensatzes: Bezug "spitze" oder "mitte" der Backen plus Versatz (mm, + = vom Flansch weg),
+    oder "flansch" mit festem Abstand. Rueckgabe: Felder fuer backensatz.json."""
+    t = entwurf.get("tcp") or {}
+    art = t.get("bezug", "spitze")
+    try:
+        wert = float(t.get("mm") or 0)
+    except (TypeError, ValueError):
+        raise BaukastenFehler("TCP: bitte eine Zahl in mm angeben.")
+    if art in ("spitze", "mitte"):
+        if not -200 <= wert <= 200:
+            raise BaukastenFehler("TCP-Versatz: -200 bis 200 mm.")
+        return {"tcp": art, "tcp_versatz_mm": round(wert, 2)}
+    if art == "flansch":
+        if not 0 < wert <= 400:
+            raise BaukastenFehler("TCP ab Flansch: 0 bis 400 mm.")
+        return {"tcp": round(wert, 2), "tcp_versatz_mm": 0}
+    raise BaukastenFehler("TCP-Bezug ist 'spitze', 'mitte' oder 'flansch'.")
+
+
+def backensatz_aus_entwurf(name, entwurf, lagen, merkmale_von):
+    """backensatz.json fuer tools/erzeuge_rebel_modell.py: die LINKE Backe (x < 0) im Werkzeugsystem.
+    Haengt sie am rechten Traeger, wird sie um die Werkzeugachse gedreht (die rechte ist dieselbe Backe)."""
+    if not BACKENSATZ_NAME.fullmatch(name or ""):
+        raise BaukastenFehler("Name des Backensatzes: Buchstabe zuerst, dann a-z, 0-9 und _, hoechstens 20 Zeichen.")
+    basis = greifer_basis(entwurf)
+    tcp = tcp_werte(entwurf)
+    hub = entwurf.get("hub_mm")
+    if hub not in (None, ""):
+        try:
+            hub = round(float(hub), 2)
+        except (TypeError, ValueError):
+            raise BaukastenFehler("Hub je Backe: bitte eine Zahl in mm.")
+        if not 0 < hub <= 30:
+            raise BaukastenFehler("Hub je Backe: 0 bis 30 mm.")
+    backen = [t for t in entwurf.get("teile", []) if t.get("art", "aufbau") == "aufbau"]
+    if len(backen) != 1 or len(entwurf["teile"]) != 1:
+        raise BaukastenFehler("Ein Backensatz besteht aus genau einer Backe (die zweite ist dieselbe, gedreht).")
+    backe = backen[0]
+    if (backe.get("verbindung") or {}).get("an") != "greifer":
+        raise BaukastenFehler("Die Backe muss mit dem Greifer verbunden sein.")
+    lage = lagen[backe["id"]]
+    box = merkmale_von(backe["teil"])["box"]
+    mitte = lage.punkt([(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2])
+    if mitte[0] > 0:
+        lage = Lage(_rot_z(180.0)).mal(lage)
+    satz = {"name": name, "titel": str(entwurf.get("titel") or name)[:40], "basis": basis, "teil": backe["teil"],
+            "matrix": [[round(v, 9) for v in zeile] for zeile in lage.r],
+            "verschiebung_mm": [round(v, 4) for v in lage.o]}
+    satz.update(tcp)
+    if hub not in (None, ""):
+        satz["hub_mm"] = hub
+    return satz
+
+
 def _umklappen(art_teil, art_ziel):
     """Halbe Drehung, die z umkehrt und das Wesentliche der Punkte zusammenhaelt."""
     if art_teil == art_ziel == "kante":
@@ -503,8 +575,8 @@ def pruefe_entwurf(entwurf):
     for t in teile:
         if not ID.fullmatch(str(t.get("id", ""))) or t["id"] in ("tisch", "roboterfuss"):
             raise BaukastenFehler("Ungueltiger Name %r (Buchstabe zuerst, dann a-z, 0-9, - und _)." % t.get("id"))
-        if t["id"] in ids:
-            raise BaukastenFehler("Der Name %s kommt doppelt vor." % t["id"])
+        if t["id"] in ids or t["id"] == "greifer":
+            raise BaukastenFehler("Der Name %s kommt doppelt vor oder ist vergeben." % t["id"])
         ids.add(t["id"])
         if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor"):
             raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck' oder 'sensor'." % t["id"])
@@ -525,7 +597,8 @@ def loese(entwurf, merkmale_von):
     Rueckgabe: {id: Lage}. Fehler bei Schleifen, unbekannten Teilen oder Punkten."""
     pruefe_entwurf(entwurf)
     teile = {t["id"]: t for t in entwurf["teile"]}
-    tisch = tisch_merkmale(tisch_werte(entwurf))
+    backensatz = entwurf.get("art") == "backensatz"   # Bezug ist dann der Greifer statt des Tischs
+    tisch = None if backensatz else tisch_merkmale(tisch_werte(entwurf))
 
     def merkmale(t):
         if t.get("art") == "sensor":
@@ -542,8 +615,10 @@ def loese(entwurf, merkmale_von):
         t = teile[ident]
         v = t["verbindung"]
         an = v.get("an")
-        if an in ("tisch", "roboterfuss"):
+        if an in ("tisch", "roboterfuss") and not backensatz:
             ziel_welt, ziel_merkmale = Lage(), tisch
+        elif an == "greifer" and backensatz:
+            ziel_welt, ziel_merkmale = GREIFER_LAGE, merkmale_von(GREIFER_TEILE[greifer_basis(entwurf)])
         elif an in teile:
             ziel_welt, ziel_merkmale = lage(an), merkmale(teile[an])
         else:
@@ -723,7 +798,7 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
         sockel = SOCKEL % {"z": h / 2, "h": -h} if h < -0.001 else ""
     text = KOPF % dict(werte, **{
         "entwurf": entwurf_name, "info": _vrml_text(entwurf.get("aufgabe", "")[:500]),
-        "titel": _vrml_text(entwurf.get("titel", "Baukasten-Welt")), "greifer": _vrml_text(entwurf.get("greifer", "egp25")),
+        "titel": _vrml_text(entwurf.get("titel", "Baukasten-Welt")), "greifer": _vrml_text(entwurf.get("greifer", "egp40")),
         "tisch_x": mitte[0] / 1000, "tisch_y": mitte[1] / 1000, "tisch_z": h,
         "tisch_drehung": math.radians(-t["drehung_grad"]), "boden_z": h - 0.75,
         "tisch_kinder": kinder, "tisch_dicke": dicke, "tisch_dicke_halb": dicke / 2,

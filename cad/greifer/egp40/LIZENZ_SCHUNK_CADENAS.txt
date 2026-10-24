@@ -1,0 +1,13 @@
+CC-BY-ND-4.0 (Supplier: SCHUNK SE & Co. KG / CAD Data: CADENAS GmbH)
+ 
+Jede Kopie und sonstige Vervielfältigung oder Verbreitung der CAD-Datei
+ist nach der CC BY ND 4.0 Lizenz nur unter Nennung der folgenden Rechteinhaber
+zulässig:
+Die CADENAS GmbH hält die Rechte an der Datenbank in Form der CAD Datei.
+SCHUNK SE & Co. KG hält die Rechte an dem ursprünglichen Bauteil.
+
+Every copy and any other reproduction or distribution of the CAD file is
+permitted only when naming the following copyright holder, in accordance
+with the CC BY ND 4.0 license:
+CADENAS GmbH holds the rights for the database in the form of the CAD file.
+SCHUNK SE & Co. KG holds the rights for the original component.

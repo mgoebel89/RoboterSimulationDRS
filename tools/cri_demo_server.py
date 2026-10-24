@@ -24,10 +24,10 @@ HOME = [0.0, -20.0, 110.0, 0.0, 90.0, 0.0]
 
 def ablauf(greifer):
     """Liste von (Gelenkwinkel, Dauer in s, Greifer zu?)."""
-    tool = {"egp25": kin.TCP_EGP25, "egp25_robi2": kin.TCP_EGP25_ROBI2}.get(greifer, kin.TCP_VAKUUM)
+    tool = {"egp40": kin.TCP_EGP40, "egp25": kin.TCP_EGP25, "egp25_robi2": kin.TCP_EGP25_ROBI2}.get(greifer, kin.TCP_VAKUUM)
     # Stift 20 mm hoch: Backen am oberen Ende, lange Backen mit der Spitze knapp ueber
     # dem Tisch, Sauger auf der Oberseite
-    greif_z = {"egp25": 0.0155, "egp25_robi2": 0.001}.get(greifer, 0.02)
+    greif_z = {"egp40": 0.012, "egp25": 0.0155, "egp25_robi2": 0.001}.get(greifer, 0.02)
     r, winkel = 0.35, math.radians(60)
     pick = (r, 0.0)
     place = (r * math.cos(winkel), r * math.sin(winkel))
@@ -90,7 +90,7 @@ def status_nachricht(cnt, q, dout):
 def dout_maske(greifer, zu):
     """Ausgaenge wie iRC: EGP 25 mit zwei Kanaelen (Bit 30 = DOut31 oeffnen,
     Bit 31 = DOut32 schliessen), Sauger nur DOut32."""
-    if greifer.startswith("egp25"):
+    if greifer.startswith("egp"):
         return (1 << 31) if zu else (1 << 30)
     return (1 << 31) if zu else 0
 
@@ -148,7 +148,7 @@ def serve(port=3920, greifer="egp25", takt=0.05, log=print, stop=None, bereit=No
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=3920)
-    ap.add_argument("--greifer", choices=["egp25", "egp25_robi2", "vakuum"], default="egp25")
+    ap.add_argument("--greifer", choices=["egp40", "egp25", "egp25_robi2", "vakuum"], default="egp40")
     args = ap.parse_args()
     try:
         serve(args.port, args.greifer)

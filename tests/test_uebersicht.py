@@ -92,8 +92,11 @@ class TestServer(Grundlage):
             self.assertIn("location.host + '/sim/07'", viewer)   # Stream ueber dieselbe Adresse
             self.assertIn("currentWorld = 'worlds/lf7.wbt'", viewer)   # Weltname fuer Meshes
             self.assertIn("'w3d', true", viewer)            # Schueler: nur zuschauen
+            # Lehrkraft schaut ebenfalls nur zu (Webots-Pause wuerde von iRC abkoppeln), hat aber die Platz-Knoepfe
             lehrer = urllib.request.urlopen(basis + "/platz/07?steuern=1", timeout=5).read().decode("utf-8")
-            self.assertIn("'w3d', false", lehrer)
+            self.assertIn("'w3d', true", lehrer)
+            self.assertIn("lehrerAktion('teile_zuruecksetzen')", lehrer)
+            self.assertIn("platz: '07'", lehrer)
             with self.assertRaises(urllib.error.HTTPError) as fehler:
                 urllib.request.urlopen(basis + "/platz/09", timeout=5)
             self.assertEqual(fehler.exception.code, 404)

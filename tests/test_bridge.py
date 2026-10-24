@@ -227,6 +227,26 @@ class TestGreifer(unittest.TestCase):
         self.assertIsNone(self.greifer.teil)
         self.assertEqual(self.robot.geraete["finger_links"].pos, 0.0)
 
+    def test_zu_tief_in_tasche_abgelegt_wird_angehoben(self):
+        # Magazin: Platte z -2..6 mm mit Tasche (Boden 3 mm) um x=0.35, y=0; wie profiltisch_test
+        def quadrat(x0, x1, y0, y1, z):
+            return [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]]
+        punkte = quadrat(0.32, 0.38, -0.03, 0.03, 0.003) + quadrat(0.30, 0.40, -0.05, -0.03, 0.006) + quadrat(0.30, 0.40, -0.05, 0.05, -0.002)
+        dreiecke = [(0, 1, 2), (0, 2, 3), (4, 5, 6), (4, 6, 7), (8, 9, 10), (8, 10, 11)]
+        netz = (punkte, dreiecke, [0.30, -0.05, 0.40, 0.05])
+        self.assertAlmostEqual(irc_bridge.auflage_hoehe([netz], [0.35, 0.0, 0.018], [0.012, 0.012], 0.018), 0.003)
+        self.assertIsNone(irc_bridge.auflage_hoehe([netz], [0.10, 0.0, 0.018], [0.012, 0.012], 0.018))   # daneben
+        self.assertAlmostEqual(irc_bridge.auflage_hoehe([netz], [0.35, 0.0, 0.002], [0.012, 0.012], 0.002), -0.002)
+        self.greifer.auflagen = lambda: [netz]
+        target = _Teil("target", (0.35, 0.0, 0.018), (0.04, 0.04, 0.04))
+        self.greifer.teil, self.greifer.teil_name = target, "target"
+        self.greifer._loslassen()
+        self.assertAlmostEqual(target.pos[2], 0.0235)   # Unterkante 0,5 mm ueber dem Taschenboden
+        target.pos = [0.35, 0.0, 0.030]                 # zu hoch abgelegt: faellt selbst, bleibt
+        self.greifer.teil = target
+        self.greifer._loslassen()
+        self.assertAlmostEqual(target.pos[2], 0.030)
+
     def test_daneben_gegriffen(self):
         self.tcp.setze(kin.ik_nach_unten(0.35, 0.08, 0.0155, kin.TCP_EGP25))
         self.greifer.schalte(True, [self.stift])
@@ -542,6 +562,43 @@ class TestSensorflaechen(unittest.TestCase):
         f.pruefen([grau])
         self.assertEqual(f.belegt, [None, None])
         self.assertEqual(set(f.signale().values()), {False})
+
+
+class TestBackensatzGenerator(unittest.TestCase):
+    def test_matrix_und_netz_aus_der_teilebibliothek(self):
+        import erzeuge_rebel_modell as gen
+        with tempfile.TemporaryDirectory() as tmp:
+            teile, backen = os.path.join(tmp, "teile"), os.path.join(tmp, "backen")
+            os.makedirs(os.path.join(teile, "klotz"))
+            os.makedirs(os.path.join(backen, "neu"))
+            with open(os.path.join(teile, "klotz", "netz.obj"), "w", encoding="ascii") as f:
+                f.write("g f1" + chr(10) + "v 0 0 0" + chr(10) + "v 10 0 0" + chr(10) + "v 0 10 0" + chr(10) + "f 1 2 3" + chr(10))
+            satz = {"name": "neu", "titel": "Neu", "basis": "egp25", "teil": "klotz", "tcp": "spitze",
+                    "matrix": [[0, 0, -1], [0, 1, 0], [1, 0, 0]], "verschiebung_mm": [-9.5, 0, 84.9]}
+            with open(os.path.join(backen, "neu", "backensatz.json"), "w", encoding="utf-8") as f:
+                json.dump(satz, f)
+            alt = gen.TEILE_DIR
+            gen.TEILE_DIR = teile
+            try:
+                gelesen = gen.lade_backensaetze((backen,))
+                self.assertEqual([s["name"] for s in gelesen], ["neu"])
+                links, rechts = gen.backe_platzieren(gelesen[0])
+            finally:
+                gen.TEILE_DIR = alt
+            # Punkt (10, 0, 0) mm -> Matrix -> (0, 0, 10) + Verschiebung, in Metern; rechts um z gedreht
+            self.assertEqual([round(v, 6) for v in links[0][1]], [-0.0095, 0.0, 0.0949])
+            self.assertEqual([round(v, 6) for v in rechts[0][1]], [0.0095, 0.0, 0.0949])
+            satz["matrix"] = [[1, 0, 0], [0, 1, 0], [0, 0, -1]]   # gespiegelt: keine Drehung
+            with self.assertRaises(SystemExit):
+                gen.backen_lage(satz)
+
+    def test_tcp_der_backen(self):
+        import erzeuge_rebel_modell as gen
+        backe = [(-0.01, 0, 0.100), (-0.01, 0, 0.130), (0.01, 0, 0.115)]
+        for satz, tcp in (({}, 0.130), ({"tcp": "spitze", "tcp_versatz_mm": -5}, 0.125), ({"tcp": "mitte"}, 0.115),
+                          ({"tcp": "mitte", "tcp_versatz_mm": 2}, 0.117), ({"tcp": 128.5}, 0.1285)):
+            self.assertAlmostEqual(gen.tcp_von_backen(satz, backe), tcp, msg=satz)
+        self.assertEqual((gen.egp_titel("egp40_finger"), gen.EGP_VARIANTEN[0][0]), ("EGP 40", "egp40"))
 
 
 class TestKonfigurationJePlatz(unittest.TestCase):
