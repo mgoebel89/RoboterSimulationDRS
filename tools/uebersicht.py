@@ -403,6 +403,18 @@ input[type=file] { display:none; }
     <button class="warnen" id="wd-loeschen" style="margin-left:auto">Welt löschen</button></div>
 </div></div>
 
+<div id="teil-dialog" class="dialog" hidden><div class="feld">
+  <h2>Neues Teil aus STEP-Datei</h2>
+  <label>Name in der Bibliothek <input id="t-name" placeholder="z.B. magazin_v2" autocapitalize="none"></label>
+  <label>STEP-Datei <input id="t-datei" type="file" accept=".step,.stp,.STEP,.STP" style="display:block"></label>
+  <div class="hilfe">Erlaubt sind a-z, 0-9, - und _ (leer = Dateiname). Gewinde und Kleinteile machen das Einlesen langsam:
+    am besten ohne Normteile exportieren.</div>
+  <div class="vorschau" id="t-bild" hidden></div>
+  <div class="hilfe" id="t-stand"></div>
+  <div class="knopfreihe"><button class="haupt" id="t-hochladen">Einlesen</button><button id="t-zu">Schließen</button>
+    <a id="t-baukasten" href="/lehrer/baukasten" hidden>Zum Baukasten</a></div>
+</div></div>
+
 <div id="import-dialog" class="dialog" hidden><div class="feld"><h2>Welt importieren</h2>
   <div id="im-text"></div>
   <label>Neuer Name <input id="im-name" autocapitalize="none"></label>
@@ -413,14 +425,10 @@ input[type=file] { display:none; }
 
 <section id="tab-teile" hidden>
   <div class="spalte">
-    <div class="feld"><h2>Teil aus STEP-Datei einlesen</h2>
-      <div class="zeile"><label>Name in der Bibliothek <input id="t-name" placeholder="z.B. magazin_v2" autocapitalize="none"></label>
-        <label>STEP-Datei <input id="t-datei" type="file" accept=".step,.stp,.STEP,.STP" style="display:block"></label></div>
-      <div><button class="haupt" id="t-hochladen">Einlesen</button></div>
-      <div class="hilfe">Erlaubt sind a-z, 0-9, - und _. Gewinde und Kleinteile machen das Einlesen langsam: am besten ohne
-        Normteile exportieren. Platziert werden die Teile im Baukasten (kommt als Nächstes).</div></div>
+    <div class="filter"><button class="haupt" id="t-neu">+ Neues Teil</button>
+      <span class="hilfe">STEP-Datei einlesen; platziert werden die Teile im Baukasten.</span></div>
     <div class="feld"><h2>Teilebibliothek</h2>
-      <table><thead><tr><th>Name</th><th>Größe (mm)</th><th>Flächen</th><th>Bohrungen</th><th>Kanten</th><th>Ecken</th>
+      <table><thead><tr><th></th><th>Name</th><th>Größe (mm)</th><th>Flächen</th><th>Bohrungen</th><th>Kanten</th><th>Ecken</th>
         <th>verwendet in</th><th></th></tr></thead><tbody id="teile"></tbody></table></div>
   </div>
 </section>
@@ -716,25 +724,48 @@ $('wd-loeschen').onclick = async () => {
 };
 
 // --- Teile ---
+// Vorschaubilder erzeugt tools/teil_vorschau.js (three.js) beim ersten Anzeigen und speichert sie im Container
+let vorschauModul = null;
+const vorschau = () => vorschauModul || (vorschauModul = import('/lehrer/teil_vorschau.js'));
+function vorschauSetzen(el, t) {
+  vorschau().then(m => m.vorschauAdresse(t)).then(url => { el.style.backgroundImage = 'url(' + url + ')'; el.textContent = ''; })
+    .catch(() => { el.textContent = 'keine Vorschau'; });
+}
 async function teile() {
   const liste = await (await fetch('/api/lehrer/teile', {cache: 'no-store'})).json();
-  $('teile').innerHTML = liste.map(t => '<tr data-name="' + esc(t.name) + '"><td>' + esc(t.name)
+  $('teile').innerHTML = liste.map(t => '<tr data-name="' + esc(t.name) + '"><td style="width:96px"><div class="mini" data-vorschau>'
+    + (t.vorschau ? '' : '…') + '</div></td><td>' + esc(t.name)
     + '<div class="hilfe">' + esc(t.quelle) + '</div></td><td>' + (t.groesse_mm || []).map(v => v.toFixed(1)).join(' × ')
     + '</td><td>' + t.anzahl.flaechen + '</td><td>' + t.anzahl.bohrungen + '</td><td>' + t.anzahl.kanten + '</td><td>'
     + t.anzahl.ecken + '</td><td>' + esc(t.verwendet_in.join(', ')) + '</td><td class="knoepfe">'
     + (t.verwendet_in.length ? '' : '<button class="t-loeschen warnen">Löschen</button>') + '</td></tr>').join('')
-    || '<tr><td colspan="8" class="hilfe">Noch keine Teile.</td></tr>';
+    || '<tr><td colspan="9" class="hilfe">Noch keine Teile.</td></tr>';
+  for (const t of liste) vorschauSetzen($('teile').querySelector('[data-name="' + CSS.escape(t.name) + '"] [data-vorschau]'), t);
 }
+$('t-neu').onclick = () => {
+  $('t-name').value = ''; $('t-datei').value = ''; $('t-stand').textContent = ''; $('t-bild').hidden = true;
+  $('t-baukasten').hidden = true; $('teil-dialog').hidden = false; $('t-name').focus();
+};
+$('t-zu').onclick = () => { $('teil-dialog').hidden = true; };
+$('t-datei').onchange = () => {   // Name aus dem Dateinamen vorschlagen
+  const f = $('t-datei').files[0];
+  if (f && !$('t-name').value.trim()) $('t-name').value = f.name.replace(/[.][^.]*$/, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').slice(0, 60);
+};
 $('t-hochladen').onclick = async () => {
   const f = $('t-datei').files[0], name = $('t-name').value.trim().toLowerCase();
   if (!f || !name) { melden('Bitte Name und STEP-Datei angeben.', true); return; }
   const b = $('t-hochladen'); b.disabled = true; b.textContent = 'lese ein ...';
+  $('t-stand').textContent = 'Der Container rechnet Netz und Verbindungspunkte (einige Sekunden, mit Gewinden länger) ...';
   try {
     const r = await fetch('/api/lehrer/teil_hochladen?name=' + encodeURIComponent(name), {method: 'POST', body: f,
       headers: {'Content-Type': 'application/octet-stream', 'X-Lehrer': '1'}});
     const d = await r.json().catch(() => ({}));
-    if (r.ok) { melden('Eingelesen: ' + name + ' (' + d.flaechen + ' Flächen, ' + d.bohrungen + ' Bohrungen)'); $('t-name').value = ''; }
-    else melden(d.fehler || 'Einlesen fehlgeschlagen.', true);
+    if (r.ok) {
+      $('t-stand').textContent = 'Eingelesen: ' + name + ' – ' + d.groesse_mm.map(v => Math.round(v)).join(' × ') + ' mm, '
+        + d.flaechen + ' Flächen, ' + d.bohrungen + ' Bohrungen. Vorschau:';
+      $('t-bild').hidden = false; $('t-bild').textContent = 'wird erzeugt ...'; $('t-baukasten').hidden = false;
+      vorschauSetzen($('t-bild'), {name, vorschau: null});
+    } else $('t-stand').textContent = d.fehler || 'Einlesen fehlgeschlagen.';
   } finally { b.disabled = false; b.textContent = 'Einlesen'; teile(); }
 };
 $('teile').onclick = async ev => {
@@ -843,7 +874,10 @@ $('n-anlegen').onclick = async () => {
   await anmeldung(); benutzer();
 };
 
-anmeldung().then(() => { simulationen(); setInterval(() => { if (!$('tab-sim').hidden) simulationen(); }, 2000); });
+anmeldung().then(() => {
+  const tab = document.querySelector('nav button[data-tab="' + location.hash.slice(1) + '"]');   // z.B. /lehrer#teile
+  if (tab) tab.click();
+  simulationen(); setInterval(() => { if (!$('tab-sim').hidden) simulationen(); }, 2000); });
 </script></body></html>"""
 
 VIEWER = """<!doctype html>
@@ -1457,7 +1491,11 @@ def teile_liste():
                 t = json.load(f)
         except (OSError, ValueError):
             continue
-        liste.append({"name": name, "quelle": t.get("quelle"), "groesse_mm": t.get("groesse_mm"),
+        try:
+            vorschau = int(os.path.getmtime(os.path.join(TEILE_DIR, name, TEIL_VORSCHAU)))
+        except OSError:
+            vorschau = None   # erzeugt der Browser beim ersten Anzeigen (tools/teil_vorschau.js)
+        liste.append({"name": name, "quelle": t.get("quelle"), "groesse_mm": t.get("groesse_mm"), "vorschau": vorschau,
                       "volumen_mm3": t.get("volumen_mm3"),
                       "anzahl": {k: len(t.get(k, [])) for k in ("flaechen", "bohrungen", "kanten", "ecken")},
                       "verwendet_in": [w for w, e in entwuerfe().items() if any(x.get("teil") == name for x in e["teile"])
@@ -1465,6 +1503,22 @@ def teile_liste():
                       + ["Backensatz " + b["name"] for b in backensaetze_liste() if b["teil"] == name]
                       + (["Backensatz-Editor (Greifer)"] if name in baukasten.GREIFER_TEILE.values() else [])})
     return liste
+
+
+TEIL_VORSCHAU = "vorschau.png"
+MAX_VORSCHAU = 2 * 1024 * 1024
+
+
+def speichere_teil_vorschau(name, inhalt):
+    """Vorschaubild eines Teils (PNG, im Browser aus dem Netz gerendert) neben teil.json ablegen."""
+    if not TEIL_NAME.fullmatch(name or "") or not os.path.isfile(os.path.join(TEILE_DIR, name, "teil.json")):
+        raise lehrer.LehrerFehler("Das Teil %s gibt es nicht." % name)
+    if not inhalt.startswith(b"\x89PNG") or len(inhalt) > MAX_VORSCHAU:
+        raise lehrer.LehrerFehler("Vorschaubild: PNG bis 2 MB.")
+    ziel = os.path.join(TEILE_DIR, name, TEIL_VORSCHAU)
+    with open(ziel + ".tmp", "wb") as f:
+        f.write(inhalt)
+    os.replace(ziel + ".tmp", ziel)
 
 
 def teil_einlesen(name, inhalt):
@@ -1493,6 +1547,10 @@ def teil_einlesen(name, inhalt):
         if "MemoryError" in r.stderr or "bad_alloc" in r.stderr:
             meldung = "Das Teil ist zu gross oder zu fein (Speichergrenze). Ohne Gewinde und Kleinteile exportieren."
         raise lehrer.LehrerFehler("Einlesen fehlgeschlagen: %s" % meldung.replace("Fehler: ", ""))
+    try:   # neues Netz: altes Vorschaubild passt nicht mehr
+        os.remove(os.path.join(TEILE_DIR, name, TEIL_VORSCHAU))
+    except OSError:
+        pass
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
@@ -1877,6 +1935,12 @@ class Handler(BaseHTTPRequestHandler):
                                   kopf=[("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")])
             except (OSError, KeyError):
                 self._text(404, "kein Logo")
+        elif pfad == "/lehrer/teil_vorschau.js":
+            if not self._lehrer():
+                self._text(403, "Nur für die Lehrkraft.")
+            else:
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "teil_vorschau.js"), encoding="utf-8") as f:
+                    self._antwort(200, f.read(), "text/javascript; charset=utf-8")
         elif pfad == "/lehrer/baukasten":
             if not self._lehrer():
                 self._antwort(302, "", kopf=[("Location", "/lehrer")])
@@ -1918,6 +1982,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, lehrer.benutzer_liste(ZUSTAND_DIR))
             elif pfad == "/api/lehrer/teile":
                 self._json(200, teile_liste())
+            elif pfad == "/api/lehrer/teil_vorschau":
+                name = urllib.parse.parse_qs(abfrage).get("name", [""])[0]
+                datei = os.path.join(TEILE_DIR, name, TEIL_VORSCHAU)
+                if not TEIL_NAME.fullmatch(name) or not os.path.exists(datei):
+                    self._text(404, "kein Vorschaubild")
+                else:
+                    with open(datei, "rb") as f:
+                        self._antwort(200, f.read(), "image/png")
             elif pfad == "/api/lehrer/teil" or pfad == "/api/lehrer/netz":
                 name = urllib.parse.parse_qs(abfrage).get("name", [""])[0]
                 datei = os.path.join(TEILE_DIR, name, "teil.json" if pfad.endswith("teil") else "netz.json")
@@ -1980,7 +2052,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         pfad, _, abfrage = self.path.partition("?")
-        if pfad in ("/api/lehrer/upload", "/api/lehrer/teil_hochladen", "/api/lehrer/logo_hochladen", "/api/lehrer/welt_import"):
+        if pfad in ("/api/lehrer/upload", "/api/lehrer/teil_hochladen", "/api/lehrer/logo_hochladen", "/api/lehrer/welt_import",
+                    "/api/lehrer/teil_vorschau"):
             self._hochladen(abfrage, art=pfad.rsplit("/", 1)[1])
             return
         try:
@@ -2245,6 +2318,10 @@ class Handler(BaseHTTPRequestHandler):
                     bericht["welt"], ", ".join(bericht["teile_neu"]) or "keine",
                     ", Backensatz %s" % bericht["backensatz"] if bericht["backensatz_neu"] else ""))
                 self._json(200, dict(bericht, ok=True))
+                return
+            if art == "teil_vorschau":
+                speichere_teil_vorschau(urllib.parse.parse_qs(abfrage).get("name", [""])[0], self.rfile.read(laenge))
+                self._json(200, {"ok": True})
                 return
             if art == "logo_hochladen":
                 inhalt = self.rfile.read(laenge)   # erst ganz lesen, dann pruefen (sonst bricht die Verbindung ab)

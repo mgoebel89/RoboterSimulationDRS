@@ -184,8 +184,10 @@ Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehre
 
 ![Welten im Lehrerbereich](bilder/lehrer_welten.jpg)
 
-- **Teile:** STEP-Dateien hochladen; der Container erzeugt daraus Netz und Verbindungspunkte (Flächen, Bohrungen,
-  Kanten, Ecken) für den Baukasten. Gewinde und Normteile machen das Einlesen langsam, besser ohne exportieren.
+- **Teile:** Liste mit Vorschaubildern. „+ Neues Teil“ öffnet einen Dialog: Name, STEP-Datei, Einlesen; der Container
+  erzeugt daraus Netz und Verbindungspunkte (Flächen, Bohrungen, Kanten, Ecken) für den Baukasten, danach zeigt der
+  Dialog die Vorschau. Gewinde und Normteile machen das Einlesen langsam, besser ohne exportieren. Die Vorschaubilder
+  rendert der Browser einmal aus dem Netz und legt sie im Container ab (`teile/<name>/vorschau.png`).
 
 ![Teilebibliothek](bilder/lehrer_teile.jpg)
 
@@ -211,7 +213,8 @@ Im Lehrerbereich auf **Baukasten**: Welten aus Teilen der Teilebibliothek zusamm
 - „Links“ und „vorne“ gelten aus Sicht des Roboters (vorne = Blickrichtung bei 0°).
 
 **Teile platzieren** (wie Mate Connectors in Onshape)
-1. Teil aus der Bibliothek **hinzufügen**; es steht zuerst neben dem Tisch.
+1. **+ Teil hinzufügen** öffnet die Teilebibliothek als Kacheln mit Vorschau und Suche; ein Klick fügt das Teil ein.
+   Es steht zuerst neben dem Tisch.
 2. **Punkt am Teil** anklicken (Fläche, Bohrung, Kante oder Ecke), dann das **Gegenstück** (Tisch, Nut,
    Roboterfuß oder ein anderes Teil). Die beiden Punkte werden aufeinandergelegt.
 3. Mit **X/Y/Z** verschieben (Pfeile rot/grün am Gegenstück), drehen, ggf. umdrehen.

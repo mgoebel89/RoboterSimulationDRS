@@ -500,6 +500,31 @@ class TestLehrerSeiten(Grundlage):
         finally:
             uebersicht.greifer_liste = alt
 
+    def test_teil_vorschau(self):
+        from test_baukasten import wuerfel
+        os.makedirs(os.path.join(uebersicht.TEILE_DIR, "klotz"))
+        with open(os.path.join(uebersicht.TEILE_DIR, "klotz", "teil.json"), "w", encoding="utf-8") as f:
+            json.dump(dict(wuerfel(), quelle="klotz.step", groesse_mm=[20, 20, 20]), f)
+        self.assertEqual(self.anfrage("GET", "/lehrer/teil_vorschau.js")[0], 403)   # nur fuer Lehrkraefte
+        self.konto("mueller", "lehrkraft")
+        self.anmelden("mueller")
+        status, js = self.anfrage("GET", "/lehrer/teil_vorschau.js")
+        self.assertEqual(status, 200)
+        self.assertIn("export function vorschauAdresse", js)
+        self.assertIsNone(self.anfrage("GET", "/api/lehrer/teile")[1][0]["vorschau"])
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/teil_vorschau?name=klotz")[0], 404)
+        for name, inhalt in (("klotz", JPG), ("gibtsnicht", PNG), ("../klotz", PNG)):
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/teil_vorschau?name=" + name, roh=inhalt, typ="image/png")[0], 409, name)
+        self.assertEqual(self.anfrage("POST", "/api/lehrer/teil_vorschau?name=klotz", roh=PNG, typ="image/png")[0], 200)
+        self.assertIsInstance(self.anfrage("GET", "/api/lehrer/teile")[1][0]["vorschau"], int)
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        c.request("GET", "/api/lehrer/teil_vorschau?name=klotz", headers={"Cookie": self.cookie})
+        r = c.getresponse()
+        self.assertEqual((r.status, r.getheader("Content-Type"), r.read()), (200, "image/png", PNG))
+        c.close()
+        self.assertIn('id="teil-dialog"', self.anfrage("GET", "/lehrer")[1])
+        self.assertIn("vorschauAdresse", self.anfrage("GET", "/lehrer/baukasten")[1])
+
     def test_welt_export_und_import(self):
         self.konto("mueller", "lehrkraft")
         self.anmelden("mueller")
