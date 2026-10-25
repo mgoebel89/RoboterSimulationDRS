@@ -799,13 +799,9 @@ class KollisionsWaechter:
         return self.wolken[node.getId()]
 
     def koerper(self, nahe):
-        """Huellkoerper in Weltlage; Glieder nur, wenn ihre Huellkugel `nahe` (Funktion Mitte, Radius) ist."""
+        """Huellkoerper in Weltlage; Glieder nur, wenn ihre Huellkugel `nahe` (Funktion Mitte, Radius) ist.
+        Greifer, Backen und gegriffenes Teil zuerst: dort kracht es meist, und nach wenigen Treffern ist Schluss."""
         liste = []
-        for name, node, kugeln, (m, r) in self.glieder:
-            lage = (node.getPosition(), node.getOrientation())
-            if not nahe(kollision._welt(lage, m), r):
-                continue
-            liste += [kollision.Kugel(name, kollision._welt(lage, k[:3]), k[3]) for k in kugeln]
         if self.flansch is not None and "grund" in self.greifer_huelle:
             h = self.greifer_huelle["grund"]
             liste.append(kollision.Quader("Greifer", (self.flansch.getPosition(), self.flansch.getOrientation()), h["mitte"], h["halb"]))
@@ -817,23 +813,29 @@ class KollisionsWaechter:
         if t is not None:
             liste.append(kollision.Quader("%s (gegriffen)" % self.greifer.teil_name, (t.getPosition(), t.getOrientation()),
                                           [0.0, 0.0, 0.0], [v / 2 for v in t.getField("size").getSFVec3f()]))
+        for name, node, kugeln, (m, r) in reversed(self.glieder):   # vom Flansch zum Fuss
+            lage = (node.getPosition(), node.getOrientation())
+            if not nahe(kollision._welt(lage, m), r):
+                continue
+            liste += [kollision.Kugel(name, kollision._welt(lage, k[:3]), k[3]) for k in kugeln]
         return liste
 
     def pruefen(self, teile, aufbau_nodes, tisch_z):
         """Neue Liste der Treffer (auch leer); Rechenzeit in dauer_ms."""
         if not self.an:
             return []
-        t0 = time.perf_counter()
         umgebung = []
+        gegriffen = self.greifer.teil.getId() if self.greifer.teil is not None else None   # Wrapper wechseln, Id nicht
         for node in aufbau_nodes:
             umgebung.append(kollision.Umgebungsteil(node.getField("name").getSFString(), "aufbau",
                                                     self._wolke_aufbau(node), (node.getPosition(), node.getOrientation()), node.getId()))
         for node in teile:
-            if node is self.greifer.teil:
+            if node.getId() == gegriffen:
                 continue
             umgebung.append(kollision.Umgebungsteil(node.getField("name").getSFString(), "werkstueck",
                                                     self._wolke_werkstueck(node), (node.getPosition(), node.getOrientation()), node.getId()))
         rand = self.einst["abstand_mm"] / 1000.0
+        t0 = time.perf_counter()   # ohne das einmalige Abtasten der Netze
 
         def nahe(m, r):
             if tisch_z is not None and m[2] - r < tisch_z + rand:
@@ -845,12 +847,39 @@ class KollisionsWaechter:
         for u in umgebung:
             if u.name == "basisplatte":
                 ausnahmen.add((self.GLIED_NAMEN[1], u.kennung))
+        # Greifer und Backen gegen das Teil, das sie gerade greifen koennen bzw. eben losgelassen haben: kein
+        # Sicherheitsabstand (es sitzt beim Greifen dicht unter dem Greiferkoerper), nur echtes Eindringen zaehlt
+        eng = set()
         los, wann = self.zuletzt_los
         if los is not None and time.monotonic() - wann < 1.5:
-            for seite in ("links", "rechts"):
-                ausnahmen.add(("Backe %s" % seite, los.getId()))
-        self.treffer = kollision.pruefe(self.koerper(nahe), umgebung, tisch_z, rand, self.einst["ablage_mm"] / 1000.0,
-                                        ausnahmen=ausnahmen, tisch_frei={self.GLIED_NAMEN[1]})
+            eng.add(los.getId())
+        if self.greifer.fingers and self.greifer.teil is None:
+            # grob und ohne Netzschnitt (der waere bei CAD-Teilen zu teuer): Mitte zwischen den Backen, nah am TCP
+            p, r = self.greifer._tcp_lage()
+            rt = m_t(r)
+            for node in teile:
+                lokal, _r_rel, e = self.greifer._im_werkzeug(node, p, rt)
+                if abs(lokal[0]) <= self.greifer.masse["spalt"] and math.sqrt(sum(c * c for c in lokal)) < max(e) + 0.03:
+                    eng.add(node.getId())
+        rand_paare = {(name, kennung): -0.0005 for kennung in eng for name in ("Greifer", "Backe links", "Backe rechts")}
+        prof = getattr(self, "_profil", None)
+        if prof is None and os.environ.get("KOLLISION_PROFIL"):   # Fehlersuche: Rechenzeit je Funktion ins Log
+            import cProfile
+            prof = self._profil = [cProfile.Profile(), 0]
+        if prof:
+            prof[0].enable()
+        koerper = self.koerper(nahe)
+        self.treffer = kollision.pruefe(koerper, umgebung, tisch_z, rand, self.einst["ablage_mm"] / 1000.0,
+                                        ausnahmen=ausnahmen, tisch_frei={self.GLIED_NAMEN[1]}, rand_paare=rand_paare)
+        if prof:
+            prof[0].disable()
+            prof[1] += 1
+            if prof[1] % 100 == 0:
+                import io
+                import pstats
+                text = io.StringIO()
+                pstats.Stats(prof[0], stream=text).sort_stats("tottime").print_stats(12)
+                print("Kollisionen, Profil nach %d Pruefungen (%d Koerper zuletzt):\n%s" % (prof[1], len(koerper), text.getvalue()))
         self.dauer_ms = 0.8 * self.dauer_ms + 0.2 * (time.perf_counter() - t0) * 1000
         return self.treffer
 
@@ -1044,7 +1073,9 @@ def main():
 
         greifer.mitfuehren()
         greifer.festhalten()
-        if waechter.an and not vorschau and jetzt - kollision_zeit >= 0.1 and not erster_schritt:
+        # Takt nach Rechenzeit: 10-mal je Sekunde, bei teurer Pruefung (viele Teile nah am Roboter) seltener
+        kollision_takt = 0.1 if waechter.dauer_ms < 8 else 0.2 if waechter.dauer_ms < 20 else 0.3
+        if waechter.an and not vorschau and jetzt - kollision_zeit >= kollision_takt and not erster_schritt:
             kollision_zeit = jetzt
             treffer = waechter.pruefen(teile, aufbauten(robot), tischhoehe())
             if treffer:

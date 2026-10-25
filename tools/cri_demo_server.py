@@ -27,7 +27,8 @@ def ablauf(greifer):
     tool = {"egp40": kin.TCP_EGP40, "egp25": kin.TCP_EGP25, "egp25_robi2": kin.TCP_EGP25_ROBI2}.get(greifer, kin.TCP_VAKUUM)
     # Stift 20 mm hoch: Backen am oberen Ende, lange Backen mit der Spitze knapp ueber
     # dem Tisch, Sauger auf der Oberseite
-    greif_z = {"egp40": 0.012, "egp25": 0.0155, "egp25_robi2": 0.001}.get(greifer, 0.02)
+    # EGP 40: Greiferkoerper 6,65 mm ueber dem TCP, also bei 13 mm knapp 0,4 mm Luft ueber dem 20 mm hohen Stift
+    greif_z = {"egp40": 0.013, "egp25": 0.0155, "egp25_robi2": 0.001}.get(greifer, 0.02)
     r, winkel = 0.35, math.radians(60)
     pick = (r, 0.0)
     place = (r * math.cos(winkel), r * math.sin(winkel))

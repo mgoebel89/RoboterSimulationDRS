@@ -58,6 +58,36 @@ class TestHuellen(unittest.TestCase):
         self.assertAlmostEqual(q.tiefster(), -0.01)
 
 
+def drehmatrix(achse, w):
+    x, y, z = achse
+    n = math.sqrt(x * x + y * y + z * z)
+    x, y, z = x / n, y / n, z / n
+    c, s, t = math.cos(w), math.sin(w), 1 - math.cos(w)
+    return [t * x * x + c, t * x * y - s * z, t * x * z + s * y, t * x * y + s * z, t * y * y + c, t * y * z - s * x,
+            t * x * z - s * y, t * y * z + s * x, t * z * z + c]
+
+
+class TestImSystem(unittest.TestCase):
+    def test_gleich_wie_in_weltkoordinaten(self):
+        import random
+        zufall = random.Random(7)
+        for _ in range(30):
+            teil = ([zufall.uniform(-1, 1) for _ in range(3)], drehmatrix([zufall.uniform(-1, 1) for _ in range(3)], zufall.uniform(0, 6)))
+            koerper = [k.Quader("q", ([zufall.uniform(-1, 1) for _ in range(3)],
+                                      drehmatrix([zufall.uniform(-1, 1) for _ in range(3)], zufall.uniform(0, 6))),
+                                [zufall.uniform(-.05, .05) for _ in range(3)], [zufall.uniform(.01, .2) for _ in range(3)]),
+                       k.Kugel("k", [zufall.uniform(-1, 1) for _ in range(3)], zufall.uniform(.01, .3))]
+            for kk in koerper:
+                lo, hi, enthaelt = kk.im_system(teil[0], teil[1], 0.004)
+                for _ in range(200):
+                    p_welt = [kk.mitte_welt[i] if isinstance(kk, k.Quader) else kk.mitte[i] for i in range(3)]
+                    p_welt = [v + zufall.uniform(-.3, .3) for v in p_welt]
+                    p_lokal = k._mtv(teil[1], k._sub(p_welt, teil[0]))
+                    self.assertEqual(enthaelt(p_lokal), kk.enthaelt(p_welt, 0.004))
+                    if enthaelt(p_lokal):
+                        self.assertTrue(all(lo[i] - 1e-9 <= p_lokal[i] <= hi[i] + 1e-9 for i in range(3)))
+
+
 class TestPruefung(unittest.TestCase):
     def test_tisch_aufbau_und_abstand(self):
         magazin = teil("magazin", 0.1, (0.3, 0.0, 0.05))   # Oberseite bei z = 100 mm

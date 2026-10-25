@@ -260,6 +260,21 @@ Maßpfeile zur hinteren und linken Tischkante, Werkstücke erst beim Zeigen auf 
 Teil den Abstand von hinten und von links (bis zur nächsten Außenkante), Breite × Tiefe und die Nuten, über denen es
 liegt. **Drucken** gibt den Plan auf A4 quer aus.
 
+**Kollisionen** (Werkzeugleiste oder Teilebaum): Die Simulation prüft etwa 10-mal je Sekunde, ob Greifer, Backen, das
+gegriffene Teil oder der Roboterarm Tisch, Aufbauten oder Werkstücke berühren. Der Arm wird dabei mit vereinfachten
+Hüllkörpern gerechnet (bis etwa 2 cm, an der Hand gut 1 cm größer als echt), Greifer und Teile genau. Je
+Roboterumgebung einstellbar:
+- **Kollisionen prüfen** ein/aus (Standard: ein)
+- **Reaktion:** wie ein echter Crash (Programm in iRC stoppen) oder nur melden. Das Stoppen kommt mit der nächsten
+  Ausbaustufe; bis dahin wird in beiden Fällen nur gemeldet.
+- **Sicherheitsabstand** (Standard 2 mm): so nah darf der Roboter an Tisch und Teile kommen. Zwischen dem Greifer und
+  dem Teil, das er gerade greift oder eben losgelassen hat, zählt nur echtes Eindringen (mehr als 0,5 mm).
+- **Ablagetoleranz** (Standard 2 mm): so tief darf ein abgelegtes Teil in die Auflage drücken.
+
+In der Schüleransicht erscheint dann oben eine rote Meldung, z.B. „Kollision: Backe links mit magazin · X 362 Y 14 Z 4 mm“,
+und ein roter Punkt an der Stelle; die Meldung bleibt nach dem Ende der Berührung noch 3 s stehen. Die Lehrkraft
+bekommt davon nichts mit.
+
 **Backensätze** (Lehrerbereich → Backensätze): eigene Greiferbacken aus der Teilebibliothek an den Schunk-Greifer setzen.
 1. **Greifer** wählen: Schunk EGP 40 (Standard) oder EGP 25. Der Greifer steht geschlossen im Werkzeugsystem von iRC.
 2. Backe hinzufügen, Punkt an der Backe und Gegenstück am Backenträger anklicken (EGP 40: zwei M3-Gewinde in

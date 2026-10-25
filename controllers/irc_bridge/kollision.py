@@ -9,7 +9,7 @@ Webots testbar. Alle Laengen in m.
 
 import math
 
-ABTASTUNG = 0.002     # Abstand der Punkte auf den Netzen der Umgebung
+ABTASTUNG = 0.003     # Abstand der Punkte auf den Netzen der Umgebung
 ZELLE = 0.02          # Kantenlaenge der Rasterzellen zum Einsortieren der Punkte
 STANDARD = {"an": True, "reaktion": "stopp", "abstand_mm": 2.0, "ablage_mm": 2.0}
 
@@ -137,7 +137,10 @@ def quader_punkte(halb, abstand=ABTASTUNG * 2):
 class Punktwolke:
     """Punkte eines Teils im eigenen System, in Rasterzellen einsortiert; Abfrage mit einem Quader im selben System."""
 
-    def __init__(self, punkte, zelle=ZELLE):
+    def __init__(self, punkte, zelle=ZELLE, duenn=ABTASTUNG / 2):
+        # fein vernetzte Stellen (Rundungen) liefern sehr viele Punkte: hoechstens einer je Wuerfel `duenn`
+        if duenn:
+            punkte = list({tuple(int(math.floor(p[i] / duenn)) for i in range(3)): p for p in punkte}.values())
         self.zelle = zelle
         self.zellen = {}
         for p in punkte:
@@ -187,6 +190,18 @@ class Kugel:
     def tiefster(self):
         return self.mitte[2] - self.r
 
+    def im_system(self, pos, rot, rand):
+        """(lo, hi, enthaelt) fuer Punkte im System (pos, rot) eines Umgebungsteils: eine Umrechnung je Teil
+        statt einer je Punkt."""
+        c = _mtv(rot, _sub(self.mitte, pos))
+        r = self.r + rand
+        r2 = r * r
+
+        def enthaelt(p):
+            dx, dy, dz = p[0] - c[0], p[1] - c[1], p[2] - c[2]
+            return dx * dx + dy * dy + dz * dz <= r2
+        return [c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r], enthaelt
+
 
 class Quader:
     """Quader mit Mitte und halben Kantenlaengen in einem System (pos, rot) der Welt."""
@@ -214,6 +229,24 @@ class Quader:
     def tiefster(self):
         return min(q[2] for q in self.ecken())
 
+    def im_system(self, pos, rot, rand):
+        # Drehung Quader -> Teil und Quadermitte im Teilsystem
+        rq = [[self.rot[i * 3 + j] for j in range(3)] for i in range(3)] if len(self.rot) == 9 else self.rot
+        rt = [[rot[i * 3 + j] for j in range(3)] for i in range(3)] if len(rot) == 9 else rot
+        rel = [[sum(rt[k][i] * rq[k][j] for k in range(3)) for j in range(3)] for i in range(3)]   # rt^T * rq
+        c = _mtv(rot, _sub(self.mitte_welt, pos))
+        h = [self.halb[i] + rand for i in range(3)]
+        ecken = [[c[i] + sum(rel[i][j] * (sx, sy, sz)[j] * h[j] for j in range(3)) for i in range(3)]
+                 for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+
+        def enthaelt(p):
+            d = (p[0] - c[0], p[1] - c[1], p[2] - c[2])
+            for j in range(3):   # Koordinate j im Quadersystem = Spalte j von rel mal d
+                if abs(rel[0][j] * d[0] + rel[1][j] * d[1] + rel[2][j] * d[2]) > h[j]:
+                    return False
+            return True
+        return [min(q[i] for q in ecken) for i in range(3)], [max(q[i] for q in ecken) for i in range(3)], enthaelt
+
 
 # ---------------------------------------------------------------- Pruefung
 
@@ -224,13 +257,37 @@ class Umgebungsteil:
         self.name, self.art, self.wolke, self.lage, self.kennung = name, art, wolke, lage, kennung
 
 
-def pruefe(koerper, umgebung, tisch_z, rand, ablage, ausnahmen=frozenset(), tisch_frei=frozenset(), hoechstens=3):
+def pruefe(koerper, umgebung, tisch_z, rand, ablage, ausnahmen=frozenset(), tisch_frei=frozenset(), hoechstens=3,
+           rand_paare=None):
     """Kollisionen der Huellkoerper `koerper` (Kugel/Quader, Attribut name; gegriffenes Teil mit name endend auf
     '(gegriffen)') mit dem Tisch (Ebene tisch_z, None = kein Tisch) und den Umgebungsteilen.
     rand: Sicherheitsabstand; fuer das gegriffene Teil gilt stattdessen -ablage (es darf so tief eindruecken).
-    ausnahmen: Paare (koerpername, kennung des Umgebungsteils), die nicht zaehlen; tisch_frei: Koerper ohne Tischpruefung.
+    ausnahmen: Paare (koerpername, kennung des Umgebungsteils), die nicht zaehlen; tisch_frei: Koerper ohne Tischpruefung;
+    rand_paare: {(koerpername, kennung): rand} fuer einzelne Paare (z.B. Greifer und das Teil, das er gerade greift).
     Rueckgabe: Liste {a, b, punkt} (hoechstens `hoechstens`)."""
     treffer = []
+    # Gruppen (alle Kugeln eines Glieds): eine Huellkugel je Gruppe, damit ganze Glieder fern eines Teils mit einer
+    # einzigen Rechnung entfallen
+    gruppen = {}
+    for k in koerper:
+        gruppen.setdefault(k.name, []).append(k)
+    huelle = {}
+    for name, liste in gruppen.items():
+        mitten = [k.mitte if isinstance(k, Kugel) else k.mitte_welt for k in liste]
+        m = [sum(p[i] for p in mitten) / len(mitten) for i in range(3)]
+        huelle[name] = (m, max(math.dist(m, c) + (k.r if isinstance(k, Kugel) else math.sqrt(_dot(k.halb, k.halb)))
+                               for c, k in zip(mitten, liste)))
+    rand_max = max([rand] + list((rand_paare or {}).values()))
+    in_reichweite = {}
+    for name, (m, rg) in huelle.items():
+        liste = []
+        for teil in umgebung:
+            pos, rot = teil.lage
+            c = _mtv(rot, _sub(m, pos))
+            w = teil.wolke
+            if all(w.lo[i] - rg - rand_max <= c[i] <= w.hi[i] + rg + rand_max for i in range(3)):
+                liste.append(teil)
+        in_reichweite[name] = liste
     for k in koerper:
         r = -ablage if k.name.endswith("(gegriffen)") else rand
         if tisch_z is not None and k.name not in tisch_frei and k.tiefster() < tisch_z + r:
@@ -238,24 +295,22 @@ def pruefe(koerper, umgebung, tisch_z, rand, ablage, ausnahmen=frozenset(), tisc
             treffer.append({"a": k.name, "b": "Tisch", "punkt": [p[0], p[1], tisch_z]})
             if len(treffer) >= hoechstens:
                 return treffer
-        lo, hi = k.kasten(r)
-        for teil in umgebung:
+        lo0, hi0 = k.kasten(r)
+        for teil in in_reichweite[k.name]:
             if (k.name, teil.kennung) in ausnahmen:
                 continue
+            rt = (rand_paare or {}).get((k.name, teil.kennung), r)
+            lo, hi = (lo0, hi0) if rt == r else k.kasten(rt)
             pos, rot = teil.lage
             # grob: Abstand der Mitten gegen die Ausdehnungen
             m = [(lo[i] + hi[i]) / 2 for i in range(3)]
             h = max((hi[i] - lo[i]) / 2 for i in range(3)) * math.sqrt(3)
             if math.dist(m, pos) > h + teil.wolke.radius + 0.001:
                 continue
-            # Kasten des Koerpers ins System des Teils (achsparallel umschlossen)
-            ecken = [_mtv(rot, _sub([x, y, z], pos)) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
-            llo = [min(q[i] for q in ecken) for i in range(3)]
-            lhi = [max(q[i] for q in ecken) for i in range(3)]
+            llo, lhi, enthaelt = k.im_system(pos, rot, rt)
             for q in teil.wolke.in_box(llo, lhi):
-                pw = _welt(teil.lage, q)
-                if k.enthaelt(pw, r):
-                    treffer.append({"a": k.name, "b": teil.name, "punkt": pw})
+                if enthaelt(q):
+                    treffer.append({"a": k.name, "b": teil.name, "punkt": _welt(teil.lage, q)})
                     break
             if len(treffer) >= hoechstens:
                 return treffer
