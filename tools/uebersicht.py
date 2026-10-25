@@ -1003,6 +1003,15 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 .ansichten button { color:#fff; background:transparent; border:0; border-radius:5px; padding:5px 9px;
   font:inherit; font-size:.85em; cursor:pointer; }
 .ansichten button.an { background:var(--blau); }
+.ansichten .trenner { width:1px; background:rgba(255,255,255,.3); margin:2px 3px; }
+/* Beschriftungen: Namen der Teile, an 3D-Punkte gehaengt (Projektion im Browser, siehe schilderZeichnen) */
+#schilder { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:4; }
+.schild { position:absolute; left:0; top:0; padding:2px 7px; border-radius:var(--ecke) 0 0 0; font-size:.8em;
+  font-weight:700; white-space:nowrap; color:#fff; background:rgba(0,99,156,.9); box-shadow:0 1px 4px rgba(0,0,0,.35); }
+.schild::after { content:""; position:absolute; left:50%%; bottom:-6px; margin-left:-5px; border:5px solid transparent;
+  border-bottom:0; border-top:6px solid rgba(0,99,156,.9); }
+.schild.aufbau { background:rgba(60,64,72,.85); } .schild.aufbau::after { border-top-color:rgba(60,64,72,.85); }
+.schild.sensor { background:rgba(177,200,0,.92); color:var(--schwarz); } .schild.sensor::after { border-top-color:rgba(177,200,0,.92); }
 .ea { position:absolute; bottom:52px; z-index:5; display:flex; flex-direction:column; gap:5px; max-width:44%%;
   background:rgba(26,26,26,.75); padding:8px; border-radius:var(--ecke) 0 0 0; color:#fff; font-size:.88em; }
 .ea.links { left:10px; bottom:100px; } .ea.rechts { right:10px; bottom:100px; }   /* unten links steht die Einteach-Hilfe */
@@ -1033,7 +1042,9 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 <div class="ansichten" title="Blickrichtung. Mit der Maus: linke Taste drehen, rechte schieben, nach einem Klick Rad zoomen.">
 <button data-ansicht="standard" class="an">Standard</button><button data-ansicht="vorne">Vorne</button>
 <button data-ansicht="seite">Seite</button><button data-ansicht="oben">Oben</button>
-<button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button></div>%(ea)s</div>%(aufgabe)s</div>
+<button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button>
+<span class="trenner"></span><button data-schilder title="Namen der Teile im 3D-Bild ein- oder ausblenden">Namen</button></div>
+<div id="schilder"></div>%(ea)s</div>%(aufgabe)s</div>
 <script type="module">
 import "%(webots_js)s";
 import MeshLoader from "%(wwi)s/MeshLoader.js";
@@ -1116,6 +1127,72 @@ view.addEventListener('mousedown', () => {
   if (folgen) { clearInterval(folgen); folgen = null; }
   document.querySelectorAll('[data-ansicht]').forEach(b => b.classList.remove('an'));
 });
+
+// --- Beschriftungen: Namen der Teile im Bild. Werkstuecke und Sensorflaechen haengen am Solid gleichen Namens
+// im Viewer (laufen beim Tragen mit), Aufbauten an einem festen Punkt ueber ihrer Oberseite. Jedes Bild wird mit
+// dem Viewpoint des Viewers projiziert: Kamera x = Blickrichtung, y = links, z = oben (wie in blick()). ---
+const SCHILDER = %(beschriftungen)s;
+const schilderEbene = document.getElementById('schilder'), schildKnopf = document.querySelector('[data-schilder]');
+const schildDivs = SCHILDER.map(s => {
+  const d = document.createElement('div'); d.className = 'schild ' + s.art; d.textContent = s.text; d.hidden = true;
+  schilderEbene.appendChild(d); return d;
+});
+let schilderAn = true;
+try { schilderAn = localStorage.getItem('rebel-schilder') !== 'aus'; } catch (e) {}
+function schilderSchalten(an) {
+  schilderAn = an; schildKnopf.classList.toggle('an', an); schilderEbene.hidden = !an;
+  try { localStorage.setItem('rebel-schilder', an ? 'an' : 'aus'); } catch (e) {}
+}
+schildKnopf.hidden = !SCHILDER.length;
+schildKnopf.previousElementSibling.hidden = !SCHILDER.length;
+schildKnopf.onclick = () => schilderSchalten(!schilderAn);
+schilderSchalten(schilderAn);
+let solids = new Map(), solidsWelt = null;
+function solidVon(name) {
+  const welt = WbWorld.instance;
+  if (solidsWelt !== welt) { solids = new Map(); solidsWelt = welt; }   // neu verbunden: neue Knoten
+  let n = solids.get(name);
+  if (!n || !welt.nodes.has(n.id)) {
+    n = null;
+    for (const k of welt.nodes.values()) if (k.name === name && k.translation) { n = k; break; }
+    if (n) solids.set(name, n);
+  }
+  return n;
+}
+function drehung(x, y, z, w) {   // Achse-Winkel -> Matrix (Zeilen), wie Webots-Rotation
+  const l = Math.hypot(x, y, z) || 1, c = Math.cos(w), s = Math.sin(w), t = 1 - c;
+  x /= l; y /= l; z /= l;
+  return [[t * x * x + c, t * x * y - s * z, t * x * z + s * y],
+          [t * x * y + s * z, t * y * y + c, t * y * z - s * x],
+          [t * x * z - s * y, t * y * z + s * x, t * z * z + c]];
+}
+function schilderZeichnen() {
+  requestAnimationFrame(schilderZeichnen);
+  const welt = WbWorld.instance, vp = welt && welt.viewpoint, bild = view.querySelector('canvas');
+  if (!schilderAn || !SCHILDER.length) return;
+  if (!vp || !vp.position || !bild) { schildDivs.forEach(d => d.hidden = true); return; }
+  const r = bild.getBoundingClientRect(), e = schilderEbene.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const aspekt = r.width / r.height, halb = Math.tan(vp.fieldOfView / 2);
+  const tanY = aspekt < 1 ? halb : halb / aspekt, tanX = tanY * aspekt;
+  const o = vp.orientation, m = drehung(o.x, o.y, o.z, o.w), k = vp.position;
+  SCHILDER.forEach((s, i) => {
+    const d = schildDivs[i];
+    let p = s.punkt;
+    if (s.folgen) { const n = solidVon(s.name); p = n && [n.translation.x, n.translation.y, n.translation.z + s.hoehe_m]; }
+    if (!p) { d.hidden = true; return; }
+    const v = [p[0] - k.x, p[1] - k.y, p[2] - k.z];
+    const vor = v[0] * m[0][0] + v[1] * m[1][0] + v[2] * m[2][0];
+    const links = v[0] * m[0][1] + v[1] * m[1][1] + v[2] * m[2][1];
+    const oben = v[0] * m[0][2] + v[1] * m[1][2] + v[2] * m[2][2];
+    if (vor < 0.02) { d.hidden = true; return; }   // hinter der Kamera
+    const x = r.left - e.left + r.width / 2 * (1 - links / (vor * tanX));
+    const y = r.top - e.top + r.height / 2 * (1 - oben / (vor * tanY)) - 7;
+    d.hidden = x < 0 || y < 0 || x > e.width || y > e.height;
+    d.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(-50%%,-100%%)';
+  });
+}
+requestAnimationFrame(schilderZeichnen);
 </script>%(schueler_js)s%(ea_js)s</body></html>"""
 
 # Zusatz fuer die Ansicht der Lehrkraft: Knoepfe fuer genau diesen Platz
@@ -1343,6 +1420,60 @@ def kamera_ansichten(welt_datei):
             "oben": [[cx, cy, h + 1.3], [cx, cy, h], [1, 0, 0]]}
 
 
+WBT_TEIL = re.compile(r'(?:DEF \S+ )?(Werkstueck|Aufbau|Sensorfeld) \{(.*?)\n\}', re.S)
+
+
+def _wbt_vektor(inhalt, feld):
+    m = re.search(r'\n\s*%s ([-\d.e]+) ([-\d.e]+) ([-\d.e]+)' % feld, inhalt)
+    return [float(v) for v in m.groups()] if m else None
+
+
+def welt_beschriftungen(welt_datei):
+    """Schilder fuer die 3D-Ansicht: Werkstuecke, Aufbauten und Sensorflaechen der Welt (aus der .wbt).
+    folgen: der Browser haengt das Schild an das Solid dieses Namens, hoehe_m ueber dessen Ursprung (Werkstueck:
+    Mitte des Huellquaders); sonst fester punkt in m, bei Baukasten-Aufbauten mitten ueber der Oberseite."""
+    try:
+        with open(os.path.join(WELTEN_DIR, os.path.basename(welt_datei)), encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return []
+    entwurf = entwuerfe().get(welt_datei[:-4] if welt_datei.endswith(".wbt") else welt_datei) or {}
+    oben, sensor_namen = {}, {}
+    if entwurf.get("teile"):
+        try:
+            lade = baukasten.teile_lader(TEILE_DIR)
+            lagen = baukasten.loese(entwurf, lade)
+            for t in entwurf["teile"]:
+                if t.get("art") == "sensor":
+                    sensor_namen["sensor_" + t["id"]] = (t.get("sensor") or {}).get("name") or t["id"]
+                elif t.get("art") != "werkstueck":
+                    b = lade(t["teil"])["box"]
+                    ecken = [lagen[t["id"]].punkt([x, y, z]) for x in (b[0], b[3]) for y in (b[1], b[4]) for z in (b[2], b[5])]
+                    oben[t["id"]] = [round((min(p[0] for p in ecken) + max(p[0] for p in ecken)) / 2000, 5),
+                                     round((min(p[1] for p in ecken) + max(p[1] for p in ecken)) / 2000, 5),
+                                     round(max(p[2] for p in ecken) / 1000, 5)]
+        except (baukasten.BaukastenFehler, KeyError, TypeError, ValueError):
+            pass   # Entwurf unvollstaendig: Aufbauten dann am Ursprung beschriften
+    schilder = []
+    for art, inhalt in WBT_TEIL.findall(text):
+        m = re.search(r'\n\s*name "([^"]*)"', inhalt)
+        if not m:
+            continue
+        name = m.group(1)
+        if art == "Werkstueck":
+            groesse = _wbt_vektor(inhalt, "size") or [0.04, 0.04, 0.04]
+            schilder.append({"name": name, "text": name, "art": "werkstueck", "folgen": True, "hoehe_m": groesse[2] / 2})
+        elif art == "Sensorfeld":
+            groesse = _wbt_vektor(inhalt, "groesse") or [0.04, 0.04, 0.02]
+            anzeige = sensor_namen.get(name) or (name[7:] if name.startswith("sensor_") else name)
+            schilder.append({"name": name, "text": anzeige, "art": "sensor", "folgen": True, "hoehe_m": groesse[2] / 2})
+        else:
+            punkt = oben.get(name) or _wbt_vektor(inhalt, "translation")
+            if punkt:
+                schilder.append({"name": name, "text": name, "art": "aufbau", "punkt": punkt})
+    return schilder
+
+
 # Taster (links) und Leuchtmelder (rechts): Zustand aus der Statusdatei des Controllers
 EA_JS = """<script>
 const EA_STEUERN = %%STEUERN%%;
@@ -1454,6 +1585,7 @@ def seite_viewer(platz, welt=None):
              .replace("%%PLATZ%%", html.escape(platz["platz"]))) if ea_teil else ""
     return VIEWER % {"stil": STIL, "marke": marke(), "platz": html.escape(platz["platz"]), "titel": titel, "ea": ea_teil, "ea_js": ea_js,
                      "ansichten": json.dumps(kamera_ansichten(platz["welt"])),
+                     "beschriftungen": json.dumps(welt_beschriftungen(platz["welt"]), ensure_ascii=False).replace("</", "<\\/"),
                      "knoepfe": knoepfe, "aufgabe": aufgabe, "schueler_js": schueler_js,
                      "irc_host": html.escape(platz["irc_host"]), "stream_port": platz["stream_port"],
                      "welt": html.escape(platz["welt"]), "broadcast": "true",

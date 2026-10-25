@@ -525,6 +525,38 @@ class TestLehrerSeiten(Grundlage):
         finally:
             uebersicht.subprocess = alt
 
+    def test_beschriftungen(self):
+        from test_baukasten import wuerfel, STIFT
+        for name, m in (("vorrichtung", wuerfel(40, bohrung=8)), ("stift", STIFT)):
+            os.makedirs(os.path.join(uebersicht.TEILE_DIR, name))
+            with open(os.path.join(uebersicht.TEILE_DIR, name, "teil.json"), "w", encoding="utf-8") as f:
+                json.dump(m, f)
+        entwurf = {"titel": "Lager", "teile": [
+            {"id": "halter", "teil": "vorrichtung", "art": "aufbau", "verbindung": {
+                "punkt": {"art": "flaeche", "id": 1}, "an": "tisch", "an_punkt": {"art": "flaeche", "id": "oben"},
+                "versatz_mm": [100, 0, 0]}},
+            {"id": "stift1", "teil": "stift", "art": "werkstueck", "verbindung": {
+                "punkt": {"art": "bohrung", "id": 41, "ende": 0}, "an": "halter", "an_punkt": {"art": "bohrung", "id": 31, "ende": 1}}},
+            {"id": "s1", "art": "sensor", "sensor": {"name": "Ablage", "groesse_mm": [40, 40, 4]}, "verbindung": {
+                "punkt": {"art": "flaeche", "id": "unten"}, "an": "tisch", "an_punkt": {"art": "flaeche", "id": "oben"}}}]}
+        uebersicht.baukasten_speichern("lager", entwurf, "test")
+        schilder = uebersicht.welt_beschriftungen("lager.wbt")
+        self.assertEqual([(s["name"], s["text"], s["art"], s.get("folgen", False)) for s in schilder],
+                         [("halter", "halter", "aufbau", False), ("stift1", "stift1", "werkstueck", True),
+                          ("sensor_s1", "Ablage", "sensor", True)])
+        self.assertEqual(schilder[0]["punkt"], [0.35, 0.0, 0.04])     # mitten ueber der Oberseite des Halters
+        self.assertAlmostEqual(schilder[1]["hoehe_m"], 0.015)          # Stift 30 mm hoch, Ursprung in der Mitte
+        seite = uebersicht.seite_viewer({"platz": "03", "irc_host": "192.168.2.20", "stream_port": 1243, "welt": "lager.wbt"})
+        self.assertIn('const SCHILDER = [{"name": "halter", "text": "halter", "art": "aufbau", "punkt": [0.35, 0.0, 0.04]}', seite)
+        self.assertIn("translate(-50%,-100%)", seite)
+        # von Hand geschriebene Welt (ohne Baukasten): Werkstuecke aus der .wbt
+        with open(os.path.join(self.welten, "hand.wbt"), "w", encoding="utf-8") as f:
+            f.write('#VRML_SIM R2025a utf8\nDEF STIFT Werkstueck {\n  translation 0.35 0 0.01\n  name "stift"\n'
+                    '  size 0.008 0.008 0.02\n}\n')
+        self.assertEqual(uebersicht.welt_beschriftungen("hand.wbt"),
+                         [{"name": "stift", "text": "stift", "art": "werkstueck", "folgen": True, "hoehe_m": 0.01}])
+        self.assertEqual(uebersicht.welt_beschriftungen("gibtsnicht.wbt"), [])
+
     def test_baukasten_seite_nur_fuer_lehrkraefte(self):
         status, _ = self.anfrage("GET", "/lehrer/baukasten")
         self.assertEqual(status, 302)   # ohne Anmeldung zur Anmeldeseite

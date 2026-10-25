@@ -159,7 +159,7 @@ details.feld[open] summary { margin-bottom:6px; }
 
   <div class="feld" id="eigenschaften" hidden>
     <h2 id="e-titel">Teil</h2>
-    <div class="zeile"><label class="hilfe">Name <input id="e-id" size="14"></label>
+    <div class="zeile"><label class="hilfe" title="So heißt das Teil in der Simulation, in der Einteach-Hilfe und in der Beschriftung im 3D-Bild">Name <input id="e-id" size="14"></label>
       <select id="e-art"><option value="aufbau">Aufbau (fest)</option><option value="werkstueck">Werkstück (greifbar)</option></select>
       <input id="e-farbe" type="color" title="Farbe"></div>
     <div class="zeile" id="e-masse-zeile"><label class="hilfe">Masse in g (leer = aus Volumen, PLA)
@@ -786,6 +786,8 @@ const VERSATZ_HILFE = {
   kante: 'X = entlang der Kante, Y = Abstand von der Kante (grüner Pfeil), Z = Höhe.',
   ecke: 'X und Y = Abstand von den beiden Kanten (Pfeile rot/grün), Z = Höhe.',
 };
+// Eingabefeld setzen, ausser man tippt gerade darin (jede Zwischenrechnung baut das Formular neu auf)
+function feld(id, wert) { const e = $(id); if (e !== document.activeElement) e.value = wert; }
 function formularZeigen() {
   const t = auswahl && teil(auswahl);
   $('eigenschaften').hidden = !t;
@@ -794,18 +796,18 @@ function formularZeigen() {
   const v = t.verbindung || {};
   const sensor = t.art === 'sensor';
   $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : t.teil) + ')';
-  $('e-id').value = t.id; $('e-art').value = t.art || 'aufbau';
+  feld('e-id', t.id); $('e-art').value = t.art || 'aufbau';
   $('e-farbe').value = hex(standardFarbe(t));
   $('e-art').hidden = $('e-farbe').hidden = sensor;
   $('e-masse-zeile').hidden = t.art !== 'werkstueck';
   $('e-sensor').hidden = !sensor;
   if (sensor) sensorFormular(t);
-  $('e-masse').value = t.masse_kg ? Math.round(t.masse_kg * 1000) : '';
+  feld('e-masse', t.masse_kg ? Math.round(t.masse_kg * 1000) : '');
   $('p-teil').textContent = 'Punkt am Teil: ' + punktText(t.id, v.punkt);
   $('p-ziel').textContent = 'Gegenstück: ' + punktText(v.an, v.an_punkt);
   const vs = v.versatz_mm || [0, 0, 0];
-  $('v-x').value = vs[0]; $('v-y').value = vs[1]; $('v-z').value = vs[2];
-  $('v-dreh').value = v.drehung_grad || 0; $('v-um').checked = !!v.umdrehen;
+  feld('v-x', vs[0]); feld('v-y', vs[1]); feld('v-z', vs[2]);
+  feld('v-dreh', v.drehung_grad || 0); $('v-um').checked = !!v.umdrehen;
   $('versatz-hilfe').textContent = VERSATZ_HILFE[(v.an_punkt || {}).art] || 'Erst Punkt am Teil und Gegenstück anklicken.';
   const l = lagen[t.id];
   $('e-lage').textContent = l ? 'Lage des CAD-Ursprungs: x ' + l.ursprung_mm.map(v => v.toFixed(1)).join(', ') + ' mm (iRC)'
