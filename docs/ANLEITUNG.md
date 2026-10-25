@@ -153,6 +153,9 @@ der Spalt bei geschlossenem Greifer ist und auf Backenhöhe liegt; das Teil ruts
 - Unten links zeigt die **Einteach-Hilfe**, wie weit der TCP noch von der Greifstellung des nächsten Werkstücks
   entfernt ist, in iRC-Koordinaten (z.B. `target1: noch X +2 Y -1 Z -12 mm`). Grün, sobald der Griff klappen würde.
 - Unten rechts: **Ansichten** Standard, Vorne, Seite, Oben und **Greifer** (Kamera folgt dem TCP).
+- **Namen** blendet Schilder mit den Namen der Werkstücke, Aufbauten und Sensorflächen ins 3D-Bild ein oder aus
+  (die Wahl merkt sich der Browser). Werkstücke behalten ihr Schild auch, während der Greifer sie trägt; liegen
+  Schilder übereinander, weicht eines nach oben aus. Die Namen vergibt der Baukasten (Feld „Name“).
 - Maus: linke Taste dreht, rechte verschiebt, nach einem Klick ins Bild zoomt das Rad.
 
 Die Simulation endet automatisch nach 15 Minuten ohne iRC und zu den eingestellten Stundenenden.
@@ -230,7 +233,8 @@ Im Lehrerbereich auf **Baukasten**: Welten aus Teilen der Teilebibliothek zusamm
 2. **Punkt am Teil** anklicken (Fläche, Bohrung, Kante oder Ecke), dann das **Gegenstück** (Tisch, Nut,
    Roboterfuß oder ein anderes Teil). Die beiden Punkte werden aufeinandergelegt.
 3. Mit **X/Y/Z** verschieben (Pfeile rot/grün am Gegenstück), drehen, ggf. umdrehen.
-4. **Aufbau** (fest) oder **Werkstück** (greifbar, Farbe, Masse).
+4. **Name** (so heißt das Teil in der Simulation, in der Einteach-Hilfe und auf dem Schild im 3D-Bild; Enter oder
+   Klick daneben übernimmt ihn), **Aufbau** (fest) oder **Werkstück** (greifbar, Farbe, Masse).
 5. **Speichern**: Die Welt wird erzeugt, Webots rendert ein Vorschaubild. Danach unter „Welten“ freigeben.
 
 ![Verbindung eines Teils](bilder/baukasten_verbindung.jpg)
