@@ -495,7 +495,7 @@ class TestLehrerSeiten(Grundlage):
             # neues Modell, nur andere Nummern: Punkte umgestellt, Welt neu gerechnet, altes Teil im Papierkorb
             status, d = hochladen("&ersetzen=1")
             self.assertEqual(status, 200, d)
-            self.assertEqual((d["neu_gerechnet"], d["neu_verbinden"], d["verschoben"], d["fehler"]), (["Welt lager"], [], [], []))
+            self.assertEqual((d["neu_gerechnet"], d["neu_verbinden"], d["verschoben"], d["fehler"]), (["Roboterumgebung lager"], [], [], []))
             self.assertTrue(d["papierkorb"].startswith("papierkorb/vorrichtung-"))
             self.assertTrue(os.path.isfile(os.path.join(teile_dir, d["papierkorb"], "teil.json")))
             self.assertEqual((gespeichert()["v"]["punkt"]["id"], gespeichert()["s"]["an_punkt"]["id"]), (101, 131))
@@ -505,12 +505,12 @@ class TestLehrerSeiten(Grundlage):
             # groesser und Bohrung woanders: ohne erzwingen bleibt alles, wie es war
             naechstes["teil"] = umnummeriert(wuerfel(60, bohrung=8), plus=200)
             status, d = hochladen("&ersetzen=1")
-            self.assertEqual((status, d["offen"]), (409, [{"wo": "Welt lager", "punkte": ["s an v Bohrung 131"]}]))
+            self.assertEqual((status, d["offen"]), (409, [{"wo": "Roboterumgebung lager", "punkte": ["s an v Bohrung 131"]}]))
             self.assertEqual(gespeichert()["s"]["an_punkt"]["id"], 131)
             status, d = hochladen("&ersetzen=1&erzwingen=1")
             self.assertEqual(status, 200, d)
-            self.assertEqual(d["neu_verbinden"], [{"wo": "Welt lager", "punkte": ["s an v Bohrung 131"]}])
-            self.assertEqual(d["verschoben"], [{"wo": "Welt lager", "punkt": "v Fläche 101", "mm": 14.14}])
+            self.assertEqual(d["neu_verbinden"], [{"wo": "Roboterumgebung lager", "punkte": ["s an v Bohrung 131"]}])
+            self.assertEqual(d["verschoben"], [{"wo": "Roboterumgebung lager", "punkt": "v Fläche 101", "mm": 14.14}])
             self.assertEqual(d["neu_gerechnet"], [])   # erst nach dem Verbinden im Baukasten
             self.assertIsNone(gespeichert()["s"]["an_punkt"])
             self.assertEqual(gespeichert()["v"]["punkt"], {"art": "flaeche", "id": 201})
@@ -521,7 +521,7 @@ class TestLehrerSeiten(Grundlage):
             self.assertTrue(os.path.isfile(os.path.join(teile_dir, d["papierkorb"], "teil.json")))
             self.assertFalse(os.path.exists(os.path.join(teile_dir, "klotz")))
             was = [e["was"] for e in self.anfrage("GET", "/api/lehrer/protokoll")[1]]
-            self.assertTrue(any(w.startswith("Teil vorrichtung ersetzt") and "neu verbinden: Welt lager" in w for w in was))
+            self.assertTrue(any(w.startswith("Teil vorrichtung ersetzt") and "neu verbinden: Roboterumgebung lager" in w for w in was))
         finally:
             uebersicht.subprocess = alt
 

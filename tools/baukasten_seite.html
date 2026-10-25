@@ -2,80 +2,130 @@
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ReBeL - Baukasten</title>
 <style>%%STIL%%
+/* Baukasten im Stil gaengiger CAD-Oberflaechen (Onshape): Werkzeugleiste oben, Teilebaum links, 3D-Bild in der Mitte,
+   Eigenschaften als schwebendes Feld rechts. Einfuegen und Einstellen immer in Dialogen. */
 html, body { height:100%; }
-body { display:flex; flex-direction:column; }
-header { flex-wrap:wrap; gap:10px; padding:8px 16px; }
-header label { display:flex; gap:6px; align-items:center; font-size:.9em; color:var(--leise); }
-header input, header select { font:inherit; font-size:.9em; padding:5px 7px; border-radius:3px; border:1px solid var(--grau-hell);
-  color:var(--text); background:#fff; }
-header button, header a.knopf { font:inherit; font-size:.9em; border:0; border-radius:3px; padding:7px 11px; cursor:pointer;
-  background:var(--knopf); color:var(--text); text-decoration:none; margin:0; font-weight:400; }
-header button:hover, header a.knopf:hover { background:var(--blau-hell); color:var(--blau); }
-header button.haupt { background:var(--blau); color:#fff; font-weight:700; }
-header button.haupt:hover { background:var(--blau-dunkel); color:#fff; }
-header .rechts { margin-left:auto; display:flex; gap:8px; }
-.flaeche { flex:1; min-height:0; display:grid; grid-template-columns:340px 1fr; }
-aside { overflow:auto; background:var(--bg); border-right:1px solid var(--linie); padding:12px; display:flex;
-  flex-direction:column; gap:12px; }
-#ansicht { position:relative; min-width:0; }
+body { display:flex; flex-direction:column; overflow:hidden; }
+header { padding:8px 16px; min-height:56px; }
+header .dokument { display:flex; gap:8px; align-items:center; margin-left:6px; }
+header { flex-wrap:nowrap; }
+header .dokument { min-width:0; flex:1; }
+header .dokument select { max-width:220px; font-weight:600; }
+header .dokument input { width:min(260px, 22vw); min-width:120px; }
+@media (max-width: 1150px) { header .unter, header .rechts .btn span.lang { display:none; } }
+#datei-feld { font-size:.8em; font-weight:700; color:#8a5a00; background:#fdf0d9; border-radius:999px; padding:4px 10px; cursor:pointer;
+  border:0; }
+header .rechts { margin-left:auto; display:flex; gap:8px; align-items:center; }
+header label.kompakt { display:flex; gap:6px; align-items:center; }
+header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; height:18px; flex:none; }
+.werkzeuge { display:flex; align-items:center; gap:4px; padding:6px 12px; background:var(--karte); border-bottom:1px solid var(--linie);
+  flex-wrap:wrap; position:relative; z-index:5; }
+.werkzeuge button { border-color:transparent; background:transparent; padding:7px 10px; font-weight:600; color:var(--text); }
+.werkzeuge button:hover { background:var(--bg); border-color:transparent; }
+.werkzeuge button.haupt { background:var(--blau); color:#fff; } .werkzeuge button.haupt:hover { background:var(--blau-dunkel); color:#fff; }
+.werkzeuge .trenner { width:1px; align-self:stretch; background:var(--linie); margin:4px 6px; }
+#status { margin-left:auto; font-size:.86em; color:var(--leise); max-width:52%; text-align:right; }
+#status.fehler { color:var(--rot); font-weight:600; }
+.flaeche { flex:1; min-height:0; display:grid; grid-template-columns:260px 1fr; }
+.baum { overflow:auto; background:var(--karte); border-right:1px solid var(--linie); padding:10px 8px 16px; display:flex;
+  flex-direction:column; gap:2px; }
+.baum-kopf { font-size:.72em; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--grau);
+  padding:12px 10px 4px; display:flex; justify-content:space-between; }
+.baum-eintrag, .liste > div { display:flex !important; align-items:center; gap:9px; width:100%; justify-content:flex-start !important;
+  padding:7px 10px !important; border-radius:var(--r); border:1px solid transparent !important; background:transparent !important;
+  color:var(--text) !important; font-weight:500 !important; font-size:.92em !important; cursor:pointer; text-align:left; }
+.baum-eintrag:hover, .liste > div:hover { background:var(--bg) !important; }
+.baum-eintrag .kurz { color:var(--leise); font-size:.86em; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.liste { display:flex; flex-direction:column; gap:1px; }
+.liste > div.an { background:var(--blau-hell) !important; color:var(--blau) !important; }
+.liste .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.liste .art { color:var(--leise); font-size:.8em; white-space:nowrap; }
+.symbol { width:22px; height:22px; border-radius:6px; flex:none; display:flex; align-items:center; justify-content:center;
+  font-size:.7em; font-weight:800; color:#fff; }
+.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; }
+.liste .offen { color:var(--pink); background:var(--pink-hell); font-size:.72em; font-weight:700; border-radius:999px; padding:2px 7px; }
+.baum .hilfe { padding:8px 10px 0; }
+#ansicht { position:relative; min-width:0; background:#eef1f4; }
 #ansicht canvas { display:block; }
-.feld { background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:12px; border:1px solid var(--linie);
-  display:flex; flex-direction:column; gap:8px; }
-.feld h2 { margin:0; font-size:1em; color:var(--blau); }
-.feld input, .feld select { font:inherit; padding:5px 7px; border:1px solid var(--grau-hell); border-radius:3px; }
-.feld button { font:inherit; font-size:.88em; border:0; border-radius:3px; padding:6px 9px; cursor:pointer;
-  background:var(--knopf); color:var(--text); }
-.feld button:hover { background:var(--blau-hell); color:var(--blau); }
-.feld button.haupt { background:var(--blau); color:#fff; font-weight:700; }
-.feld button.warnen { background:var(--pink); color:#fff; }
-.feld button.an { background:var(--blau); color:#fff; }
-.feld a.knopf { font-size:.88em; border-radius:3px; padding:6px 9px; background:var(--blau); color:#fff;
-  text-decoration:none; font-weight:700; margin:0; }
-.zeile { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-.zahlen { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
-.zahlen label { display:flex; flex-direction:column; font-size:.8em; color:var(--leise); }
-.zahlen input { width:100%; }
-.liste { display:flex; flex-direction:column; gap:4px; }
-.liste div { padding:6px 8px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; gap:6px;
-  background:var(--bg); font-size:.9em; }
-.liste div.an { background:var(--blau); color:#fff; } .liste div.an .hilfe { color:#dfeaf3; }
-.liste .offen { color:var(--rot); font-size:.85em; }
-.wahlpunkt { display:block; font-size:.88em; line-height:1.35; padding:5px 8px; border-radius:3px; background:var(--bg); flex:1; min-width:0; }
-.hilfe { font-size:.82em; color:var(--leise); }
-#status { font-size:.88em; min-height:1.2em; }
-#status.fehler { color:var(--rot); }
-#hinweis3d { position:absolute; left:12px; top:10px; background:rgba(26,26,26,.8); color:#fff; padding:7px 11px;
-  border-radius:var(--ecke) 0 0 0; font-size:.9em; pointer-events:none; max-width:calc(100% - 200px); }
-#kamera-knoepfe { position:absolute; right:12px; top:10px; display:flex; gap:6px; }
-#kamera-knoepfe button { font:inherit; font-size:.85em; border:0; border-radius:3px; padding:6px 10px; cursor:pointer;
-  background:rgba(26,26,26,.8); color:#fff; }
-#achsen { position:absolute; right:12px; bottom:10px; background:rgba(255,255,255,.88); padding:6px 9px;
-  border-radius:var(--ecke) 0 0 0; font-size:.8em; pointer-events:none; }
-[hidden] { display:none !important; }
-.ea-liste { display:flex; flex-direction:column; gap:6px; }
-.ea-zeile { display:grid; grid-template-columns:1fr 62px auto; gap:4px; background:var(--bg); padding:6px; border-radius:3px; }
-.ea-zeile input, .ea-zeile select { font-size:.85em; padding:3px 5px; min-width:0; }
-.ea-zeile .zweite { grid-column:1 / 3; display:flex; gap:4px; align-items:center; font-size:.85em; }
-.ea-zeile button { padding:2px 8px; }
-summary { cursor:pointer; }
-/* Dialog "Teil hinzufuegen": Kacheln mit Vorschaubild */
-.dialog { position:fixed; inset:0; background:rgba(26,26,26,.55); z-index:30; display:flex; align-items:center;
-  justify-content:center; padding:16px; }
-.dialog-feld { background:var(--karte); border-radius:var(--ecke) 0 0 0; width:min(920px, 100%); max-height:calc(100vh - 32px);
-  display:flex; flex-direction:column; gap:10px; padding:16px 18px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
-.dialog-kopf { display:flex; gap:10px; align-items:center; }
-.dialog-kopf h2 { margin:0; color:var(--blau); font-size:1.15em; flex:1; }
-.dialog-kopf input { font:inherit; padding:7px 10px; border:1px solid var(--grau-hell); border-radius:3px; width:min(280px, 45vw); }
-.dialog-kopf .zu { font:inherit; font-size:1.2em; line-height:1; border:0; background:var(--knopf); border-radius:3px; padding:5px 10px; cursor:pointer; }
-.kacheln { overflow:auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px; padding:2px; }
-.kachel { border:1px solid var(--linie); border-radius:var(--ecke) 0 0 0; background:#fff; cursor:pointer; padding:0;
-  display:flex; flex-direction:column; text-align:left; font:inherit; color:var(--text); overflow:hidden; }
-.kachel:hover, .kachel:focus-visible { border-color:var(--blau); box-shadow:0 0 0 3px var(--blau-hell); outline:none; }
-.kachel .bild { aspect-ratio:4/3; background:var(--bg) center/contain no-repeat; display:flex; align-items:center;
+#hinweis3d { position:absolute; left:50%; transform:translateX(-50%); top:12px; background:rgba(29,36,51,.88); color:#fff;
+  padding:8px 14px; border-radius:999px; font-size:.88em; pointer-events:none; max-width:calc(100% - 420px); font-weight:600;
+  box-shadow:var(--schatten-2); }
+#achsen { position:absolute; left:12px; bottom:10px; background:rgba(255,255,255,.9); padding:6px 10px; border-radius:8px;
+  font-size:.78em; pointer-events:none; color:var(--leise); box-shadow:var(--schatten-1); }
+/* Eigenschaften: schwebendes Feld rechts im 3D-Bild */
+.panel { position:absolute; top:12px; right:12px; width:340px; max-height:calc(100% - 24px); overflow:auto; background:var(--karte);
+  border:1px solid var(--linie); border-radius:var(--ecke) 8px 8px 8px; box-shadow:var(--schatten-3); display:flex;
+  flex-direction:column; z-index:6; }
+.panel-kopf { display:flex; align-items:center; gap:8px; padding:12px 12px 10px 16px; border-bottom:1px solid var(--linie);
+  position:sticky; top:0; background:var(--karte); z-index:1; }
+.panel-kopf h2 { margin:0; font-size:1em; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.panel-kopf .zu, .dialog-kopf .zu { padding:4px 9px; font-size:1.1em; line-height:1; border-color:transparent; background:transparent; }
+.abschnitt { padding:12px 16px; border-bottom:1px solid var(--linie); display:flex; flex-direction:column; gap:9px; }
+.abschnitt:last-child { border-bottom:0; }
+.abschnitt h3 { margin:0; font-size:.74em; letter-spacing:.08em; text-transform:uppercase; color:var(--grau); }
+.zeile { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.zeile label { display:flex; gap:6px; align-items:center; }
+.feldspalte { display:flex; flex-direction:column; gap:4px; }
+.zahlen { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+.zahlen label { display:flex; flex-direction:column; gap:4px; font-size:.8em; }
+.zahlen input, .zahlen select { width:100%; }
+.wahlpunkt { display:block; font-size:.86em; line-height:1.35; padding:7px 10px; border-radius:var(--r); background:var(--bg); flex:1; min-width:0; }
+.hilfe { font-size:.82em; color:var(--leise); font-weight:400; }
+.ea-liste { display:flex; flex-direction:column; gap:8px; }
+.ea-zeile { display:grid; grid-template-columns:1fr 72px auto; gap:6px; background:var(--bg); padding:8px; border-radius:var(--r); }
+.ea-zeile .zweite { grid-column:1 / 3; display:flex; gap:6px; align-items:center; font-size:.85em; color:var(--leise); }
+.ea-zeile button { padding:4px 10px; }
+/* Dialoge */
+.dialog-feld { background:var(--karte); border-radius:var(--ecke) 8px 8px 8px; width:min(560px, 100%); max-height:calc(100vh - 32px);
+  display:flex; flex-direction:column; box-shadow:var(--schatten-3); overflow:hidden; }
+.dialog-feld.breit { width:min(940px, 100%); } .dialog-feld.ganz { width:min(1240px, 100%); height:calc(100vh - 32px); }
+.dialog-kopf { display:flex; gap:10px; align-items:center; padding:16px 18px 12px 22px; border-bottom:1px solid var(--linie); }
+.dialog-kopf h2 { margin:0; font-size:1.15em; flex:1; }
+.dialog-kopf input[type=search] { width:min(280px, 40vw); }
+.dialog-inhalt { padding:16px 22px; overflow:auto; display:flex; flex-direction:column; gap:12px; flex:1; min-height:0; }
+.dialog-fuss { display:flex; gap:8px; justify-content:flex-end; padding:12px 18px; border-top:1px solid var(--linie); background:#fafbfc; }
+.dialog-fuss .links { margin-right:auto; }
+.kacheln { overflow:auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px; padding:2px; }
+.kachel { border:1px solid var(--linie) !important; border-radius:var(--ecke) 6px 6px 6px !important; background:#fff !important; padding:0 !important;
+  display:flex !important; flex-direction:column; align-items:stretch !important; text-align:left; color:var(--text) !important;
+  overflow:hidden; white-space:normal !important; }
+.kachel:hover, .kachel:focus-visible { border-color:var(--blau) !important; box-shadow:0 0 0 3px var(--blau-hell); outline:none; }
+.kachel .bild { aspect-ratio:4/3; background:#fff center/contain no-repeat; display:flex; align-items:center;
   justify-content:center; color:var(--grau); font-size:.8em; border-bottom:1px solid var(--linie); }
-.kachel .name { font-weight:700; padding:7px 9px 0; word-break:break-word; }
-.kachel .mass { font-size:.8em; color:var(--leise); padding:2px 9px 8px; }
-details.feld[open] summary { margin-bottom:6px; }
+.kachel .name { font-weight:700; padding:8px 10px 0; word-break:break-word; }
+.kachel .mass { font-size:.8em; color:var(--leise); padding:2px 10px 9px; font-weight:400; }
+.wahl-kacheln { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+.wahl-kacheln button { flex-direction:column; align-items:flex-start; text-align:left; white-space:normal; padding:12px; gap:4px; height:100%; }
+.wahl-kacheln button small { font-weight:400; color:var(--leise); }
+.wahl-kacheln button.an small { color:var(--blau); }
+/* Kontextmenue (Rechtsklick im Baum oder im 3D-Bild) */
+.kontext { position:fixed; z-index:50; background:var(--karte); border:1px solid var(--linie); border-radius:10px;
+  box-shadow:var(--schatten-3); padding:5px; min-width:200px; display:flex; flex-direction:column; }
+.kontext button { justify-content:flex-start; border-color:transparent; background:transparent; font-weight:500; padding:8px 10px; }
+.kontext button:hover { background:var(--bg); border-color:transparent; color:var(--text); }
+.kontext button.warnen:hover { background:var(--pink-hell); color:var(--pink); }
+.kontext .trenner { height:1px; background:var(--linie); margin:4px 2px; }
+/* Aufbauplan */
+#plan-bild { background:#fff; border:1px solid var(--linie); border-radius:var(--ecke) 6px 6px 6px; min-height:0; flex:1; display:flex; }
+#plan-bild svg { width:100%; height:100%; }
+.plan-inhalt { display:grid; grid-template-columns:minmax(0, 1fr) minmax(420px, 1.1fr); gap:16px; min-height:0; flex:1; }
+.plan-tabelle { overflow:auto; }
+.plan-tabelle table { border-collapse:collapse; width:100%; font-size:.88em; }
+.plan-tabelle th { font-size:.74em; text-transform:uppercase; letter-spacing:.05em; color:var(--leise); background:var(--bg); text-align:left; }
+.plan-tabelle th, .plan-tabelle td { padding:7px 9px; border-bottom:1px solid var(--linie); }
+.plan-tabelle td.zahl { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.plan-tabelle tr:hover td { background:#f7fafc; }
+@media print {
+  @page { size:A4 landscape; margin:10mm; }
+  body { overflow:visible; display:block; background:#fff; }
+  body > *:not(#plan-dialog) { display:none !important; }
+  #plan-dialog { position:static; background:none; padding:0; display:block !important; }
+  #plan-dialog .dialog-feld { box-shadow:none; width:100%; height:auto; max-height:none; border:0; }
+  #plan-dialog .dialog-fuss, #plan-dialog .zu { display:none !important; }
+  .plan-inhalt { display:block; } #plan-bild { height:120mm; border:0; } .plan-tabelle { margin-top:6mm; }
+}
+@media (max-width: 900px) { .flaeche { grid-template-columns:1fr; grid-template-rows:auto 1fr; } .baum { max-height:180px; }
+  .panel { width:calc(100% - 24px); max-height:55%; top:auto; bottom:12px; } .plan-inhalt { grid-template-columns:1fr; } }
 </style>
 <script type="importmap">
 {"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -84,44 +134,154 @@ details.feld[open] summary { margin-bottom:6px; }
 </head>
 <body>
 <header>%%MARKE%% <span id="modus-titel" class="unter">Baukasten</span>
-  <label><span id="welt-text">Welt</span> <select id="welt"></select></label>
-  <button id="neu">Neue Welt</button>
-  <label id="datei-feld">Dateiname <input id="weltdatei" size="16" placeholder="z.B. lf7_magazin" autocapitalize="none"></label>
-  <label>Titel <input id="titel" size="28"></label>
-  <label id="greifer-feld">Greifer <select id="greifer">
-    <option value="egp40">EGP 40</option><option value="egp40_finger">EGP 40 mit Fingern</option>
-    <option value="egp25">EGP 25</option><option value="egp25_finger">EGP 25 mit Fingern</option>
-    <option value="vakuum">Sauger</option><option value="kein">kein Greifer</option></select></label>
-  <span class="rechts"><button id="speichern" class="haupt">Speichern</button>
-    <a class="knopf" id="modus-wechsel" href="/lehrer/baukasten?modus=backen">Backensätze</a>
-    <a class="knopf" href="/lehrer">Lehrerbereich</a></span>
+  <div class="dokument"><span id="welt-text" hidden>Roboterumgebung</span>
+    <select id="welt" title="Roboterumgebung öffnen"></select>
+    <button id="datei-feld" title="Noch nicht gespeichert: Namen ändern">neu, nicht gespeichert</button>
+    <input id="titel" placeholder="Titel" title="Titel, wie ihn die Schüler sehen"></div>
+  <span class="rechts">
+    <label id="greifer-feld" class="kompakt" title="Greifer am Roboter"><select id="greifer">
+      <option value="egp40">EGP 40</option><option value="egp40_finger">EGP 40 mit Fingern</option>
+      <option value="egp25">EGP 25</option><option value="egp25_finger">EGP 25 mit Fingern</option>
+      <option value="vakuum">Sauger</option><option value="kein">kein Greifer</option></select></label>
+    <button id="speichern" class="haupt">%%ICON_SPEICHERN%%Speichern</button>
+    <a class="btn" id="modus-wechsel" href="/lehrer/baukasten?modus=backen">%%ICON_BACKEN%%Backensätze</a>
+    <a class="btn" id="zurueck" href="/lehrer#welten">%%ICON_ZURUECK%%Roboterumgebungen</a></span>
 </header>
+<div class="werkzeuge" role="toolbar" aria-label="Werkzeuge">
+  <button id="neu" title="Neue Roboterumgebung anlegen">%%ICON_NEU%%<span id="neu-text">Neu</span></button>
+  <span class="trenner"></span>
+  <button id="hinzufuegen" class="haupt" title="Teil aus der Teilebibliothek einfügen">%%ICON_PLUS%%Teil</button>
+  <button id="plus-sensor" title="Fläche, die meldet, ob ein Werkstück darauf liegt (oder welche Farbe es hat)">%%ICON_SENSOR%%Sensorfläche</button>
+  <button id="w-tisch" title="Tisch und Lage des Roboters">%%ICON_TISCH%%Tisch</button>
+  <button id="w-ea" title="Taster und Leuchtmelder für die Schüleransicht">%%ICON_TASTER%%Taster &amp; Leuchten</button>
+  <span class="trenner"></span>
+  <button id="k-gesamt" title="Ganzen Tisch zeigen">%%ICON_GESAMT%%Übersicht</button>
+  <button id="k-teil" title="Kamera auf das gewählte Teil">%%ICON_FOKUS%%Teil zeigen</button>
+  <span class="trenner"></span>
+  <button id="w-plan" title="Abstände der Teile zu den Tischkanten, zum Aufbauen am echten Tisch (druckbar)">%%ICON_PLAN%%Aufbauplan</button>
+  <div id="status"></div>
+</div>
 <div class="flaeche">
-<aside>
-  <div class="feld" id="backen-feld" hidden><h2>Backensatz</h2>
-    <div class="zeile"><label class="hilfe">Greifer <select id="b-basis"><option value="egp40">Schunk EGP 40</option>
-      <option value="egp25">Schunk EGP 25</option></select></label></div>
+<aside class="baum" aria-label="Aufbau">
+  <div class="feld" id="backen-feld" hidden style="display:flex;flex-direction:column;gap:9px;padding:6px 8px 12px">
+    <div class="baum-kopf" style="padding-left:2px">Backensatz</div>
+    <label class="feldspalte">Greifer <select id="b-basis"><option value="egp40">Schunk EGP 40</option>
+      <option value="egp25">Schunk EGP 25</option></select></label>
     <div class="hilfe">Eigene Backe aus der Teilebibliothek an den Backenträger setzen, z.B. eine Bohrung der Backe auf
       ein Gewinde des Trägers (EGP 40: zwei M3 in Greifrichtung, EGP 25: ein M4). Der Greifer steht geschlossen im
       Werkzeugsystem von iRC (Ursprung Flansch, Pfeil blau = z vom Flansch weg, Backen bewegen sich entlang x).
-      Eine Backe genügt: die zweite ist dieselbe, um die Werkzeugachse gedreht. Speichern erzeugt die
-      Greifer-Variante „egp40_&lt;name&gt;“ für die Welten und ein Werkzeugpaket für iRC.</div>
-    <h2>TCP</h2>
-    <div class="zeile"><select id="b-tcp-bezug"><option value="spitze">Backenspitze</option>
+      Eine Backe genügt: die zweite ist dieselbe, um die Werkzeugachse gedreht.</div>
+    <div class="baum-kopf" style="padding-left:2px">TCP</div>
+    <select id="b-tcp-bezug"><option value="spitze">Backenspitze</option>
       <option value="mitte">Mitte der Backe</option><option value="flansch">fester Abstand ab Flansch</option></select>
-      <label class="hilfe"><span id="b-tcp-text">Versatz (mm)</span> <input id="b-tcp-mm" type="number" step="0.5" value="0" style="width:80px"></label></div>
+    <label class="feldspalte"><span id="b-tcp-text">Versatz (mm)</span> <input id="b-tcp-mm" type="number" step="0.5" value="0"></label>
     <div class="hilfe">Der TCP liegt immer mittig zwischen den Backen; verschoben wird er entlang der Werkzeugachse
       (+ = vom Flansch weg). Im Bild: gelbes Kreuz. iRC bekommt denselben Wert im Werkzeugpaket.</div>
-    <div class="zeile"><label class="hilfe">Hub je Backe (mm) <input id="b-hub" type="number" min="0.5" max="30" step="0.5"
-      style="width:80px" placeholder="Datenblatt"></label><span class="hilfe" id="b-hub-text"></span></div>
+    <label class="feldspalte">Hub je Backe (mm) <input id="b-hub" type="number" min="0.5" max="30" step="0.5" placeholder="Datenblatt"></label>
+    <span class="hilfe" id="b-hub-text"></span>
     <div id="b-tcp-wert" class="hilfe"></div>
     <div id="backen-daten" class="hilfe"></div>
-    <div class="zeile"><a id="backen-paket" class="knopf" hidden>Werkzeugpaket für iRC (ZIP)</a>
+    <div class="zeile"><a id="backen-paket" class="btn" hidden>Werkzeugpaket für iRC (ZIP)</a>
       <button id="backen-loeschen" class="warnen" hidden>Backensatz löschen</button></div>
   </div>
-  <details class="feld" id="tisch-feld"><summary><b>Tisch und Roboter</b> <span class="hilfe" id="tisch-kurz"></span></summary>
-    <div class="zeile"><label class="hilfe">Tisch <select id="t-art"><option value="eben">eben, Maße frei</option>
-      <option value="profil">Profiltisch 800 × 800 (Nut 10, Basisplatte)</option></select></label></div>
+  <div class="baum-kopf" id="baum-kopf-umgebung">Roboterumgebung</div>
+  <button class="baum-eintrag" id="baum-tisch" title="Tisch einstellen">%%ICON_TISCH%%Tisch<span class="kurz" id="tisch-kurz"></span></button>
+  <button class="baum-eintrag" id="baum-ea" title="Taster und Leuchtmelder">%%ICON_TASTER%%Taster &amp; Leuchten<span class="kurz" id="ea-kurz"></span></button>
+  <div class="baum-kopf">Teile <span id="teile-anzahl"></span></div>
+  <div class="liste" id="teileliste"></div>
+  <div class="hilfe">Neue Teile stehen erst neben dem Tisch; mit einer Verbindung kommen sie an ihren Platz.
+    Rechtsklick öffnet das Menü eines Teils.</div>
+</aside>
+<div id="ansicht"><div id="hinweis3d" hidden></div>
+  <div id="achsen">iRC-Koordinaten: <b style="color:#d22">x</b> <b style="color:#1a1">y</b> <b style="color:#22d">z</b> ·
+    Kreis = Reichweite ReBeL (664 mm) · Pfeile am Gegenstück: <b style="color:#d22">X</b> / <b style="color:#1a1">Y</b> des Versatzes</div>
+
+  <div class="panel" id="eigenschaften" hidden>
+    <div class="panel-kopf"><span class="symbol" id="e-symbol"></span><h2 id="e-titel">Teil</h2>
+      <button class="zu" id="e-zu" title="Auswahl aufheben (Esc)">&times;</button></div>
+    <div class="abschnitt"><h3>Allgemein</h3>
+      <label class="feldspalte" title="So heißt das Teil in der Simulation, in der Einteach-Hilfe und in der Beschriftung im 3D-Bild">Name <input id="e-id"></label>
+      <div class="zeile"><select id="e-art" style="flex:1"><option value="aufbau">Aufbau (fest)</option><option value="werkstueck">Werkstück (greifbar)</option></select>
+        <input id="e-farbe" type="color" title="Farbe"></div>
+      <div id="e-masse-zeile"><label class="feldspalte">Masse in g (leer = aus Volumen, PLA)
+        <input id="e-masse" type="number" min="1" step="1"></label></div>
+    </div>
+    <div class="abschnitt" id="e-sensor" hidden><h3>Sensor</h3>
+      <div class="zeile"><label class="feldspalte" style="flex:1">Beschriftung <input id="s-name" maxlength="24"></label>
+        <label class="feldspalte">Art <select id="s-typ"><option value="belegt">Belegt-Sensor</option><option value="farbe">Farbsensor</option></select></label></div>
+      <div class="zeile" id="s-belegt"><label>DIn <input id="s-din" type="number" min="1" max="64" style="width:72px"></label>
+        <select id="s-art"><option value="schliesser">Schließer</option><option value="oeffner">Öffner</option></select></div>
+      <div id="s-farbe" hidden style="display:flex;flex-direction:column;gap:8px">
+        <div class="zeile"><select id="s-ausgabe"><option value="je_farbe">ein Eingang je Farbe</option>
+          <option value="bits">Farbcode über Bits</option></select>
+          <span id="s-bits-felder" class="zeile"><label>ab DIn <input id="s-bitdin" type="number" min="1" max="64" style="width:64px"></label>
+          <label>Bits <select id="s-bits"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label></span></div>
+        <div class="ea-liste" id="s-farben"></div>
+        <div class="hilfe" id="s-farb-hilfe"></div>
+      </div>
+      <div class="zahlen">
+        <label>Länge (mm) <input id="s-lx" type="number" min="1" max="1000" step="1"></label>
+        <label>Breite (mm) <input id="s-ly" type="number" min="1" max="1000" step="1"></label>
+        <label>Höhe (mm) <input id="s-lz" type="number" min="1" max="1000" step="1"></label>
+      </div>
+      <div class="hilfe">Meldet „belegt“, sobald ein Werkstück in den Quader ragt (Länge entlang X der Verbindung).</div>
+    </div>
+    <div class="abschnitt"><h3>Verbindung</h3>
+      <label class="feldspalte">Was anklicken
+        <select id="w-art"><option value="auto">automatisch</option><option value="flaeche">Fläche</option>
+          <option value="bohrung">Bohrung</option><option value="kante">Kante</option><option value="ecke">Ecke</option></select></label>
+      <div class="zeile"><span class="wahlpunkt" id="p-teil">Punkt am Teil: –</span><button id="w-teil">anklicken</button></div>
+      <div class="zeile"><span class="wahlpunkt" id="p-ziel">Gegenstück: –</span><button id="w-ziel">anklicken</button></div>
+      <div class="hilfe" id="versatz-hilfe"></div>
+      <div class="zahlen">
+        <label>X (mm) <input id="v-x" type="number" step="0.5" value="0"></label>
+        <label>Y (mm) <input id="v-y" type="number" step="0.5" value="0"></label>
+        <label>Z (mm) <input id="v-z" type="number" step="0.5" value="0"></label>
+      </div>
+      <div class="zeile"><label>Drehung (°) <input id="v-dreh" type="number" step="15" value="0" style="width:80px"></label>
+        <button id="dreh-minus" title="−90°">↺ 90°</button><button id="dreh-plus" title="+90°">↻ 90°</button></div>
+      <label class="zeile"><input id="v-um" type="checkbox"> umdrehen</label>
+      <div class="hilfe" id="e-lage"></div>
+    </div>
+    <div class="abschnitt"><div class="zeile"><button id="e-loesen">Verbindung lösen</button>
+      <button id="e-entfernen" class="warnen" style="margin-left:auto">Entfernen</button></div></div>
+  </div>
+</div>
+</div>
+
+<!-- Dialog: Teil einfuegen -->
+<div id="teil-dialog" class="dialog" hidden><div class="dialog-feld breit" role="dialog" aria-label="Teil einfügen">
+  <div class="dialog-kopf"><h2>Teil einfügen</h2><input id="td-suche" type="search" placeholder="Suchen ...">
+    <button id="td-zu" class="zu" title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt"><div id="td-liste" class="kacheln"></div>
+    <div class="hilfe">Anklicken fügt das Teil ein; danach „Punkt am Teil“ und „Gegenstück“ wählen.
+      Neue Teile aus STEP-Dateien: <a href="/lehrer#teile">Lehrerbereich → Teile</a>.</div></div>
+</div></div>
+
+<!-- Dialog: Sensorflaeche einfuegen -->
+<div id="sensor-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Sensorfläche einfügen">
+  <div class="dialog-kopf"><h2>Sensorfläche einfügen</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt">
+    <div class="wahl-kacheln" id="sd-typ">
+      <button data-typ="belegt" class="an"><b>Belegt-Sensor</b><small>meldet, ob ein Werkstück auf der Fläche liegt</small></button>
+      <button data-typ="farbe"><b>Farbsensor</b><small>meldet die Farbe des Werkstücks (je Farbe ein Eingang oder als Code)</small></button></div>
+    <div class="zeile"><label class="feldspalte" style="flex:1">Beschriftung <input id="sd-name" maxlength="24"></label>
+      <label class="feldspalte">DIn (erster Eingang) <input id="sd-din" type="number" min="1" max="64" style="width:110px"></label></div>
+    <div class="zahlen">
+      <label>Länge (mm) <input id="sd-lx" type="number" min="1" max="1000" value="40"></label>
+      <label>Breite (mm) <input id="sd-ly" type="number" min="1" max="1000" value="40"></label>
+      <label>Höhe (mm) <input id="sd-lz" type="number" min="1" max="1000" value="20"></label></div>
+    <div class="hilfe">Nach dem Einfügen das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils). Feinheiten wie
+      Öffner/Schließer oder die Farben stehen danach rechts in den Eigenschaften.</div></div>
+  <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="sd-ok">Einfügen</button></div>
+</div></div>
+
+<!-- Dialog: Tisch -->
+<div id="tisch-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Tisch und Roboter">
+  <div class="dialog-kopf"><h2>Tisch und Roboter</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt" id="tisch-feld">
+    <label class="feldspalte">Tisch <select id="t-art"><option value="eben">eben, Maße frei</option>
+      <option value="profil">Profiltisch 800 × 800 (Nut 10, Basisplatte)</option></select></label>
     <div class="zahlen">
       <label class="nur-eben">Länge (mm) <input id="t-laenge" type="number" step="10" min="200" max="4000"></label>
       <label class="nur-eben">Breite (mm) <input id="t-breite" type="number" step="10" min="200" max="4000"></label>
@@ -140,85 +300,55 @@ details.feld[open] summary { margin-bottom:6px; }
       links, 90 mm von der Fußmitte) bis zur hinteren bzw. linken Tischkante. Nach hinten geht es nur im Nutraster
       (40 mm), weil die Bohrungen der Platte über den Nuten liegen; nach links stufenlos (<span id="t-alinks-grenzen"></span> mm).
       Die Nuten sind als Kanten anklickbar (nut-1 hinten bis nut-20 vorne, nut-links, nut-rechts).</div>
-  </details>
-  <details class="feld" id="ea-feld"><summary><b>Taster und Leuchtmelder</b> <span class="hilfe" id="ea-kurz"></span></summary>
+  </div>
+  <div class="dialog-fuss"><button class="haupt" data-zu>Fertig</button></div>
+</div></div>
+
+<!-- Dialog: Taster und Leuchtmelder -->
+<div id="ea-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Taster und Leuchtmelder">
+  <div class="dialog-kopf"><h2>Taster und Leuchtmelder</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt" id="ea-feld">
     <div class="hilfe">Taster erscheinen unten links in der Schüleransicht und setzen einen Eingang in iRC
       (dazu muss auf dem PC die App „WebotsSim“ freigeschaltet sein). Leuchtmelder unten rechts zeigen einen Ausgang.
       Nummern wie in der iRC-Anzeige.</div>
+    <div class="baum-kopf" style="padding-left:0">Taster</div>
     <div class="ea-liste" id="ea-taster"></div>
-    <button id="ea-plus-taster">+ Taster</button>
+    <div><button id="ea-plus-taster">%%ICON_PLUS%%Taster</button></div>
+    <div class="baum-kopf" style="padding-left:0">Leuchtmelder</div>
     <div class="ea-liste" id="ea-leuchten"></div>
-    <button id="ea-plus-leuchte">+ Leuchtmelder</button>
-  </details>
-  <div class="feld"><h2>Teile in dieser Welt</h2>
-    <div class="liste" id="teileliste"></div>
-    <div class="zeile"><button id="hinzufuegen" class="haupt">+ Teil hinzufügen</button></div>
-    <div class="zeile"><button id="plus-sensor" title="Fläche, die meldet, ob ein Werkstück darauf liegt">+ Sensorfläche</button></div>
-    <div class="hilfe">Neue Teile stehen erst neben dem Tisch. Mit einer Verbindung kommen sie an ihren Platz.</div>
+    <div><button id="ea-plus-leuchte">%%ICON_PLUS%%Leuchtmelder</button></div>
   </div>
-
-  <div class="feld" id="eigenschaften" hidden>
-    <h2 id="e-titel">Teil</h2>
-    <div class="zeile"><label class="hilfe" title="So heißt das Teil in der Simulation, in der Einteach-Hilfe und in der Beschriftung im 3D-Bild">Name <input id="e-id" size="14"></label>
-      <select id="e-art"><option value="aufbau">Aufbau (fest)</option><option value="werkstueck">Werkstück (greifbar)</option></select>
-      <input id="e-farbe" type="color" title="Farbe"></div>
-    <div class="zeile" id="e-masse-zeile"><label class="hilfe">Masse in g (leer = aus Volumen, PLA)
-      <input id="e-masse" type="number" min="1" step="1" style="width:90px"></label></div>
-    <div id="e-sensor" hidden>
-      <div class="zeile"><label class="hilfe">Beschriftung <input id="s-name" maxlength="24" size="16"></label>
-        <select id="s-typ"><option value="belegt">Belegt-Sensor</option><option value="farbe">Farbsensor</option></select></div>
-      <div class="zeile" id="s-belegt"><label class="hilfe">DIn <input id="s-din" type="number" min="1" max="64" style="width:60px"></label>
-        <select id="s-art"><option value="schliesser">Schließer</option><option value="oeffner">Öffner</option></select></div>
-      <div id="s-farbe" hidden>
-        <div class="zeile"><select id="s-ausgabe"><option value="je_farbe">ein Eingang je Farbe</option>
-          <option value="bits">Farbcode über Bits</option></select>
-          <span id="s-bits-felder"><label class="hilfe">ab DIn <input id="s-bitdin" type="number" min="1" max="64" style="width:56px"></label>
-          <label class="hilfe">Bits <select id="s-bits"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label></span></div>
-        <div class="ea-liste" id="s-farben"></div>
-        <div class="hilfe" id="s-farb-hilfe"></div>
-      </div>
-      <div class="zahlen">
-        <label>Länge (mm) <input id="s-lx" type="number" min="1" max="1000" step="1"></label>
-        <label>Breite (mm) <input id="s-ly" type="number" min="1" max="1000" step="1"></label>
-        <label>Höhe (mm) <input id="s-lz" type="number" min="1" max="1000" step="1"></label>
-      </div>
-      <div class="hilfe">Meldet „belegt“, sobald ein Werkstück in den Quader ragt (Länge entlang X der Verbindung).
-        Die Unterseite ist schon als Punkt gewählt: nur noch das Gegenstück anklicken.</div>
-    </div>
-
-    <h2>Verbindung</h2>
-    <div class="zeile"><span class="hilfe">Was anklicken:</span>
-      <select id="w-art"><option value="auto">automatisch</option><option value="flaeche">Fläche</option>
-        <option value="bohrung">Bohrung</option><option value="kante">Kante</option><option value="ecke">Ecke</option></select></div>
-    <div class="zeile"><span class="wahlpunkt" id="p-teil">Punkt am Teil: –</span><button id="w-teil">anklicken</button></div>
-    <div class="zeile"><span class="wahlpunkt" id="p-ziel">Gegenstück: –</span><button id="w-ziel">anklicken</button></div>
-    <div class="hilfe" id="versatz-hilfe"></div>
-    <div class="zahlen">
-      <label>X (mm) <input id="v-x" type="number" step="0.5" value="0"></label>
-      <label>Y (mm) <input id="v-y" type="number" step="0.5" value="0"></label>
-      <label>Z (mm) <input id="v-z" type="number" step="0.5" value="0"></label>
-    </div>
-    <div class="zeile"><label class="hilfe">Drehung (°) <input id="v-dreh" type="number" step="15" value="0" style="width:80px"></label>
-      <button id="dreh-minus">−90°</button><button id="dreh-plus">+90°</button>
-      <label class="hilfe"><input id="v-um" type="checkbox"> umdrehen</label></div>
-    <div class="hilfe" id="e-lage"></div>
-    <div class="zeile"><button id="e-loesen">Verbindung lösen</button><button id="e-entfernen" class="warnen">Teil entfernen</button></div>
-  </div>
-  <div id="status"></div>
-</aside>
-<div id="ansicht"><div id="hinweis3d" hidden></div>
-  <div id="kamera-knoepfe"><button id="k-teil" title="Kamera auf das gewählte Teil">Teil</button><button id="k-gesamt" title="ganzer Tisch">Übersicht</button></div>
-  <div id="achsen">iRC-Koordinaten: <b style="color:#d22">x</b> <b style="color:#1a1">y</b> <b style="color:#22d">z</b> ·
-    Kreis = Reichweite ReBeL (664 mm) · Pfeile am Gegenstück: <b style="color:#d22">X</b> / <b style="color:#1a1">Y</b> des Versatzes</div></div>
-</div>
-
-<div id="teil-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Teil hinzufügen">
-  <div class="dialog-kopf"><h2>Teil hinzufügen</h2><input id="td-suche" type="search" placeholder="Suchen ...">
-    <button id="td-zu" class="zu" title="Schließen (Esc)">&times;</button></div>
-  <div id="td-liste" class="kacheln"></div>
-  <div class="hilfe">Anklicken fügt das Teil ein; danach „Punkt am Teil“ und „Gegenstück“ wählen.
-    Neue Teile aus STEP-Dateien: <a href="/lehrer#teile">Lehrerbereich → Teile</a>.</div>
+  <div class="dialog-fuss"><button class="haupt" data-zu>Fertig</button></div>
 </div></div>
+
+<!-- Dialog: neue Roboterumgebung bzw. neuer Backensatz -->
+<div id="neu-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Neu">
+  <div class="dialog-kopf"><h2 id="nd-titel">Neue Roboterumgebung</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt">
+    <label class="feldspalte">Titel (sehen die Schüler) <input id="nd-titel-feld" maxlength="100" placeholder="z.B. Magazin bestücken"></label>
+    <label class="feldspalte">Dateiname <input id="weltdatei" placeholder="z.B. lf7_magazin" autocapitalize="none"></label>
+    <div class="hilfe" id="nd-hilfe">Kleinbuchstaben, Ziffern, - und _. Unter diesem Namen wird gespeichert.</div>
+    <div class="feldspalte" id="nd-tisch-zeile"><span style="font-weight:600;color:var(--leise);font-size:.88em">Tisch</span>
+      <div class="wahl-kacheln" id="nd-tisch">
+        <button data-tisch="profil" class="an"><b>Profiltisch 800 × 800</b><small>Nut 10 mit Basisplatte, wie in der Schule</small></button>
+        <button data-tisch="eben"><b>Ebener Tisch</b><small>Maße frei einstellbar</small></button></div></div>
+  </div>
+  <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="nd-ok">Anlegen</button></div>
+</div></div>
+
+<!-- Dialog: Aufbauplan -->
+<div id="plan-dialog" class="dialog" hidden><div class="dialog-feld ganz" role="dialog" aria-label="Aufbauplan">
+  <div class="dialog-kopf"><h2 id="plan-titel">Aufbauplan</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt">
+    <div class="hilfe" id="plan-hinweis"></div>
+    <div class="plan-inhalt"><div id="plan-bild"></div><div class="plan-tabelle" id="plan-tabelle"></div></div>
+  </div>
+  <div class="dialog-fuss"><span class="hilfe links">Blick von oben, hinten ist oben. „Links“ und „rechts“ gelten aus Sicht des
+    Roboters (wie in iRC und im Baukasten).</span><button data-zu>Schließen</button>
+    <button class="haupt" id="plan-drucken">%%ICON_DRUCKEN%%Drucken</button></div>
+</div></div>
+
+<div id="kontext" class="kontext" hidden></div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -467,10 +597,11 @@ async function greiferAufbauen() {
   flansch.rotation.x = Math.PI / 2; flansch.position.z = -1; szene.add(flansch, tcpMarke);
   szene.add(greiferObjekt);
   // Kopfzeile und Seitenleiste umstellen
-  $('modus-titel').textContent = 'Backensatz'; $('welt-text').textContent = 'Backensatz'; $('neu').textContent = 'Neuer Backensatz';
+  $('modus-titel').textContent = 'Backensatz'; $('welt-text').textContent = 'Backensatz'; $('neu-text').textContent = 'Neuer Backensatz';
   $('weltdatei').placeholder = 'z.B. robi3'; $('greifer-feld').hidden = true;
-  $('modus-wechsel').textContent = 'Welten'; $('modus-wechsel').href = '/lehrer/baukasten';
-  for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor']) $(id).hidden = true;
+  $('modus-wechsel').lastChild.textContent = 'Baukasten'; $('modus-wechsel').href = '/lehrer/baukasten';
+  $('zurueck').lastChild.textContent = 'Lehrerbereich'; $('zurueck').href = '/lehrer';
+  for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor', 'w-tisch', 'w-ea', 'w-plan', 'baum-tisch', 'baum-ea', 'baum-kopf-umgebung']) $(id).hidden = true;
   $('backen-feld').hidden = false; $('e-art').disabled = true;
 }
 async function greiferZeigen() {   // Schunk-Modell der gewaehlten Groesse (aus der Teilebibliothek)
@@ -743,9 +874,9 @@ renderer.domElement.addEventListener('pointerup', ev => {
   t.verbindung = t.verbindung || {versatz_mm: [0, 0, 0], drehung_grad: 0};
   if (wahl === 'teil') t.verbindung.punkt = mk.punkt;
   else { t.verbindung.an = mk.ziel; t.verbindung.an_punkt = mk.punkt; }
-  wahlBeenden(); formularZeigen(); rechnen();
+  merken(); wahlBeenden(); formularZeigen(); rechnen();
 });
-window.addEventListener('keydown', ev => { if (ev.key === 'Escape') wahlBeenden(); });
+window.addEventListener('keydown', ev => { if (ev.key === 'Escape' && wahl) { wahlBeenden(); ev.stopImmediatePropagation(); } });
 // Kamera: auf ein Teil zoomen (Blickrichtung bleibt) oder den ganzen Tisch zeigen
 function blickAuf(id) {
   const g = id && objekte[id]; if (!g) return;
@@ -796,6 +927,7 @@ function formularZeigen() {
   const v = t.verbindung || {};
   const sensor = t.art === 'sensor';
   $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : t.teil) + ')';
+  $('e-symbol').className = 'symbol ' + (t.art || 'aufbau'); $('e-symbol').textContent = ART_KURZ[t.art || 'aufbau'];
   feld('e-id', t.id); $('e-art').value = t.art || 'aufbau';
   $('e-farbe').value = hex(standardFarbe(t));
   $('e-art').hidden = $('e-farbe').hidden = sensor;
@@ -814,11 +946,15 @@ function formularZeigen() {
                               : 'Noch nicht platziert (steht neben dem Tisch).';
   punkteZeigen();
 }
+const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S'};
 function listeZeigen() {
-  $('teileliste').innerHTML = entwurf.teile.map(t => '<div data-id="' + t.id + '" class="' + (t.id === auswahl ? 'an' : '') + '"><span>'
-    + t.id + ' <span class="hilfe">' + (t.art === 'sensor' ? (sensorWerte(t).typ === 'farbe' ? 'Farbsensor' : 'Sensorfläche, DIn' + sensorWerte(t).din)
-                                        : t.teil + (t.art === 'werkstueck' ? ', Werkstück' : '')) + '</span></span>'
-    + (lagen[t.id] ? '' : '<span class="offen">offen</span>') + '</div>').join('') || '<span class="hilfe">Noch keine Teile.</span>';
+  $('teile-anzahl').textContent = entwurf.teile.length || '';
+  $('teileliste').innerHTML = entwurf.teile.map(t => '<div data-id="' + t.id + '" class="' + (t.id === auswahl ? 'an' : '') + '" title="'
+    + (t.art === 'werkstueck' ? 'Werkstück' : t.art === 'sensor' ? 'Sensorfläche' : 'Aufbau') + ' · Rechtsklick für das Menü">'
+    + '<span class="symbol ' + (t.art || 'aufbau') + '">' + ART_KURZ[t.art || 'aufbau'] + '</span><span class="name">' + t.id + '</span>'
+    + '<span class="art">' + (t.art === 'sensor' ? (sensorWerte(t).typ === 'farbe' ? 'Farbsensor' : 'DIn' + sensorWerte(t).din) : t.teil) + '</span>'
+    + (lagen[t.id] ? '' : '<span class="offen">offen</span>') + '</div>').join('')
+    || '<span class="hilfe" style="padding:4px 10px">Noch keine Teile. Oben auf „Teil“ klicken.</span>';
 }
 $('teileliste').onclick = ev => { const d = ev.target.closest('[data-id]'); if (d) waehlen(d.dataset.id); };
 function waehlen(id) {
@@ -853,13 +989,13 @@ $('e-id').onchange = () => {
   if (lagen[alt]) { lagen[neu] = lagen[alt]; delete lagen[alt]; }
   auswahl = neu; formularZeigen();
 };
-$('e-loesen').onclick = () => { const t = teil(auswahl); t.verbindung = null; formularZeigen(); rechnen(); };
+$('e-loesen').onclick = () => { const t = teil(auswahl); t.verbindung = null; merken(); formularZeigen(); rechnen(); };
 $('e-entfernen').onclick = () => {
   if (!confirm('Teil ' + auswahl + ' aus der Welt entfernen?')) return;
   const weg = auswahl;
   entwurf.teile = entwurf.teile.filter(t => t.id !== weg);
   for (const t of entwurf.teile) if (t.verbindung && t.verbindung.an === weg) { t.verbindung.an = null; t.verbindung.an_punkt = null; }
-  objektEntfernen(weg); auswahl = null; formularZeigen(); rechnen();
+  objektEntfernen(weg); auswahl = null; merken(); formularZeigen(); rechnen();
 };
 
 // ---------- Rechnen und Speichern ----------
@@ -880,6 +1016,7 @@ function rechenbar() {
 let rechenZeit = null;
 function rechnenSpaeter() { clearTimeout(rechenZeit); rechenZeit = setTimeout(rechnen, 150); }
 async function rechnen() {
+  merken();
   const teile = rechenbar();
   try {
     const e = BACKEN ? {art: 'backensatz', basis: basis(), teile} : {teile, tisch: tischWerte()};
@@ -967,20 +1104,7 @@ $('td-liste').onclick = ev => {
   hinzufuegen(k.dataset.teil).catch(e => status(e.message, true));
 };
 window.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !$('teil-dialog').hidden) teilDialog(false); });
-// Sensorflaeche: Unterseite ist schon der Punkt am Teil, gleich das Gegenstueck anklicken
-$('plus-sensor').onclick = async () => {
-  let n = 1;
-  while (teil('sensor' + n)) n++;
-  const belegt = entwurf.teile.filter(t => t.art === 'sensor').map(t => sensorWerte(t).din);
-  let din = SENSOR_STANDARD.din;
-  while (belegt.includes(din)) din++;
-  const t = {id: 'sensor' + n, art: 'sensor', sensor: {name: 'Platz ' + n, din, art: 'schliesser', groesse_mm: [...SENSOR_STANDARD.groesse_mm]},
-             verbindung: {punkt: {art: 'flaeche', id: 'unten'}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
-  entwurf.teile.push(t);
-  await objektBauen(t);
-  waehlen(t.id); await rechnen(); wahlStarten('ziel');
-  status('Jetzt das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).');
-};
+$('plus-sensor').onclick = () => sensorDialog();
 // Farbsensor: Farben wie FARBNAMEN in baukasten.py / FARBEN im Controller
 const FARBNAMEN = {rot: '#d91f1a', gruen: '#26b33a', blau: '#1a66e6', gelb: '#f2d91a', weiss: '#f2f2f2', schwarz: '#141414'};
 const FARBTEXT = {rot: 'rot', gruen: 'grün', blau: 'blau', gelb: 'gelb', weiss: 'weiß', schwarz: 'schwarz'};
@@ -1101,15 +1225,15 @@ async function backenSpeichern() {
   if (entwurf.teile.length !== 1 || rechenbar().length !== 1) { status('Erst eine Backe hinzufügen und mit dem Greifer verbinden.', true); return; }
   if (!weltName) {
     const n = $('weltdatei').value.trim().toLowerCase();
-    if (!/^[a-z][a-z0-9_]{0,19}$/.test(n)) { status('Bitte oben einen Namen eingeben (Buchstabe zuerst, a-z, 0-9 und _, bis 20 Zeichen).', true); $('weltdatei').focus(); return; }
+    if (!/^[a-z][a-z0-9_]{0,19}$/.test(n)) { neuDialog('name'); return; }
     weltName = n;
   }
   $('speichern').disabled = true; status('speichere, das Robotermodell wird neu erzeugt (einige Sekunden) ...');
   try {
     entwurf.titel = $('titel').value.trim() || weltName;
     const r = await api('backensatz_speichern', {name: weltName, entwurf});
-    status('Gespeichert. In den Welten steht jetzt der Greifer „' + r.greifer + '“ zur Wahl (laufende Simulationen nach „Neu starten“).');
-    await weltenListe(weltName); $('datei-feld').hidden = true;
+    status('Gespeichert. In den Roboterumgebungen steht jetzt der Greifer „' + r.greifer + '“ zur Wahl (laufende Simulationen nach „Neu starten“).');
+    geaendert = false; await weltenListe(weltName); $('datei-feld').hidden = true;
   } catch (e) { status(e.message, true); if (!backensaetze.some(b => b.name === weltName)) weltName = null; }
   finally { $('speichern').disabled = false; backenInfo(); }
 }
@@ -1123,16 +1247,16 @@ async function greiferListe() {   // Greifer-Varianten aus dem erzeugten Modell 
   const texte = {egp40: 'EGP 40', egp40_finger: 'EGP 40 mit Fingern', egp25: 'EGP 25', egp25_finger: 'EGP 25 mit Fingern',
                  vakuum: 'Sauger', kein: 'kein Greifer'};
   const titel = Object.fromEntries((await holen('/api/lehrer/backensaetze')).map(b => [b.greifer, 'EGP ' + b.basis.slice(3) + ' mit ' + b.titel]));
-  $('greifer').innerHTML = namen.map(n => '<option value="' + n + '">' + esc(texte[n] || titel[n] || n) + '</option>').join('');
+  $('greifer').innerHTML = namen.map(n => '<option value="' + n + '">Greifer: ' + esc(texte[n] || titel[n] || n) + '</option>').join('');
 }
 
 $('speichern').onclick = async () => {
   if (BACKEN) { await backenSpeichern(); return; }
-  if (!entwurf.teile.length) { status('Die Welt hat noch keine Teile.', true); return; }
+  if (!entwurf.teile.length) { status('Die Roboterumgebung hat noch keine Teile.', true); return; }
   if (rechenbar().length !== entwurf.teile.length) { status('Erst alle Teile verbinden (in der Liste „offen“).', true); return; }
   if (!weltName) {
     const n = $('weltdatei').value.trim().toLowerCase();
-    if (!/^[a-z0-9_-]{1,50}$/.test(n)) { status('Bitte oben einen Dateinamen eingeben (a-z, 0-9, - und _).', true); $('weltdatei').focus(); return; }
+    if (!/^[a-z0-9_-]{1,50}$/.test(n)) { neuDialog('name'); return; }
     weltName = n;
   }
   $('speichern').disabled = true; status('speichere, Webots rechnet das Vorschaubild ...');
@@ -1140,11 +1264,277 @@ $('speichern').onclick = async () => {
     entwurf.titel = $('titel').value.trim() || weltName;
     entwurf.tisch = tischWerte();
     await api('baukasten_speichern', {welt: weltName, entwurf});
-    status('Gespeichert als ' + weltName + '. Freigeben für Schüler im Lehrerbereich unter „Welten“.');
-    await weltenListe(weltName); $('datei-feld').hidden = true;
+    status('Gespeichert als ' + weltName + '. Freigeben für Schüler im Lehrerbereich unter „Roboterumgebungen“.');
+    geaendert = false; await weltenListe(weltName); $('datei-feld').hidden = true;
   } catch (e) { status(e.message, true); if (!(await holen('/api/lehrer/entwuerfe')).includes(weltName)) weltName = null; }
   finally { $('speichern').disabled = false; }
 };
+
+// ---------- Dialoge (alle gleich: [data-zu] schliesst, Esc schliesst den obersten, Klick daneben auch) ----------
+function dialogAuf(id) { $(id).hidden = false; const f = $(id).querySelector('input:not([type=hidden]), select'); if (f) setTimeout(() => f.focus(), 30); }
+function dialogZu(id) { $(id).hidden = true; }
+document.querySelectorAll('.dialog').forEach(d => {
+  d.addEventListener('click', ev => { if (ev.target === d || ev.target.closest('[data-zu]')) { d.hidden = true; if (d.id === 'teil-dialog') teilDialog(false); } });
+});
+function offenerDialog() { return [...document.querySelectorAll('.dialog')].reverse().find(d => !d.hidden); }
+window.addEventListener('keydown', ev => {
+  if (ev.key !== 'Escape') return;
+  const d = offenerDialog();
+  if (d) { d.hidden = true; return; }
+  if (!$('kontext').hidden) { $('kontext').hidden = true; return; }
+  if (!wahl && auswahl) waehlen(null);
+});
+$('w-tisch').onclick = $('baum-tisch').onclick = () => dialogAuf('tisch-dialog');
+$('w-ea').onclick = $('baum-ea').onclick = () => dialogAuf('ea-dialog');
+$('e-zu').onclick = () => waehlen(null);
+
+// ---------- Ungespeicherte Aenderungen ----------
+let geaendert = false, laedt = false;
+function merken() { if (!laedt) geaendert = true; }
+window.addEventListener('beforeunload', ev => { if (geaendert) { ev.preventDefault(); ev.returnValue = ''; } });
+for (const id of ['tisch-dialog', 'ea-dialog', 'eigenschaften']) {
+  $(id).addEventListener('change', merken); $(id).addEventListener('input', merken);
+}
+$('titel').addEventListener('input', merken); $('greifer').addEventListener('change', merken);
+
+// ---------- Neu anlegen (auch: Namen einer noch nicht gespeicherten Roboterumgebung aendern) ----------
+let neuModus = 'neu';   // 'neu' legt an, 'name' aendert nur Dateiname und Titel
+const NAME_MUSTER = BACKEN ? /^[a-z][a-z0-9_]{0,19}$/ : /^[a-z0-9_-]{1,50}$/;
+function neuDialog(modus) {
+  neuModus = modus;
+  $('nd-titel').textContent = modus === 'name' ? 'Name festlegen' : BACKEN ? 'Neuer Backensatz' : 'Neue Roboterumgebung';
+  $('nd-ok').textContent = modus === 'name' ? 'Übernehmen' : 'Anlegen';
+  $('nd-tisch-zeile').hidden = BACKEN || modus === 'name';
+  $('nd-hilfe').textContent = BACKEN ? 'Buchstabe zuerst, dann a-z, 0-9 und _, bis 20 Zeichen. Daraus wird der Greifer „egp40_<name>“.'
+                                     : 'Kleinbuchstaben, Ziffern, - und _. Unter diesem Namen wird gespeichert.';
+  $('nd-titel-feld').value = modus === 'name' ? $('titel').value : '';
+  if (modus !== 'name') $('weltdatei').value = '';
+  dialogAuf('neu-dialog');
+}
+$('nd-tisch').onclick = ev => { const b = ev.target.closest('[data-tisch]'); if (!b) return;
+  $('nd-tisch').querySelectorAll('button').forEach(x => x.classList.toggle('an', x === b)); };
+$('nd-titel-feld').addEventListener('input', () => {   // Dateinamen aus dem Titel vorschlagen, solange keiner getippt ist
+  if ($('weltdatei').dataset.getippt) return;
+  $('weltdatei').value = $('nd-titel-feld').value.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss').replace(BACKEN ? /[^a-z0-9_]+/g : /[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, BACKEN ? 20 : 50);
+});
+$('weltdatei').addEventListener('input', () => { $('weltdatei').dataset.getippt = $('weltdatei').value ? '1' : ''; });
+$('nd-ok').onclick = async () => {
+  const name = $('weltdatei').value.trim().toLowerCase(), titel = $('nd-titel-feld').value.trim();
+  if (!NAME_MUSTER.test(name)) { $('nd-hilfe').textContent = 'Dieser Dateiname geht nicht. ' + (BACKEN
+      ? 'Buchstabe zuerst, dann a-z, 0-9 und _, bis 20 Zeichen.' : 'Erlaubt sind Kleinbuchstaben, Ziffern, - und _.'); $('weltdatei').focus(); return; }
+  if ([...$('welt').options].some(o => o.value === name)) {
+    $('nd-hilfe').textContent = 'Den Namen „' + name + '“ gibt es schon. Bitte einen anderen wählen.'; $('weltdatei').focus(); return; }
+  dialogZu('neu-dialog');
+  if (neuModus === 'neu') {
+    $('welt').value = '';
+    await weltLaden(null);
+    if (!BACKEN) {
+      entwurf.tisch = $('nd-tisch').querySelector('.an').dataset.tisch === 'profil' ? Object.assign({art: 'profil'}, PROFIL_STANDARD) : Object.assign({}, TISCH_STANDARD);
+      tischZeichnen(); uebersicht(); await rechnen();
+    }
+  }
+  $('weltdatei').value = name; $('titel').value = titel || $('titel').value || name; entwurf.titel = $('titel').value;
+  dateiFeldZeigen(); merken();
+  status(neuModus === 'neu' ? 'Angelegt (noch nicht gespeichert). Jetzt Teile einfügen.' : 'Name übernommen, noch nicht gespeichert.');
+};
+function dateiFeldZeigen() {
+  const n = $('weltdatei').value;
+  $('datei-feld').hidden = !!weltName;
+  $('datei-feld').textContent = n ? n + ' · nicht gespeichert' : 'neu · nicht gespeichert';
+}
+$('datei-feld').onclick = () => neuDialog('name');
+
+// ---------- Sensorflaeche einfuegen (Dialog) ----------
+function sensorDialog() {
+  let n = 1;
+  while (teil('sensor' + n)) n++;
+  const belegt = entwurf.teile.filter(t => t.art === 'sensor').flatMap(t => {
+    const s = sensorWerte(t); return s.typ === 'farbe' ? (s.farben || []).map(f => f.din).concat(s.din) : [s.din]; });
+  let din = SENSOR_STANDARD.din;
+  while (belegt.includes(din)) din++;
+  $('sd-name').value = 'Platz ' + n; $('sd-din').value = din;
+  [$('sd-lx').value, $('sd-ly').value, $('sd-lz').value] = SENSOR_STANDARD.groesse_mm;
+  $('sd-typ').querySelectorAll('button').forEach((b, i) => b.classList.toggle('an', i === 0));
+  dialogAuf('sensor-dialog');
+}
+$('sd-typ').onclick = ev => { const b = ev.target.closest('[data-typ]'); if (!b) return;
+  $('sd-typ').querySelectorAll('button').forEach(x => x.classList.toggle('an', x === b)); };
+$('sd-ok').onclick = async () => {
+  dialogZu('sensor-dialog');
+  let n = 1;
+  while (teil('sensor' + n)) n++;
+  const ganz = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
+  const din = ganz($('sd-din').value, 1, 64), typ = $('sd-typ').querySelector('.an').dataset.typ;
+  const sensor = {name: $('sd-name').value.trim().slice(0, 24) || 'Platz ' + n, typ, din,
+                  groesse_mm: ['sd-lx', 'sd-ly', 'sd-lz'].map(i => ganz($(i).value, 1, 1000))};
+  if (typ === 'farbe') Object.assign(sensor, {ausgabe: 'je_farbe', farben: [{farbe: 'rot', din}, {farbe: 'blau', din: Math.min(64, din + 1)}]});
+  else sensor.art = 'schliesser';
+  const t = {id: 'sensor' + n, art: 'sensor', sensor, verbindung: {punkt: {art: 'flaeche', id: 'unten'}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+  entwurf.teile.push(t); merken();
+  await objektBauen(t);
+  waehlen(t.id); await rechnen(); wahlStarten('ziel');
+  status('Jetzt das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).');
+};
+
+// ---------- Kontextmenue (Rechtsklick auf ein Teil im Baum oder im 3D-Bild) ----------
+function kontextZeigen(x, y, id) {
+  const t = teil(id); if (!t) return;
+  waehlen(id);
+  const m = $('kontext');
+  m.innerHTML = '<button data-k="name">Umbenennen</button><button data-k="zeigen">%%ICON_FOKUS%%Teil zeigen</button>'
+    + '<button data-k="punkt">Punkt am Teil neu wählen</button><button data-k="ziel">Gegenstück neu wählen</button>'
+    + (t.verbindung ? '<button data-k="loesen">Verbindung lösen</button>' : '')
+    + '<div class="trenner"></div><button data-k="weg" class="warnen">Entfernen</button>';
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px'; m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+}
+$('kontext').onclick = ev => {
+  const b = ev.target.closest('[data-k]'); if (!b) return;
+  $('kontext').hidden = true;
+  const k = b.dataset.k;
+  if (k === 'name') { $('e-id').focus(); $('e-id').select(); }
+  else if (k === 'zeigen') blickAuf(auswahl);
+  else if (k === 'punkt') wahlStarten('teil');
+  else if (k === 'ziel') wahlStarten('ziel');
+  else if (k === 'loesen') $('e-loesen').click();
+  else if (k === 'weg') $('e-entfernen').click();
+};
+window.addEventListener('pointerdown', ev => { if (!ev.target.closest('#kontext')) $('kontext').hidden = true; }, true);
+$('teileliste').addEventListener('contextmenu', ev => {
+  const d = ev.target.closest('[data-id]'); if (!d) return;
+  ev.preventDefault(); kontextZeigen(ev.clientX, ev.clientY, d.dataset.id);
+});
+let rechtsUnten = null;
+renderer.domElement.addEventListener('pointerdown', ev => { if (ev.button === 2) rechtsUnten = [ev.clientX, ev.clientY]; });
+renderer.domElement.addEventListener('contextmenu', ev => {
+  ev.preventDefault();
+  if (!rechtsUnten || Math.hypot(ev.clientX - rechtsUnten[0], ev.clientY - rechtsUnten[1]) > 4) return;   // gezogen = Kamera schieben
+  const hit = treffer(ev), id = hit && hit.object.userData.teilId;
+  if (id && id !== 'greifer') kontextZeigen(ev.clientX, ev.clientY, id);
+});
+
+// ---------- Aufbauplan: Abstaende der Teile zu den Tischkanten (hinten, links) und Nuten ----------
+function tischLokal(t, p) {   // Welt -> Tischsystem (Umkehrung von tischDrehen)
+  const w = t.drehung_grad * Math.PI / 180, c = Math.cos(w), s = Math.sin(w);
+  return [c * p[0] - s * p[1], s * p[0] + c * p[1]];
+}
+function huelle2d(punkte) {   // konvexe Huelle (monotone Kette)
+  const p = punkte.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const kr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const unten = [], oben = [];
+  for (const q of p) { while (unten.length >= 2 && kr(unten[unten.length - 2], unten[unten.length - 1], q) <= 0) unten.pop(); unten.push(q); }
+  for (const q of p.slice().reverse()) { while (oben.length >= 2 && kr(oben[oben.length - 2], oben[oben.length - 1], q) <= 0) oben.pop(); oben.push(q); }
+  return unten.slice(0, -1).concat(oben.slice(0, -1));
+}
+function fussabdruck(t, tw) {   // Umriss des Teils von oben im Tischsystem
+  const g = objekte[t.id]; if (!g || !lagen[t.id]) return null;
+  const mesh = g.userData.mesh, pos = mesh.geometry.getAttribute('position');
+  g.updateMatrixWorld(true);
+  const v = new THREE.Vector3(), punkte = [], schritt = Math.max(1, Math.floor(pos.count / 6000));
+  for (let i = 0; i < pos.count; i += schritt) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+    punkte.push(tischLokal(tw, [v.x, v.y]));
+  }
+  const xs = punkte.map(p => p[0]), ys = punkte.map(p => p[1]);
+  return {umriss: huelle2d(punkte), x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys)};
+}
+const mm = v => (Math.round(v * 10) / 10).toLocaleString('de-DE');
+function planZeigen() {
+  const tw = tischWerte(), profil = tw.art === 'profil';
+  const hx = -tw.roboter_von_hinten_mm, vx = tw.laenge_mm - tw.roboter_von_hinten_mm;   // Kanten hinten/vorne (Tisch-x)
+  const ly = tw.roboter_von_links_mm, ry = tw.roboter_von_links_mm - tw.breite_mm;     // Kanten links/rechts (Tisch-y)
+  // Blick von oben, hinten oben; links (Robotersicht, +y) liegt rechts im Bild
+  const X = y => y - ry, Y = x => x - hx, B = tw.breite_mm, L = tw.laenge_mm, rand = 70;
+  const nutX = k => hx + PROFIL.raster / 2 + k * PROFIL.raster;   // Quernut k+1 (Tisch-x)
+  const zeilen = [], teile = entwurf.teile.filter(t => lagen[t.id]);
+  let svg = '<svg viewBox="' + (-rand) + ' ' + (-rand) + ' ' + (B + 2 * rand) + ' ' + (L + 2 * rand) + '" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">'
+    + '<defs><marker id="pf" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
+    + '<path d="M0 0L10 5L0 10z" fill="#00639C"/></marker></defs>'
+    + '<rect x="0" y="0" width="' + B + '" height="' + L + '" fill="#f7f8fa" stroke="#5d6779" stroke-width="2" rx="4"/>';
+  if (profil) {
+    for (let k = 0; k < PROFIL.nuten; k++) {
+      const y = Y(nutX(k));
+      svg += '<line x1="' + PROFIL.rahmen + '" y1="' + y + '" x2="' + (B - PROFIL.rahmen) + '" y2="' + y + '" stroke="#d3d8df" stroke-width="' + PROFIL.nut + '"/>'
+        + '<text x="-10" y="' + (y + 5) + '" font-size="15" text-anchor="end" fill="#98a2b3">' + (k + 1) + '</text>';
+    }
+  }
+  // Roboterfuss mit Blickrichtung, beim Profiltisch die Anschlagkante der Basisplatte
+  const fx = X(0), fy = Y(0), d = -tw.drehung_grad * Math.PI / 180;
+  const [rx, rr] = tischLokal(tw, [1, 0]);
+  svg += '<circle cx="' + fx + '" cy="' + fy + '" r="70" fill="#26282c"/><circle cx="' + fx + '" cy="' + fy + '" r="72" fill="none" stroke="#f26b00" stroke-width="5"/>'
+    + '<line x1="' + fx + '" y1="' + fy + '" x2="' + (fx + rr * 60) + '" y2="' + (fy + rx * 60) + '" stroke="#fff" stroke-width="7" marker-end="url(#pf)"/>'
+    + '<text x="' + fx + '" y="' + (fy + 100) + '" font-size="18" text-anchor="middle" fill="#1d2433" font-weight="700">Roboter</text>';
+  const masslinie = (x1, y1, x2, y2, text, farbe = '#00639C') => {
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, w = text.length * 9 + 12;
+    return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + farbe + '" stroke-width="2" marker-start="url(#pf)" marker-end="url(#pf)"/>'
+      + '<rect x="' + (mx - w / 2) + '" y="' + (my - 11) + '" width="' + w + '" height="22" rx="5" fill="#fff" stroke="' + farbe + '" stroke-width="1"/>'
+      + '<text x="' + mx + '" y="' + (my + 6) + '" font-size="15" text-anchor="middle" fill="' + farbe + '" font-weight="700">' + text + '</text>';
+  };
+  if (profil) {
+    const ax = X(ly - tw.anschlag_links_mm), ay = Y(hx + tw.anschlag_hinten_mm);
+    svg += '<path d="M' + (ax - 40) + ' ' + ay + 'H' + ax + 'V' + (ay + 40) + '" fill="none" stroke="#f26b00" stroke-width="4"/>'
+      + masslinie(ax - 22, 0, ax - 22, ay, mm(tw.anschlag_hinten_mm), '#c45500') + masslinie(B, ay - 22, ax, ay - 22, mm(tw.anschlag_links_mm), '#c45500');
+  }
+  const FARBE = {aufbau: ['#8a93a3', 'rgba(138,147,163,.35)'], werkstueck: ['#00639C', 'rgba(0,99,156,.28)'], sensor: ['#8fa300', 'rgba(177,200,0,.35)']};
+  teile.forEach((t, i) => {
+    const f = fussabdruck(t, tw); if (!f) return;
+    const [linie, flaeche] = FARBE[t.art] || FARBE.aufbau, nr = i + 1;
+    const mitte = [(f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2];
+    svg += '<g data-nr="' + nr + '"><polygon points="' + f.umriss.map(p => X(p[1]).toFixed(1) + ',' + Y(p[0]).toFixed(1)).join(' ')
+      + '" fill="' + flaeche + '" stroke="' + linie + '" stroke-width="2"/>'
+      + '<circle cx="' + X(mitte[1]) + '" cy="' + Y(mitte[0]) + '" r="13" fill="' + linie + '"/><text x="' + X(mitte[1]) + '" y="' + (Y(mitte[0]) + 5)
+      + '" font-size="14" text-anchor="middle" fill="#fff" font-weight="700">' + nr + '</text>';
+    const hinten = f.x0 - hx, links = ly - f.y1;
+    // Masse fuer Aufbauten und Sensoren immer, fuer Werkstuecke beim Zeigen auf die Zeile
+    svg += '<g class="mass"' + (t.art === 'werkstueck' ? ' visibility="hidden"' : '') + '>'
+      + masslinie(X(mitte[1]), 0, X(mitte[1]), Y(f.x0), mm(hinten)) + masslinie(B, Y(mitte[0]), X(f.y1), Y(mitte[0]), mm(links)) + '</g></g>';
+    let nut = '';
+    const v = t.verbindung || {};
+    if (profil && v.an === 'tisch' && v.an_punkt && v.an_punkt.art === 'kante' && /^nut-/.test(v.an_punkt.id))
+      nut = 'befestigt an ' + {'nut-links': 'linker Randnut', 'nut-rechts': 'rechter Randnut'}[v.an_punkt.id] || 'Nut ' + v.an_punkt.id.slice(4);
+    if (profil) {
+      const unter = Array.from({length: PROFIL.nuten}, (_, k) => k).filter(k => nutX(k) > f.x0 && nutX(k) < f.x1).map(k => k + 1);
+      if (unter.length) nut += (nut ? ', ' : '') + 'über Nut ' + (unter.length > 1 ? unter[0] + '–' + unter[unter.length - 1] : unter[0]);
+    }
+    const auf = v.an && v.an !== 'tisch' && v.an !== 'roboterfuss' ? 'auf ' + v.an : '';
+    zeilen.push('<tr data-nr="' + nr + '"><td><b>' + nr + '</b></td><td><b>' + esc(t.id) + '</b><div class="hilfe">'
+      + esc(t.art === 'sensor' ? 'Sensorfläche' : t.teil) + (auf ? ' · ' + esc(auf) : '') + '</div></td>'
+      + '<td>' + ({aufbau: 'Aufbau', werkstueck: 'Werkstück (Start)', sensor: 'Sensor'}[t.art] || '') + '</td>'
+      + '<td class="zahl">' + mm(hinten) + '</td><td class="zahl">' + mm(links) + '</td>'
+      + '<td class="zahl">' + mm(f.y1 - f.y0) + ' × ' + mm(f.x1 - f.x0) + '</td><td>' + esc(nut || '–') + '</td></tr>');
+  });
+  svg += '<text x="' + (B / 2) + '" y="-24" font-size="17" text-anchor="middle" fill="#5d6779" font-weight="700">hintere Tischkante</text>'
+    + '<text x="' + (B + 28) + '" y="' + (L / 2) + '" font-size="17" text-anchor="middle" fill="#5d6779" font-weight="700" transform="rotate(90 ' + (B + 28) + ' ' + (L / 2) + ')">linke Tischkante (Robotersicht)</text>'
+    + '<text x="' + (B / 2) + '" y="' + (L + 40) + '" font-size="17" text-anchor="middle" fill="#98a2b3">vorne</text></svg>';
+  $('plan-bild').innerHTML = svg;
+  $('plan-titel').textContent = 'Aufbauplan: ' + ($('titel').value || weltName || 'neue Roboterumgebung');
+  $('plan-hinweis').textContent = (profil ? 'Profiltisch 800 × 800 mm, Basisplatte mit Anschlagkante ' + mm(tw.anschlag_hinten_mm)
+    + ' mm von hinten und ' + mm(tw.anschlag_links_mm) + ' mm von links (orange).' : 'Tisch ' + mm(tw.laenge_mm) + ' × ' + mm(tw.breite_mm)
+    + ' mm, Roboterfuß ' + mm(tw.roboter_von_hinten_mm) + ' mm von hinten und ' + mm(tw.roboter_von_links_mm) + ' mm von links.')
+    + ' Gemessen wird jeweils bis zur nächsten Außenkante des Teils.' + (entwurf.teile.length > teile.length
+    ? ' ' + (entwurf.teile.length - teile.length) + ' Teil(e) ohne Verbindung fehlen im Plan.' : '');
+  $('plan-tabelle').innerHTML = teile.length ? '<table><thead><tr><th>Nr</th><th>Teil</th><th>Art</th><th>von hinten</th><th>von links</th>'
+    + '<th>Breite × Tiefe</th><th>Nut</th></tr></thead><tbody>' + zeilen.join('') + '</tbody></table>'
+    + '<div class="hilfe" style="margin-top:8px">Alle Maße in mm. Breite = quer (links–rechts), Tiefe = von hinten nach vorne.</div>'
+    : '<div class="hilfe">Noch keine platzierten Teile.</div>';
+  dialogAuf('plan-dialog');
+}
+$('w-plan').onclick = planZeigen;
+$('plan-drucken').onclick = () => window.print();
+$('plan-tabelle').addEventListener('mouseover', ev => {   // Zeile zeigen: Teil hervorheben, seine Masse einblenden
+  const z = ev.target.closest('tr[data-nr]');
+  $('plan-bild').querySelectorAll('g[data-nr]').forEach(g => {
+    const an = z && g.dataset.nr === z.dataset.nr;
+    g.style.opacity = z && !an ? '.35' : '1';
+    const m = g.querySelector('.mass'); if (m && m.dataset.immer === undefined) m.dataset.immer = m.getAttribute('visibility') !== 'hidden' ? '1' : '';
+    if (m) m.setAttribute('visibility', an || m.dataset.immer ? 'visible' : 'hidden');
+  });
+});
+$('plan-tabelle').addEventListener('mouseleave', () => $('plan-bild').querySelectorAll('g[data-nr]').forEach(g => {
+  g.style.opacity = '1'; const m = g.querySelector('.mass'); if (m) m.setAttribute('visibility', m.dataset.immer ? 'visible' : 'hidden'); }));
 
 // ---------- Laden ----------
 async function weltenListe(gewaehlt) {
@@ -1156,9 +1546,13 @@ async function weltenListe(gewaehlt) {
     return;
   }
   const namen = await holen('/api/lehrer/entwuerfe');
-  $('welt').innerHTML = '<option value="">(neue Welt)</option>' + namen.map(n => '<option' + (n === gewaehlt ? ' selected' : '') + '>' + n + '</option>').join('');
+  $('welt').innerHTML = '<option value="">(neue Roboterumgebung)</option>' + namen.map(n => '<option' + (n === gewaehlt ? ' selected' : '') + '>' + n + '</option>').join('');
 }
 async function weltLaden(name) {
+  laedt = true;
+  try { await weltLadenInnen(name); } finally { laedt = false; geaendert = false; }
+}
+async function weltLadenInnen(name) {
   for (const id of Object.keys(objekte)) objektEntfernen(id);
   lagen = {}; auswahl = null; weltName = name || null;
   if (BACKEN) {
@@ -1168,7 +1562,7 @@ async function weltLaden(name) {
     entwurf = name ? await holen('/api/lehrer/baukasten?welt=' + encodeURIComponent(name)) : {titel: '', aufgabe: '', greifer: 'egp40', teile: []};
   }
   $('titel').value = entwurf.titel || ''; $('greifer').value = entwurf.greifer || 'egp40';
-  $('datei-feld').hidden = !!weltName; $('weltdatei').value = '';
+  $('weltdatei').value = ''; $('weltdatei').dataset.getippt = ''; dateiFeldZeigen();
   if (BACKEN) {
     const t = entwurf.tcp || {};
     $('b-basis').value = basis(); $('b-tcp-bezug').value = t.bezug || 'spitze'; $('b-tcp-mm').value = t.mm ?? 0;
@@ -1179,8 +1573,11 @@ async function weltLaden(name) {
   for (const t of entwurf.teile) await objektBauen(t);
   formularZeigen(); await rechnen();
 }
-$('welt').onchange = () => weltLaden($('welt').value).catch(e => status(e.message, true));
-$('neu').onclick = () => { $('welt').value = ''; weltLaden(null); };
+$('welt').onchange = () => {
+  if (geaendert && !confirm('Ungespeicherte Änderungen verwerfen?')) { $('welt').value = weltName || ''; return; }
+  weltLaden($('welt').value).catch(e => status(e.message, true));
+};
+$('neu').onclick = () => { if (!geaendert || confirm('Ungespeicherte Änderungen verwerfen?')) neuDialog('neu'); };
 
 async function start() {
   groesse();
@@ -1189,6 +1586,7 @@ async function start() {
   if (BACKEN) await greiferAufbauen(); else { await platteLaden(); await greiferListe(); }
   await weltenListe(welt);
   await weltLaden(welt);
+  if (!welt || new URLSearchParams(location.search).get('neu')) neuDialog('neu');
 }
 renderer.setAnimationLoop(() => { steuerung.update(); renderer.render(szene, kamera); });
 start().catch(e => status('Start fehlgeschlagen: ' + e.message, true));

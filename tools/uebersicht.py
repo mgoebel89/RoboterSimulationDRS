@@ -163,43 +163,116 @@ def gesamtstatus(plaetze=None, aktiv_fn=None, status_dir=None):
 # Akzente Gruen, Pink, Gelb; Schrift DIN Pro bzw. Calibri; Flaechen mit EINER abgerundeten Ecke;
 # das blaue DRS-Dreieck hebt Ueberschriften hervor. Das Logo waehlt ein Admin unter Einstellungen.
 STIL = """
-:root { --blau:#00639C; --blau-dunkel:#004a75; --blau-hell:#E6F3FA; --gruen:#B1C800; --pink:#D4005E; --gelb:#F8B442;
-        --schwarz:#1a1a1a; --grau:#a6a6a6; --grau-hell:#d1d1d1; --linie:#e2e5e9; --bg:#f4f5f6; --karte:#fff;
-        --text:#1a1a1a; --leise:#666; --rot:#D4005E; --ecke:14px; --knopf:#eceef1; }
+:root { --blau:#00639C; --blau-dunkel:#004d7a; --blau-mittel:#7fb1cf; --blau-hell:#e8f2f9; --gruen:#B1C800; --pink:#D4005E;
+        --pink-hell:#fbe8f0; --gelb:#F8B442; --schwarz:#1a1a1a; --grau:#98a2b3; --grau-hell:#d0d5dd; --linie:#e4e7ec;
+        --linie-stark:#cfd4dc; --bg:#f4f6f8; --karte:#fff; --text:#1d2433; --leise:#5d6779; --rot:#D4005E;
+        --ecke:16px; --r:8px; --knopf:#f2f4f7;
+        --schatten-1:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+        --schatten-2:0 4px 8px -2px rgba(16,24,40,.08), 0 2px 4px -2px rgba(16,24,40,.05);
+        --schatten-3:0 20px 40px -12px rgba(16,24,40,.28); }
 * { box-sizing:border-box; }
-body { margin:0; font-family:'DIN Pro', Calibri, 'Segoe UI', Arial, sans-serif; background:var(--bg); color:var(--text); }
-header { background:var(--karte); color:var(--text); padding:8px 20px; display:flex; gap:8px 12px; align-items:center;
-  border-bottom:3px solid var(--blau); min-height:58px; flex-wrap:wrap; }
+html { -webkit-text-size-adjust:100%; }
+body { margin:0; font-family:'DIN Pro', 'Segoe UI Variable Text', 'Segoe UI', Calibri, system-ui, -apple-system, Arial, sans-serif;
+  font-size:15px; line-height:1.45; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; }
+/* Kopfzeile: weiss mit blauer Linie (DRS), Logo links */
+header { background:var(--karte); color:var(--text); padding:8px 20px; display:flex; gap:8px 14px; align-items:center;
+  border-bottom:2px solid var(--blau); min-height:60px; flex-wrap:wrap; box-shadow:0 1px 3px rgba(16,24,40,.06);
+  position:relative; z-index:10; }
 header > * { white-space:nowrap; }
 .marke { display:flex; align-items:center; gap:14px; color:var(--blau); text-decoration:none; font-weight:700;
-  font-size:1.15em; white-space:nowrap; }
-.marke img { height:40px; width:auto; display:block; }
-.dreieck { width:.75em; height:.75em; fill:var(--blau); flex:none; vertical-align:-.05em; margin-right:.35em; }
-header .unter { color:var(--leise); }
-main { padding:20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; }
-.platz { background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:14px; border:1px solid var(--linie);
-  box-shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04); display:flex; flex-direction:column; gap:6px; }
-.kopf { display:flex; align-items:center; gap:10px; font-size:1.25em; font-weight:700; }
-.punkt { width:16px; height:16px; border-radius:50%; flex:none; }
+  font-size:1.12em; white-space:nowrap; letter-spacing:-.01em; }
+.marke img { height:38px; width:auto; display:block; }
+.dreieck { width:.72em; height:.72em; fill:var(--blau); flex:none; vertical-align:-.04em; margin-right:.4em; }
+header .unter { color:var(--leise); font-weight:600; padding-left:12px; border-left:1px solid var(--linie); }
+/* Bedienelemente (niedrige Spezifitaet: Seiten duerfen alles ueberschreiben; der Webots-Viewer bleibt unberuehrt) */
+:where(button, a.btn, label.knopf-datei, a.knopf):not(:where(webots-view *)) {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px; font:inherit; font-size:.9em; font-weight:600;
+  line-height:1.2; padding:8px 14px; border-radius:var(--r); border:1px solid var(--linie-stark); background:var(--karte);
+  color:var(--text); cursor:pointer; text-decoration:none; white-space:nowrap; transition:background .15s, border-color .15s,
+  color .15s, box-shadow .15s; }
+:where(button, a.btn, label.knopf-datei, a.knopf):not(:where(webots-view *)):hover {
+  border-color:var(--blau-mittel); color:var(--blau); background:var(--blau-hell); }
+:where(button, a.btn, label.knopf-datei, a.knopf):not(:where(webots-view *)):focus-visible {
+  outline:none; box-shadow:0 0 0 3px var(--blau-hell), 0 0 0 4px var(--blau-mittel); }
+:where(button.haupt, a.haupt, a.knopf, button.knopf, a.btn.haupt) {
+  background:var(--blau); border-color:var(--blau); color:#fff; }
+:where(button.haupt, a.haupt, a.knopf, button.knopf, a.btn.haupt):hover { background:var(--blau-dunkel); border-color:var(--blau-dunkel); color:#fff; }
+:where(button.warnen, a.warnen) { color:var(--pink); border-color:#f0b7cf; background:var(--karte); }
+:where(button.warnen, a.warnen):hover { background:var(--pink); border-color:var(--pink); color:#fff; }
+:where(button.an) { background:var(--blau-hell); border-color:var(--blau-mittel); color:var(--blau); }
+:where(button.leicht) { border-color:transparent; background:transparent; }
+:where(button):disabled, :where(button):disabled:hover { opacity:.5; cursor:default; background:var(--karte); color:var(--text);
+  border-color:var(--linie-stark); }
+:where(input, select, textarea):not(:where(webots-view *, [type=checkbox], [type=radio], [type=color], [type=file])) {
+  font:inherit; font-size:.95em; padding:7px 10px; border:1px solid var(--linie-stark); border-radius:var(--r);
+  background:var(--karte); color:var(--text); min-height:36px; transition:border-color .15s, box-shadow .15s; }
+:where(input, select, textarea):not(:where(webots-view *)):focus { outline:none; border-color:var(--blau);
+  box-shadow:0 0 0 3px var(--blau-hell); }
+:where(input[type=checkbox], input[type=radio]) { accent-color:var(--blau); width:16px; height:16px; }
+:where(input[type=color]) { width:40px; height:36px; padding:3px; border:1px solid var(--linie-stark); border-radius:var(--r);
+  background:var(--karte); cursor:pointer; }
+:where(label) { color:var(--leise); font-size:.88em; font-weight:600; }
+:where(label) :where(input, select, textarea) { color:var(--text); font-weight:400; }
+:where(code) { font-family:'Cascadia Mono', Consolas, monospace; font-size:.88em; background:var(--bg);
+  border:1px solid var(--linie); border-radius:4px; padding:0 4px; }
+/* Karten: eine grosse abgerundete Ecke (DRS) */
+.platz { background:var(--karte); border-radius:var(--ecke) 6px 6px 6px; padding:16px; border:1px solid var(--linie);
+  box-shadow:var(--schatten-1); display:flex; flex-direction:column; gap:6px; transition:box-shadow .2s, transform .2s; }
+main { padding:20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
+.kopf { display:flex; align-items:center; gap:10px; font-size:1.2em; font-weight:700; }
+.punkt { width:12px; height:12px; border-radius:50%; flex:none; box-shadow:0 0 0 3px rgba(0,0,0,.04); }
 .gruen { background:var(--gruen); } .gelb { background:var(--gelb); } .rot { background:var(--pink); }
 .leise { color:var(--leise); font-size:.9em; }
-a.knopf { margin-top:6px; text-align:center; background:var(--blau); color:#fff; text-decoration:none;
-          padding:8px; border-radius:3px; font-weight:700; }
-a.knopf:hover { background:var(--blau-dunkel); }
-.leer { padding:40px; color:var(--leise); grid-column:1/-1; }
-.md { line-height:1.45; } .md > :first-child { margin-top:0; } .md > :last-child { margin-bottom:0; }
+a.knopf { margin-top:6px; }
+.leer { padding:48px 20px; color:var(--leise); grid-column:1/-1; text-align:center; }
+.md { line-height:1.5; } .md > :first-child { margin-top:0; } .md > :last-child { margin-bottom:0; }
 .md p, .md ul, .md ol, .md blockquote, .md table { margin:0 0 .65em; } .md ul, .md ol { padding-left:1.3em; }
 .md h3, .md h4, .md h5 { margin:.9em 0 .35em; color:var(--blau); } .md h3 { font-size:1.08em; } .md h4, .md h5 { font-size:1em; }
-.md code { background:var(--bg); border:1px solid var(--linie); border-radius:3px; padding:0 4px; font-size:.92em; }
-.md blockquote { border-left:4px solid var(--gelb); background:#fff8ea; padding:6px 10px; }
+.md blockquote { border-left:4px solid var(--gelb); background:#fff8ea; padding:6px 10px; border-radius:0 6px 6px 0; }
 .md table { border-collapse:collapse; } .md th, .md td { border:1px solid var(--linie); padding:3px 7px; text-align:left; }
 .md th { background:var(--bg); } .md hr { border:0; border-top:1px solid var(--linie); margin:.8em 0; }
 .md a { color:var(--blau); }
+/* Dialoge: immer gleich, abgedunkelter Hintergrund, Titel oben, Knoepfe unten rechts */
+.dialog { position:fixed; inset:0; background:rgba(16,24,40,.45); z-index:40; display:flex;
+  align-items:center; justify-content:center; padding:16px; animation:einblenden .15s ease-out; }
+@keyframes einblenden { from { opacity:0; } to { opacity:1; } }
+#meldung { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#1d2433; color:#fff;
+  padding:11px 18px; border-radius:10px; z-index:60; box-shadow:var(--schatten-3); font-weight:600; max-width:min(640px, 92vw); }
+#meldung.fehler { background:var(--pink); }
+[hidden] { display:none !important; }   /* sonst gewinnt z.B. display:flex gegen hidden */
 """
 
 # Blaues DRS-Dreieck (Gestaltungselement), als Inline-SVG
 DREIECK = ('<svg class="dreieck" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.6 .9C1 .6.6.9.6 1.6v6.8c0 .7.4 1 '
            '1 .7l6.9-3.4c.6-.3.6-1.1 0-1.4z"/></svg>')
+
+
+# Strichsymbole (24er-Raster, Linienstaerke wie die Schrift) fuer Seitenleiste und Werkzeugleisten
+SYMBOLE = {
+    "SIM": '<circle cx="12" cy="12" r="9"/><path d="M10 8.6v6.8l5.6-3.4z"/>',
+    "UMGEBUNG": '<path d="M3 11h18v3H3z"/><path d="M5 14v6M19 14v6M7 11V6h4v5M14 11V4h4v7"/>',
+    "TEILE": '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+    "BACKEN": '<path d="M7 3h4v7l-2 3v8M17 3h-4v7l2 3v8M7 7h10"/>',
+    "PROTOKOLL": '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+    "EINST": '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+    "BENUTZER": '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.6a3.5 3.5 0 010 6.8M18.5 14.8c1.6.8 2.7 2.6 3 5.2"/>',
+    "PLUS": '<path d="M12 5v14M5 12h14"/>',
+    "SENSOR": '<rect x="4" y="13" width="16" height="6" rx="1.5"/><path d="M8 9.5a5.5 5.5 0 018 0M5.5 7a9 9 0 0113 0"/>',
+    "TASTER": '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/>',
+    "TISCH": '<path d="M3 9h18v3H3zM5 12v8M19 12v8"/>',
+    "PLAN": '<path d="M4 4h16v16H4z"/><path d="M8 4v4M12 4v2M16 4v4M4 8h4M4 12h2M4 16h4"/><path d="M10 12h6v5h-6z"/>',
+    "ZURUECK": '<path d="M15 5l-7 7 7 7"/>',
+    "SPEICHERN": '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
+    "FOKUS": '<path d="M4 9V5a1 1 0 011-1h4M15 4h4a1 1 0 011 1v4M20 15v4a1 1 0 01-1 1h-4M9 20H5a1 1 0 01-1-1v-4"/><circle cx="12" cy="12" r="3"/>',
+    "GESAMT": '<path d="M3 12l9-8 9 8M5 10v10h14V10"/>',
+    "DRUCKEN": '<path d="M7 8V4h10v4M7 17H4v-7h16v7h-3"/><path d="M7 14h10v6H7z"/>',
+    "NEU": '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 11v6M9 14h6"/>',
+}
+
+
+def symbol(pfade):
+    return ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            'stroke-linejoin="round" aria-hidden="true">%s</svg>' % pfade)
 
 
 def logo_url():
@@ -223,15 +296,12 @@ def marke():
 ANMELDUNG = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ReBeL - Lehrerbereich</title><style>%%STIL%%
-.anmelden { max-width:360px; margin:60px auto; background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:24px;
-  border:1px solid var(--linie); box-shadow:0 4px 12px rgba(0,0,0,.05); display:flex; flex-direction:column; gap:10px; }
-.anmelden h1 { margin:0 0 6px; font-size:1.25em; color:var(--blau); }
-.anmelden input { font:inherit; font-size:1.1em; padding:8px 10px; border:1px solid var(--grau-hell); border-radius:3px; }
-.anmelden input:focus { outline:2px solid var(--blau); outline-offset:-1px; }
-.anmelden button { font:inherit; font-weight:700; background:var(--blau); color:#fff; border:0; border-radius:3px;
-  padding:10px; cursor:pointer; margin-top:6px; }
-.anmelden button:hover { background:var(--blau-dunkel); }
-.anmelden a { color:var(--blau); font-size:.92em; }
+.anmelden { max-width:380px; margin:72px auto; background:var(--karte); border-radius:var(--ecke) 8px 8px 8px; padding:28px;
+  border:1px solid var(--linie); box-shadow:var(--schatten-2); display:flex; flex-direction:column; gap:10px; }
+.anmelden h1 { margin:0 0 8px; font-size:1.35em; color:var(--text); display:flex; align-items:center; }
+.anmelden input { font-size:1.02em; }
+.anmelden button { margin-top:8px; padding:11px; font-size:1em; }
+.anmelden a { color:var(--blau); font-size:.9em; font-weight:600; text-align:center; margin-top:4px; }
 #fehler { color:var(--rot); min-height:1.2em; }
 </style></head>
 <body><header>%%MARKE%% <span class="unter">Lehrerbereich</span></header>
@@ -241,7 +311,7 @@ ANMELDUNG = """<!doctype html>
   <input id="name" autocomplete="username" autocapitalize="none" autofocus>
   <label for="passwort">Passwort</label>
   <input id="passwort" type="password" autocomplete="current-password">
-  <button>Anmelden</button>
+  <button class="haupt">Anmelden</button>
   <div id="fehler"></div>%%HINWEIS%%
   <a href="/">Zurück zur Startseite</a>
 </form>
@@ -263,126 +333,156 @@ KEINE_BENUTZER = """<div class="leise">Es gibt noch kein Konto. Den ersten Admin
 LEHRER_SEITE = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ReBeL - Lehrerbereich</title><style>%%STIL%%
-header { flex-wrap:wrap; }
-nav { display:flex; gap:4px; margin-left:12px; flex-wrap:wrap; }
-nav button, nav a.nav-link, header .rechts { color:var(--text); background:transparent; border:0; border-radius:3px;
-  padding:7px 11px; font:inherit; cursor:pointer; text-decoration:none; }
-nav button:hover, nav a.nav-link:hover, header .rechts:hover { background:var(--blau-hell); color:var(--blau); }
-nav button.an { background:var(--blau); color:#fff; font-weight:700; }
-#ich { margin-left:auto; color:var(--leise); font-size:.9em; }
-.leiste { display:flex; gap:12px; align-items:center; padding:16px 20px 0; flex-wrap:wrap; }
-.knopfreihe { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
-.knopfreihe a, .knopfreihe button, .leiste button, .leiste a, .feld button, label.knopf-datei, td button, td a.klein {
-  font:inherit; font-size:.88em; border:0; border-radius:3px; padding:7px 10px; cursor:pointer;
-  background:var(--knopf); color:var(--text); text-decoration:none; display:inline-block; }
-.knopfreihe a:hover, .knopfreihe button:hover, .leiste button:hover, .feld button:hover, label.knopf-datei:hover,
-  td button:hover, td a.klein:hover { background:var(--blau-hell); color:var(--blau); }
-button.haupt, a.haupt { background:var(--blau) !important; color:#fff !important; font-weight:700; }
-button.haupt:hover, a.haupt:hover { background:var(--blau-dunkel) !important; }
-button.warnen { background:var(--pink) !important; color:#fff !important; }
-button:disabled { opacity:.55; cursor:default; }
-.hilfe { font-size:.88em; color:var(--leise); }
-.feld input, .feld select, .feld textarea, td select { font:inherit; padding:6px 8px;
-  border:1px solid var(--grau-hell); border-radius:3px; width:100%; background:#fff; }
-.feld input:focus, .feld select:focus, .feld textarea:focus { outline:2px solid var(--blau); outline-offset:-1px; }
-.feld input[type=checkbox], .feld input[type=radio] { width:auto; }
-td select { width:auto; }
-.feld textarea { min-height:9em; resize:vertical; font-family:Consolas, 'Cascadia Mono', monospace; font-size:.9em; }
-.feld button.an { background:var(--blau); color:#fff; }
-.spalte { padding:20px; display:flex; flex-direction:column; gap:16px; max-width:860px; }
-.spalte.breit { max-width:1200px; }
-.feld { background:var(--karte); border-radius:var(--ecke) 0 0 0; padding:14px 16px; border:1px solid var(--linie);
-  box-shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04); display:flex; flex-direction:column; gap:8px; overflow-x:auto; }
-.feld h2 { margin:0; font-size:1.05em; color:var(--blau); }
-.zeile { display:flex; gap:8px; flex-wrap:wrap; } .zeile > * { flex:1; min-width:140px; }
-table { border-collapse:collapse; width:100%; font-size:.92em; }
-th { font-weight:700; color:var(--leise); font-size:.85em; text-transform:uppercase; letter-spacing:.03em; }
-th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--linie); vertical-align:middle; }
+/* Lehrerbereich: Seitenleiste links, Inhalt rechts (wie gaengige Verwaltungsoberflaechen) */
+html, body { height:100%; }
+body { display:flex; flex-direction:column; }
+header .kopf-rechts { margin-left:auto; display:flex; gap:4px; align-items:center; }
+#ich { color:var(--leise); font-size:.88em; margin-right:6px; padding:5px 10px; border-radius:999px; background:var(--bg); }
+.rahmen { flex:1; min-height:0; display:grid; grid-template-columns:232px 1fr; }
+nav { background:var(--karte); border-right:1px solid var(--linie); padding:14px 10px; display:flex; flex-direction:column;
+  gap:2px; overflow:auto; }
+nav a.nav-link { display:flex; align-items:center; border:1px solid transparent; border-radius:var(--r); font-weight:600;
+  text-decoration:none; line-height:1.2; }
+nav button, nav a.nav-link { justify-content:flex-start !important; gap:11px !important; width:100%; border-color:transparent !important;
+  background:transparent !important; color:var(--leise) !important; padding:9px 12px !important; font-size:.93em !important; }
+nav button:hover, nav a.nav-link:hover { background:var(--bg) !important; color:var(--text) !important; }
+nav button.an { background:var(--blau-hell) !important; color:var(--blau) !important; }
+nav svg { width:19px; height:19px; flex:none; }
+nav .nav-titel { font-size:.72em; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--grau);
+  padding:14px 12px 4px; }
+.inhalt { overflow:auto; min-width:0; }
+.seitenkopf { display:flex; align-items:flex-end; gap:16px; padding:26px 28px 6px; flex-wrap:wrap; }
+.seitenkopf h1 { margin:0; font-size:1.55em; letter-spacing:-.015em; }
+.seitenkopf .unterzeile { color:var(--leise); font-size:.92em; margin-top:2px; }
+.seitenkopf .aktionen { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.leiste { display:none; }
+.knopfreihe { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; align-items:center; }
+.hilfe { font-size:.86em; color:var(--leise); }
+.feld label { display:flex; flex-direction:column; gap:5px; }
+.feld input, .feld select, .feld textarea { width:100%; }
+.feld input[type=checkbox], .feld input[type=radio] { width:16px; }
+.feld textarea { min-height:9em; resize:vertical; font-family:'Cascadia Mono', Consolas, monospace; font-size:.88em; }
+.spalte { padding:16px 28px 32px; display:flex; flex-direction:column; gap:18px; max-width:920px; }
+.spalte.breit { max-width:1240px; }
+.feld { background:var(--karte); border-radius:var(--ecke) 6px 6px 6px; padding:18px 20px; border:1px solid var(--linie);
+  box-shadow:var(--schatten-1); display:flex; flex-direction:column; gap:12px; overflow-x:auto; }
+.feld h2 { margin:0; font-size:1.02em; color:var(--text); display:flex; align-items:center; }
+.feld h2::before { content:""; width:4px; height:1em; background:var(--blau); border-radius:2px; margin-right:9px; }
+.zeile { display:flex; gap:12px; flex-wrap:wrap; } .zeile > * { flex:1; min-width:160px; }
+table { border-collapse:collapse; width:100%; font-size:.93em; }
+th { font-weight:600; color:var(--leise); font-size:.78em; text-transform:uppercase; letter-spacing:.05em; background:var(--bg); }
+th:first-child { border-radius:8px 0 0 8px; } th:last-child { border-radius:0 8px 8px 0; }
+th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--linie); vertical-align:middle; }
+th { border-bottom:0; }
+tbody tr:last-child td { border-bottom:0; }
 td.knoepfe { white-space:nowrap; text-align:right; }
+td.knoepfe > * { margin-left:4px; }
 .gesperrt { color:var(--rot); font-weight:700; }
-/* Weltenliste */
-table.welten td { padding:8px; }
-table.welten tr.zeile-welt { cursor:pointer; } table.welten tr.zeile-welt:hover td { background:var(--blau-hell); }
-.mini { width:84px; height:63px; border-radius:8px 0 0 0; background:var(--bg) center/cover no-repeat; display:flex;
+main#liste { padding:16px 28px 32px; }
+/* Liste der Roboterumgebungen und Teile: ganze Zeile anklickbar */
+table.welten tr.zeile-welt, #teile tr[data-name] { cursor:pointer; }
+table.welten tr.zeile-welt:hover td, #teile tr[data-name]:hover td { background:#f7fafc; }
+.mini { width:92px; height:69px; border-radius:10px 4px 4px 4px; background:var(--bg) center/cover no-repeat; display:flex;
   align-items:center; justify-content:center; font-size:.7em; color:var(--grau); border:1px solid var(--linie); }
+#teile .mini { background-size:contain; background-color:#fff; }
 .welt-titel { font-weight:700; } .welt-datei { font-size:.8em; color:var(--leise); }
-.welt-aufgabe { font-size:.85em; color:var(--leise); max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.chip { display:inline-block; font-size:.8em; font-weight:700; padding:3px 9px; border-radius:10px; border:0; cursor:pointer;
-  font-family:inherit; white-space:nowrap; }
-.chip.frei { background:var(--gruen); color:var(--schwarz); } .chip.zu { background:var(--knopf); color:var(--leise); }
-.chip.laeuft { background:var(--gelb); color:var(--schwarz); cursor:default; }
-.filter { display:flex; gap:8px; align-items:center; }
-.filter input { font:inherit; padding:6px 9px; border:1px solid var(--grau-hell); border-radius:3px; min-width:220px; }
+.welt-aufgabe { font-size:.85em; color:var(--leise); max-width:440px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chip { display:inline-flex !important; align-items:center; gap:5px; font-size:.78em !important; font-weight:700; padding:4px 10px !important;
+  border-radius:999px !important; border:0 !important; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.chip::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.8; }
+.chip.frei { background:#eef6cc !important; color:#4d5a00 !important; } .chip.zu { background:var(--bg) !important; color:var(--leise) !important; }
+.chip.laeuft { background:#fdf0d9 !important; color:#8a5a00 !important; cursor:default; }
+.filter { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.filter input[type=search] { min-width:280px; }
 /* Logos */
-.logos { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px; }
-.logo-wahl { border:2px solid var(--linie); border-radius:var(--ecke) 0 0 0; padding:10px; display:flex; flex-direction:column;
-  gap:8px; align-items:stretch; cursor:pointer; background:#fff; }
+.logos { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:12px; }
+.logo-wahl { border:2px solid var(--linie); border-radius:var(--ecke) 6px 6px 6px; padding:12px; display:flex; flex-direction:column;
+  gap:8px; align-items:stretch; cursor:pointer; background:#fff; transition:border-color .15s, box-shadow .15s; }
+.logo-wahl:hover { border-color:var(--blau-mittel); }
 .logo-wahl.an { border-color:var(--blau); box-shadow:0 0 0 3px var(--blau-hell); }
 .logo-wahl .bildchen { height:64px; display:flex; align-items:center; justify-content:center; }
 .logo-wahl img { max-height:64px; max-width:100%; }
 .logo-wahl .unten { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:.85em; }
-#meldung { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--schwarz); color:#fff;
-  padding:10px 16px; border-radius:var(--ecke) 0 0 0; z-index:30; box-shadow:0 2px 10px rgba(0,0,0,.3); }
-#meldung.fehler { background:var(--rot); }
-[hidden] { display:none !important; }   /* sonst gewinnt z.B. display:flex gegen hidden */
-.dialog { position:fixed; inset:0; background:rgba(26,26,26,.55); z-index:15; display:flex; align-items:center;
-  justify-content:center; padding:16px; }
-.dialog > .feld { width:min(380px, 100%); max-height:calc(100vh - 32px); overflow:auto; }
-.dialog > .feld.gross { width:min(720px, 100%); }
-.dialog .vorschau { width:100%; aspect-ratio:4/3; max-height:260px; border-radius:var(--ecke) 0 0 0; background:var(--bg) center/contain no-repeat;
-  border:1px solid var(--linie); display:flex; align-items:center; justify-content:center; color:var(--grau); }
+.dialog > .feld { width:min(420px, 100%); max-height:calc(100vh - 32px); overflow:auto; box-shadow:var(--schatten-3); gap:14px;
+  padding:22px 24px; }
+.dialog > .feld.gross { width:min(760px, 100%); }
+.dialog > .feld > h2 { font-size:1.15em; }
+.dialog .vorschau { width:100%; aspect-ratio:4/3; max-height:260px; border-radius:var(--ecke) 6px 6px 6px;
+  background:var(--bg) center/contain no-repeat; border:1px solid var(--linie); display:flex; align-items:center;
+  justify-content:center; color:var(--grau); }
+.dialog .fuss { display:flex; gap:8px; flex-wrap:wrap; align-items:center; border-top:1px solid var(--linie); padding-top:14px; margin-top:2px; }
 input[type=file] { display:none; }
+label.knopf-datei { color:var(--text); font-size:.9em; }
 label.knopf-datei.aus { pointer-events:none; opacity:.5; }
+.feld .platz { box-shadow:none; }
+.platz .knopfreihe a, .platz .knopfreihe button { font-size:.82em; padding:6px 10px; }
+@media (max-width: 820px) {
+  .rahmen { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+  nav { flex-direction:row; border-right:0; border-bottom:1px solid var(--linie); padding:6px; overflow-x:auto; }
+  nav button, nav a.nav-link { width:auto; } nav .nav-titel { display:none; }
+  .seitenkopf, .spalte, main#liste { padding-left:16px; padding-right:16px; }
+}
 </style></head>
 <body><header>%%MARKE%% <span class="unter">Lehrerbereich</span>
-<nav><button data-tab="sim" class="an">Simulationen</button><button data-tab="welten">Welten</button>
-<button data-tab="teile">Teile</button><a class="nav-link" href="/lehrer/baukasten">Baukasten</a><a class="nav-link" href="/lehrer/baukasten?modus=backen">Backensätze</a><button data-tab="protokoll">Protokoll</button><button data-tab="einst" class="nur-admin">Einstellungen</button>
-<button data-tab="benutzer" class="nur-admin">Benutzer</button></nav>
-<span id="ich"></span><button class="rechts" id="pw-knopf">Passwort</button>
-<button class="rechts" id="abmelden">Abmelden</button></header>
+<span class="kopf-rechts"><span id="ich"></span><button class="leicht" id="pw-knopf">Passwort</button>
+<button class="leicht" id="abmelden">Abmelden</button></span></header>
 <div id="meldung" hidden></div>
+<div class="rahmen">
+<nav aria-label="Bereiche">
+<button data-tab="sim" class="an">%%ICON_SIM%%Simulationen</button>
+<button data-tab="welten">%%ICON_UMGEBUNG%%Roboterumgebungen</button>
+<button data-tab="teile">%%ICON_TEILE%%Teile</button>
+<a class="nav-link" href="/lehrer/baukasten?modus=backen">%%ICON_BACKEN%%Backensätze</a>
+<div class="nav-titel">Verwaltung</div>
+<button data-tab="protokoll">%%ICON_PROTOKOLL%%Protokoll</button>
+<button data-tab="einst" class="nur-admin">%%ICON_EINST%%Einstellungen</button>
+<button data-tab="benutzer" class="nur-admin">%%ICON_BENUTZER%%Benutzer</button>
+</nav>
+<div class="inhalt">
 
 <div id="pw-dialog" class="dialog" hidden><div class="feld"><h2 id="pw-titel">Passwort ändern</h2>
   <div class="hilfe" id="pw-hinweis"></div>
   <label>Bisheriges Passwort <input id="pw-alt" type="password" autocomplete="current-password"></label>
   <label>Neues Passwort (mindestens 8 Zeichen) <input id="pw-neu" type="password" autocomplete="new-password"></label>
   <label>Neues Passwort wiederholen <input id="pw-neu2" type="password" autocomplete="new-password"></label>
-  <div class="knopfreihe"><button class="haupt" id="pw-speichern">Speichern</button><button id="pw-abbrechen">Abbrechen</button></div>
+  <div class="fuss"><button class="haupt" id="pw-speichern">Speichern</button><button id="pw-abbrechen">Abbrechen</button></div>
 </div></div>
 
 <section id="tab-sim">
-  <div class="leiste"><span id="belegt" class="hilfe"></span>
-    <button id="alle-beenden" class="warnen" style="margin-left:auto">Alle beenden</button></div>
+  <div class="seitenkopf"><div><h1>Simulationen</h1><div class="unterzeile" id="belegt"></div></div>
+    <div class="aktionen"><button id="alle-beenden" class="warnen">Alle beenden</button></div></div>
   <main id="liste"><div class="leer">lade ...</div></main>
 </section>
 
 <section id="tab-welten" hidden>
-  <div class="spalte breit">
-    <div class="filter"><input id="w-suche" type="search" placeholder="Welten durchsuchen ...">
-      <span class="hilfe" id="w-anzahl"></span>
-      <label class="knopf-datei" style="margin-left:auto" title="Welt-Paket (ZIP) aus „Exportieren“ einer anderen Instanz">Welt importieren
+  <div class="seitenkopf"><div><h1>Roboterumgebungen</h1>
+      <div class="unterzeile">Tisch, Teile und Aufgabe, mit denen die Schüler arbeiten. Zeile anklicken zum Bearbeiten.</div></div>
+    <div class="aktionen">
+      <label class="knopf-datei" title="Paket (ZIP) aus „Exportieren“ einer anderen Instanz">Importieren
         <input type="file" id="w-import" accept=".zip,application/zip"></label>
-      <a class="haupt" href="/lehrer/baukasten" style="padding:7px 12px;border-radius:3px;text-decoration:none">Neue Welt im Baukasten</a></div>
-    <div class="feld"><table class="welten"><thead><tr><th></th><th>Welt</th><th>Greifer</th><th>Schüler</th><th></th></tr></thead>
+      <a class="btn haupt" href="/lehrer/baukasten?neu=1">+ Neue Roboterumgebung</a></div></div>
+  <div class="spalte breit">
+    <div class="feld"><div class="filter"><input id="w-suche" type="search" placeholder="Roboterumgebungen durchsuchen ...">
+      <span class="hilfe" id="w-anzahl"></span></div>
+      <table class="welten"><thead><tr><th></th><th>Roboterumgebung</th><th>Greifer</th><th>Schüler</th><th></th></tr></thead>
       <tbody id="welten"></tbody></table>
-      <div class="hilfe">Zeile anklicken zum Bearbeiten. Nur freigegebene Welten sehen die Schüler auf der Startseite;
-        Änderungen gelten für neu gestartete Simulationen. Gelöschte Welten landen im Papierkorb
-        (<code>worlds/papierkorb</code> im Container).</div></div>
+      <div class="hilfe">Nur freigegebene Roboterumgebungen sehen die Schüler auf der Startseite; Änderungen gelten für neu
+        gestartete Simulationen. Gelöschte landen im Papierkorb (<code>worlds/papierkorb</code> im Container).</div></div>
   </div>
 </section>
 
 <div id="welt-dialog" class="dialog" hidden><div class="feld gross">
-  <h2 id="wd-titel">Welt</h2><div class="welt-datei" id="wd-datei"></div>
+  <h2 id="wd-titel">Roboterumgebung</h2><div class="welt-datei" id="wd-datei"></div>
   <label>Titel <input id="wd-name" maxlength="100"></label>
-  <div class="zeile" style="align-items:center"><span style="flex:1">Aufgabentext (Markdown)</span>
-    <span style="flex:0;white-space:nowrap"><button id="wd-md-text" class="an">Text</button><button id="wd-md-vorschau">Vorschau</button></span></div>
+  <div class="zeile" style="align-items:center"><span style="flex:1;font-weight:600;color:var(--leise);font-size:.88em">Aufgabentext (Markdown)</span>
+    <span style="flex:0;white-space:nowrap;display:flex;gap:4px"><button id="wd-md-text" class="an">Text</button><button id="wd-md-vorschau">Vorschau</button></span></div>
   <textarea id="wd-aufgabe" maxlength="5000" spellcheck="true"></textarea>
   <div id="wd-md-bild" class="md feld" style="min-height:9em;box-shadow:none" hidden></div>
   <div class="hilfe"><code># Überschrift</code> · <code>**fett**</code> · <code>*kursiv*</code> · <code>- Aufzählung</code> ·
     <code>1. Schritt</code> · <code>&gt; Hinweis</code> · <code>`DOut31`</code> · <code>[Link](https://…)</code> ·
     Tabelle: <code>| A | B |</code> und darunter <code>|---|---|</code>. Leerzeile = neuer Absatz.</div>
   <div class="zeile"><label>Greifer <select id="wd-greifer"></select></label>
-    <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="wd-sichtbar"> für Schüler freigegeben</label></div>
+    <label style="flex-direction:row;gap:8px;align-items:center;margin-top:20px"><input type="checkbox" id="wd-sichtbar"> für Schüler freigegeben</label></div>
   <div class="hilfe" id="wd-greifer-hilfe"></div>
   <label>Zu tief abgelegte Werkstücke <select id="wd-ablage">
     <option value="auflage">auf die Auflage legen (realistisch: der Griff danach auf derselben Höhe scheitert)</option>
@@ -391,29 +491,30 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
     ein Crash. Hinweis erscheint so oder so oben links im 3D-Bild. Wirkt nach „Neu starten“ der Simulation.</div>
   <div class="zeile">
     <div><div class="vorschau" id="wd-bild">kein Vorschaubild</div>
-      <div class="knopfreihe"><button id="wd-vorschau">Vorschaubild erzeugen</button>
+      <div class="knopfreihe" style="margin-top:8px"><button id="wd-vorschau">Vorschaubild erzeugen</button>
         <label class="knopf-datei">Bild hochladen<input type="file" class="wd-datei" accept="image/png,image/jpeg"></label></div></div>
-    <div><div class="hilfe">Arbeitsblatt (PDF, optional)</div>
+    <div style="display:flex;flex-direction:column;gap:8px"><div class="hilfe">Arbeitsblatt (PDF, optional)</div>
       <div class="knopfreihe" id="wd-pdf"></div>
-      <div class="hilfe" id="wd-laeuft" style="margin-top:12px"></div>
+      <div class="hilfe" id="wd-laeuft" style="margin-top:8px"></div>
       <div class="knopfreihe" id="wd-baukasten"></div></div>
   </div>
-  <div class="knopfreihe" style="margin-top:10px"><button class="haupt" id="wd-speichern">Speichern</button>
+  <div class="fuss"><button class="haupt" id="wd-speichern">Speichern</button>
     <button id="wd-abbrechen">Schließen</button>
-    <a id="wd-export" title="Welt mit allen Teilen und dem Backensatz als ZIP, z.B. für die Instanz in der Schule">Exportieren (ZIP)</a>
-    <button class="warnen" id="wd-loeschen" style="margin-left:auto">Welt löschen</button></div>
+    <a class="btn" id="wd-export" title="Mit allen Teilen und dem Backensatz als ZIP, z.B. für die Instanz in der Schule">Exportieren (ZIP)</a>
+    <button class="warnen" id="wd-loeschen" style="margin-left:auto">Löschen</button></div>
 </div></div>
 
 <div id="teil-dialog" class="dialog" hidden><div class="feld">
   <h2>Neues Teil aus STEP-Datei</h2>
   <label>Name in der Bibliothek <input id="t-name" placeholder="z.B. magazin_v2" autocapitalize="none"></label>
-  <label>STEP-Datei <input id="t-datei" type="file" accept=".step,.stp,.STEP,.STP" style="display:block"></label>
+  <label class="knopf-datei" style="align-self:flex-start">STEP-Datei wählen ...<input id="t-datei" type="file" accept=".step,.stp,.STEP,.STP"></label>
+  <div class="hilfe" id="t-datei-name">Noch keine Datei gewählt.</div>
   <div class="hilfe">Erlaubt sind a-z, 0-9, - und _ (leer = Dateiname). Gewinde und Kleinteile machen das Einlesen langsam:
     am besten ohne Normteile exportieren.</div>
   <div class="vorschau" id="t-bild" hidden></div>
   <div class="hilfe" id="t-stand"></div>
-  <div class="knopfreihe"><button class="haupt" id="t-hochladen">Einlesen</button><button id="t-zu">Schließen</button>
-    <a id="t-baukasten" href="/lehrer/baukasten" hidden>Zum Baukasten</a></div>
+  <div class="fuss"><button class="haupt" id="t-hochladen">Einlesen</button><button id="t-zu">Schließen</button>
+    <a class="btn" id="t-baukasten" href="/lehrer/baukasten" hidden>Zum Baukasten</a></div>
 </div></div>
 
 <div id="teil-info" class="dialog" hidden><div class="feld gross">
@@ -424,65 +525,69 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
   </div>
   <h2>Aktualisieren</h2>
   <div class="hilfe">Neue STEP-Datei für dasselbe Teil, z.B. nach einer Änderung in Onshape. Die Verbindungspunkte
-    (Flächen, Bohrungen, Kanten, Ecken), an denen etwas hängt, werden im neuen Modell wiedergesucht; Welten und
-    Backensätze mit diesem Teil werden neu gerechnet. Das alte Teil kommt in den Papierkorb
+    (Flächen, Bohrungen, Kanten, Ecken), an denen etwas hängt, werden im neuen Modell wiedergesucht; Roboterumgebungen
+    und Backensätze mit diesem Teil werden neu gerechnet. Das alte Teil kommt in den Papierkorb
     (<code>teile/papierkorb</code> im Container).</div>
   <div class="knopfreihe"><label class="knopf-datei" id="ti-datei-knopf">Neue STEP-Datei einlesen<input type="file" id="ti-datei"
     accept=".step,.stp,.STEP,.STP"></label>
     <button class="warnen" id="ti-trotzdem" hidden>Trotzdem ersetzen</button></div>
   <div class="hilfe" id="ti-stand"></div>
-  <div class="knopfreihe" style="margin-top:10px"><button id="ti-zu">Schließen</button>
+  <div class="fuss"><button id="ti-zu">Schließen</button>
     <button class="warnen" id="ti-loeschen" style="margin-left:auto">Teil löschen</button></div>
   <div class="hilfe" id="ti-loeschen-hilfe" style="text-align:right"></div>
 </div></div>
 
-<div id="import-dialog" class="dialog" hidden><div class="feld"><h2>Welt importieren</h2>
+<div id="import-dialog" class="dialog" hidden><div class="feld"><h2>Roboterumgebung importieren</h2>
   <div id="im-text"></div>
   <label>Neuer Name <input id="im-name" autocapitalize="none"></label>
-  <div class="hilfe">a-z, 0-9, - und _. „Ersetzen“ legt die vorhandene Welt in den Papierkorb.</div>
-  <div class="knopfreihe"><button class="haupt" id="im-neu">Als neue Welt importieren</button>
+  <div class="hilfe">a-z, 0-9, - und _. „Ersetzen“ legt die vorhandene Roboterumgebung in den Papierkorb.</div>
+  <div class="fuss"><button class="haupt" id="im-neu">Unter neuem Namen importieren</button>
     <button class="warnen" id="im-ersetzen">Vorhandene ersetzen</button><button id="im-abbrechen">Abbrechen</button></div>
 </div></div>
 
 <section id="tab-teile" hidden>
-  <div class="spalte">
-    <div class="filter"><button class="haupt" id="t-neu">+ Neues Teil</button>
-      <span class="hilfe">STEP-Datei einlesen; platziert werden die Teile im Baukasten.</span></div>
-    <div class="feld"><h2>Teilebibliothek</h2>
+  <div class="seitenkopf"><div><h1>Teilebibliothek</h1>
+      <div class="unterzeile">STEP-Dateien einlesen; platziert werden die Teile im Baukasten. Zeile anklicken zum Bearbeiten.</div></div>
+    <div class="aktionen"><button class="haupt" id="t-neu">+ Neues Teil</button></div></div>
+  <div class="spalte breit">
+    <div class="feld">
       <table><thead><tr><th></th><th>Name</th><th>Größe (mm)</th><th>Flächen</th><th>Bohrungen</th><th>Kanten</th><th>Ecken</th>
         <th>verwendet in</th><th></th></tr></thead><tbody id="teile"></tbody></table></div>
   </div>
 </section>
 
 <section id="tab-protokoll" hidden>
-  <div class="spalte"><div class="feld"><h2>Wer hat was gemacht (neueste zuerst)</h2>
+  <div class="seitenkopf"><div><h1>Protokoll</h1><div class="unterzeile">Wer hat was gemacht, neueste zuerst.</div></div></div>
+  <div class="spalte breit"><div class="feld">
     <table><thead><tr><th>Zeit</th><th>Wer</th><th>Was</th></tr></thead><tbody id="protokoll"></tbody></table></div></div>
 </section>
 
 <section id="tab-einst" hidden>
+  <div class="seitenkopf"><div><h1>Einstellungen</h1><div class="unterzeile">Gelten für alle Lehrkräfte und Schüler.</div></div></div>
   <div class="spalte">
     <div class="feld"><h2>Simulationen</h2>
-      <label>Gleichzeitig höchstens <input id="e-max" type="number" min="1" max="20"></label>
-      <label>Beenden nach so vielen Minuten ohne iRC <input id="e-leer" type="number" min="1" max="240"></label>
+      <div class="zeile"><label>Gleichzeitig höchstens <input id="e-max" type="number" min="1" max="20"></label>
+      <label>Beenden nach so vielen Minuten ohne iRC <input id="e-leer" type="number" min="1" max="240"></label></div>
       <label>Alle beenden um (Stundenende, z.B. 09:30, 11:15) <input id="e-uhr" type="text" placeholder="keine"></label>
       <div><button class="haupt" id="e-speichern">Speichern</button></div></div>
     <div class="feld"><h2>Logo</h2>
       <div class="hilfe">Erscheint oben links auf allen Seiten (Startseite, Simulation, Lehrerbereich). Anklicken wählt es aus.
         PNG, JPG oder SVG, am besten das Logo „quer“ auf weißem Grund.</div>
       <div class="logos" id="logos"></div>
-      <div class="zeile"><label>Name <input id="l-name" placeholder="z.B. drs_quer" autocapitalize="none"></label>
-        <label class="knopf-datei" style="flex:0;align-self:end;white-space:nowrap">Logo hochladen<input type="file" id="l-datei" accept="image/png,image/jpeg,image/svg+xml,.svg"></label></div>
+      <div class="zeile" style="align-items:flex-end"><label>Name <input id="l-name" placeholder="z.B. drs_quer" autocapitalize="none"></label>
+        <label class="knopf-datei" style="flex:0">Logo hochladen<input type="file" id="l-datei" accept="image/png,image/jpeg,image/svg+xml,.svg"></label></div>
     </div>
   </div>
 </section>
 
 <section id="tab-benutzer" hidden>
+  <div class="seitenkopf"><div><h1>Benutzer</h1><div class="unterzeile">Konten der Lehrkräfte.</div></div></div>
   <div class="spalte">
     <div class="feld"><h2>Konten</h2>
       <table><thead><tr><th>Benutzer</th><th>Name</th><th>Rolle</th><th>Zustand</th><th></th></tr></thead>
         <tbody id="benutzer"></tbody></table>
-      <div class="hilfe">Admins verwalten Konten und Einstellungen. Lehrkräfte steuern Simulationen und pflegen Welten.
-        Ein zurückgesetztes Passwort muss beim nächsten Anmelden geändert werden.</div></div>
+      <div class="hilfe">Admins verwalten Konten und Einstellungen. Lehrkräfte steuern Simulationen und pflegen
+        Roboterumgebungen. Ein zurückgesetztes Passwort muss beim nächsten Anmelden geändert werden.</div></div>
     <div class="feld"><h2>Neues Konto</h2>
       <div class="zeile"><label>Benutzername <input id="n-name" placeholder="z.B. mueller" autocapitalize="none"></label>
         <label>Anzeigename <input id="n-anzeige" placeholder="z.B. Frau Müller"></label></div>
@@ -493,6 +598,7 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
       <div class="hilfe" id="n-hinweis"></div></div>
   </div>
 </section>
+</div></div>
 
 <script>
 function esc(s) {
@@ -570,7 +676,7 @@ function karte(p) {
     + '<div class="leise">PC ' + esc(p.irc_host) + ' &middot; ' + esc(p.titel) + (p.dauerhaft ? ' (dauerhaft)' : '') + '</div>'
     + '<div class="leise">' + esc(gelenke) + '</div>'
     + (p.hilfe ? '<div class="leise">' + esc(p.hilfe) + '</div>' : '')
-    + '<div class="knopfreihe"><a href="/platz/' + esc(p.platz) + '" target="_blank">Ansehen</a>'
+    + '<div class="knopfreihe"><a class="btn haupt" href="/platz/' + esc(p.platz) + '" target="_blank">Ansehen</a>'
     + '<button data-teile="' + esc(p.platz) + '" title="Werkstücke auf die Startlage, ohne Neustart">Teile zurück</button>'
     + '<button data-reset="' + esc(p.platz) + '" title="Webots neu starten">Neu starten</button>'
     + '<button data-ende="' + esc(p.platz) + '" class="warnen">Beenden</button></div></div>';
@@ -615,7 +721,7 @@ async function welten() {
 function weltenZeigen() {
   const such = $('w-suche').value.trim().toLowerCase(), t = Date.now();
   const liste = weltListe.filter(w => !such || (w.titel + ' ' + w.datei + ' ' + w.aufgabe).toLowerCase().includes(such));
-  $('w-anzahl').textContent = liste.length + ' von ' + weltListe.length + ' Welten, ' + weltListe.filter(w => w.sichtbar).length + ' freigegeben';
+  $('w-anzahl').textContent = liste.length + ' von ' + weltListe.length + ' Roboterumgebungen, ' + weltListe.filter(w => w.sichtbar).length + ' freigegeben';
   $('welten').innerHTML = liste.map(w => '<tr class="zeile-welt" data-datei="' + esc(w.datei) + '">'
     + '<td style="width:96px">' + (w.bild ? '<div class="mini" style="background-image:url(\\'/welten/' + esc(w.bild) + '?' + t + '\\')"></div>'
                                           : '<div class="mini">kein Bild</div>') + '</td>'
@@ -626,9 +732,9 @@ function weltenZeigen() {
     + '<td><button class="chip ' + (w.sichtbar ? 'frei' : 'zu') + '" data-freigabe title="Klick schaltet um">'
     + (w.sichtbar ? 'freigegeben' : 'gesperrt') + '</button>'
     + (w.laeuft.length ? ' <span class="chip laeuft" title="läuft gerade">Platz ' + w.laeuft.map(esc).join(', ') + '</span>' : '') + '</td>'
-    + '<td class="knoepfe">' + (w.baukasten ? '<a class="klein" href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, ''))
+    + '<td class="knoepfe">' + (w.baukasten ? '<a class="btn" href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, ''))
        + '">Baukasten</a> ' : '') + '<button data-bearbeiten>Bearbeiten</button></td></tr>').join('')
-    || '<tr><td colspan="5" class="hilfe">' + (weltListe.length ? 'Keine Welt passt zur Suche.' : 'Noch keine Welten.') + '</td></tr>';
+    || '<tr><td colspan="5" class="hilfe">' + (weltListe.length ? 'Keine Roboterumgebung passt zur Suche.' : 'Noch keine Roboterumgebungen.') + '</td></tr>';
 }
 $('w-suche').oninput = weltenZeigen;
 $('welten').onclick = async ev => {
@@ -650,17 +756,17 @@ function weltDialog(w, nurDateien) {
       + greiferNamen.map(g => '<option value="' + esc(g.name) + '">' + esc(g.titel) + '</option>').join('');
     $('wd-greifer').value = w.greifer || ''; $('wd-greifer').disabled = !w.greifer;
     $('wd-greifer-hilfe').textContent = w.greifer ? 'In iRC dasselbe Werkzeug wählen, sonst stimmt der TCP nicht.'
-                                                  : 'Diese Welt hat kein Greifer-Feld am ReBeL.';
+                                                  : 'Diese Roboterumgebung hat kein Greifer-Feld am ReBeL.';
   }
   $('wd-datei').textContent = w.datei + (w.baukasten ? ' · im Baukasten gebaut' : '');
   const bild = $('wd-bild');
   bild.style.backgroundImage = w.bild ? 'url(\\'/welten/' + w.bild + '?' + Date.now() + '\\')' : ''; bild.textContent = w.bild ? '' : 'kein Vorschaubild';
-  $('wd-pdf').innerHTML = (w.pdf ? '<a href="/welten/' + esc(w.pdf) + '" target="_blank">ansehen</a><button data-pdf-weg>entfernen</button>' : '')
+  $('wd-pdf').innerHTML = (w.pdf ? '<a class="btn" href="/welten/' + esc(w.pdf) + '" target="_blank">ansehen</a><button data-pdf-weg>entfernen</button>' : '')
     + '<label class="knopf-datei">' + (w.pdf ? 'ersetzen' : 'hochladen') + '<input type="file" class="wd-datei" accept="application/pdf"></label>';
   $('wd-laeuft').textContent = w.laeuft.length ? 'Läuft gerade auf Platz ' + w.laeuft.join(', ') + ' – Löschen geht erst nach dem Beenden.' : '';
   $('wd-loeschen').disabled = w.laeuft.length > 0;
   $('wd-export').href = '/api/lehrer/welt_export?datei=' + encodeURIComponent(w.datei);
-  $('wd-baukasten').innerHTML = w.baukasten ? '<a href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, '')) + '">Im Baukasten öffnen</a>' : '';
+  $('wd-baukasten').innerHTML = w.baukasten ? '<a class="btn" href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, '')) + '">Im Baukasten öffnen</a>' : '';
   $('welt-dialog').hidden = false;
 }
 function weltDialogZu() { $('welt-dialog').hidden = true; weltOffen = null; mdModus(false); }
@@ -711,7 +817,7 @@ async function importSenden(name, ersetzen) {
   const d = await r.json().catch(() => ({}));
   if (r.status === 409 && d.vorhanden) {
     importVorhanden = d.vorhanden;
-    $('im-text').textContent = 'Die Welt „' + d.vorhanden + '“ gibt es hier schon. Unter neuem Namen importieren oder die vorhandene ersetzen?';
+    $('im-text').textContent = 'Die Roboterumgebung „' + d.vorhanden + '“ gibt es hier schon. Unter neuem Namen importieren oder die vorhandene ersetzen?';
     $('im-name').value = d.vorschlag; $('import-dialog').hidden = false; $('meldung').hidden = true;
     return;
   }
@@ -731,17 +837,17 @@ $('w-import').onchange = () => {
 };
 $('im-neu').onclick = () => importSenden($('im-name').value.trim().toLowerCase(), false);
 $('im-ersetzen').onclick = () => {
-  if (confirm('Vorhandene Welt „' + importVorhanden + '“ ersetzen? Sie wandert in den Papierkorb.')) importSenden(importVorhanden, true);
+  if (confirm('Vorhandene Roboterumgebung „' + importVorhanden + '“ ersetzen? Sie wandert in den Papierkorb.')) importSenden(importVorhanden, true);
 };
 $('im-abbrechen').onclick = () => { $('import-dialog').hidden = true; };
 $('wd-loeschen').onclick = async () => {
   const w = weltListe.find(w => w.datei === weltOffen);
   const dateien = ['.wbt', '.json'].concat(w.baukasten ? ['.baukasten.json'] : [], w.bild ? [w.bild.slice(w.bild.lastIndexOf('.'))] : [],
                                            w.pdf ? ['.pdf'] : []).map(e => w.datei.replace(/[.]wbt$/, '') + e);
-  if (!confirm('Welt „' + w.titel + '“ löschen?\\n\\nSie verschwindet aus der Liste und von der Startseite der Schüler.\\n'
+  if (!confirm('Roboterumgebung „' + w.titel + '“ löschen?\\n\\nSie verschwindet aus der Liste und von der Startseite der Schüler.\\n'
                + 'Diese Dateien wandern in den Papierkorb (worlds/papierkorb im Container):\\n  ' + dateien.join('\\n  '))) return;
   await api('welt_loeschen', {datei: w.datei});
-  melden('Welt „' + w.titel + '“ gelöscht (im Papierkorb).'); weltDialogZu(); welten();
+  melden('Roboterumgebung „' + w.titel + '“ gelöscht (im Papierkorb).'); weltDialogZu(); welten();
 };
 
 // --- Teile ---
@@ -766,11 +872,13 @@ async function teile() {
 }
 $('t-neu').onclick = () => {
   $('t-name').value = ''; $('t-datei').value = ''; $('t-stand').textContent = ''; $('t-bild').hidden = true;
+  $('t-datei-name').textContent = 'Noch keine Datei gewählt.';
   $('t-baukasten').hidden = true; $('teil-dialog').hidden = false; $('t-name').focus();
 };
 $('t-zu').onclick = () => { $('teil-dialog').hidden = true; };
 $('t-datei').onchange = () => {   // Name aus dem Dateinamen vorschlagen
   const f = $('t-datei').files[0];
+  $('t-datei-name').textContent = f ? 'Gewählt: ' + f.name : 'Noch keine Datei gewählt.';
   if (f && !$('t-name').value.trim()) $('t-name').value = f.name.replace(/[.][^.]*$/, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '_').slice(0, 60);
 };
 $('t-hochladen').onclick = async () => {
@@ -963,7 +1071,8 @@ $('n-anlegen').onclick = async () => {
 };
 
 anmeldung().then(() => {
-  const tab = document.querySelector('nav button[data-tab="' + location.hash.slice(1) + '"]');   // z.B. /lehrer#teile
+  const marke = {umgebungen: 'welten'}[location.hash.slice(1)] || location.hash.slice(1);
+  const tab = document.querySelector('nav button[data-tab="' + marke + '"]');   // z.B. /lehrer#teile, #welten
   if (tab) tab.click();
   simulationen(); setInterval(() => { if (!$('tab-sim').hidden) simulationen(); }, 2000); });
 </script></body></html>"""
@@ -979,11 +1088,9 @@ header { flex-wrap:wrap; }
 webots-view { display:block; width:100%%; height:100%%; position:relative; }
 #hinweis { font-size:.9em; color:var(--leise); }
 .knoepfe { margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-.knoepfe a, .knoepfe button { color:var(--text); background:var(--knopf); border:0; border-radius:3px; padding:7px 11px;
-  font:inherit; font-size:.9em; cursor:pointer; text-decoration:none; }
-.knoepfe a:hover, .knoepfe button:hover { background:var(--blau-hell); color:var(--blau); }
-.knoepfe button.warnen { background:var(--pink); color:#fff; }
-#irc { font-size:.9em; padding:4px 10px; border-radius:10px; background:var(--knopf); font-weight:700; }
+.knoepfe a, .knoepfe button { font-size:.86em; padding:7px 12px; }
+.knoepfe button.warnen { color:var(--pink); }
+#irc { font-size:.85em; padding:6px 12px; border-radius:999px; background:var(--bg); font-weight:700; }
 #irc.gruen { background:var(--gruen); color:var(--schwarz); } #irc.gelb { background:var(--gelb); color:var(--schwarz); }
 #irc.rot { background:var(--pink); color:#fff; }
 /* Aufgabe: Seitenleiste rechts, erst auf Klick; das 3D-Bild wird schmaler statt verdeckt */
@@ -994,7 +1101,7 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 #aufgabe .zu { border:0; background:var(--knopf); border-radius:3px; font:inherit; font-size:1.1em; line-height:1;
   padding:5px 9px; cursor:pointer; }
 #aufgabe .pdf { display:inline-block; margin-top:6px; color:var(--blau); font-weight:700; }
-.knoepfe button.an { background:var(--blau); color:#fff; }
+.knoepfe button.an { background:var(--blau); border-color:var(--blau); color:#fff; }
 [hidden] { display:none !important; }
 @media (max-width: 760px) { .ansicht { position:relative; }
   #aufgabe { position:absolute; inset:0; width:auto; z-index:8; border-left:0; } }
@@ -1262,32 +1369,30 @@ zustand(); setInterval(zustand, 3000);
 WAHL = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ReBeL-Simulation</title><style>%(stil)s
-main { grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); padding-top:12px; }
+main { grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); padding:8px 28px 32px; gap:20px; }
 .welt { padding:0; overflow:hidden; }
-.welt .bild { aspect-ratio:4/3; background:var(--bg) center/cover no-repeat; display:flex; align-items:center;
+.welt:hover { box-shadow:var(--schatten-2); transform:translateY(-2px); }
+.welt .bild { aspect-ratio:16/10; background:#eef1f4 center/cover no-repeat; display:flex; align-items:center;
   justify-content:center; color:var(--grau); font-weight:700; border-bottom:1px solid var(--linie); }
-.welt .text { padding:12px 14px 14px; display:flex; flex-direction:column; gap:6px; flex:1; }
-.welt h2 { margin:0; font-size:1.15em; }
-.welt a { color:var(--blau); font-size:.92em; }
-.aufgabe { font-size:.92em; max-height:9.5em; overflow:auto; color:#333; }
-button.knopf { margin-top:auto; background:var(--blau); color:#fff; border:0; padding:10px; border-radius:3px;
-  font:inherit; font-weight:700; cursor:pointer; }
-button.knopf:hover { background:var(--blau-dunkel); }
-button.knopf:disabled { background:var(--grau-hell); color:var(--leise); cursor:default; }
-.balken { margin:16px 20px 0; padding:12px 16px; border-radius:var(--ecke) 0 0 0; background:var(--karte);
-  border:1px solid var(--linie); border-left:5px solid var(--blau); }
-.balken.warnen { border-left-color:var(--gelb); }
-.balken a { color:var(--blau); }
-h1.abschnitt { margin:22px 20px 0; font-size:1.3em; color:var(--text); }
-header .pc { margin-left:auto; font-size:.9em; color:var(--leise); }
-header a.lehrer { color:var(--blau); text-decoration:none; font-weight:700; border:2px solid var(--blau); border-radius:3px;
-  padding:6px 12px; font-size:.92em; white-space:nowrap; }
-header a.lehrer:hover { background:var(--blau); color:#fff; }
+.welt .text { padding:16px 18px 18px; display:flex; flex-direction:column; gap:8px; flex:1; }
+.welt h2 { margin:0; font-size:1.15em; letter-spacing:-.01em; }
+.welt a { color:var(--blau); font-size:.9em; font-weight:600; }
+.aufgabe { font-size:.92em; max-height:9.5em; overflow:auto; color:#3d4656; }
+button.knopf { margin-top:auto; padding:11px; font-size:.95em; }
+button.knopf:disabled { background:var(--bg); border-color:var(--linie); color:var(--leise); }
+.balken { margin:20px 28px 0; padding:14px 18px; border-radius:var(--ecke) 8px 8px 8px; background:var(--blau-hell);
+  border:1px solid #cfe3f1; color:#0d3d5c; }
+.balken.warnen { background:#fff6e6; border-color:#f6dcae; color:#6b4500; }
+.balken a { color:var(--blau); font-weight:700; }
+h1.abschnitt { margin:26px 28px 8px; font-size:1.55em; color:var(--text); letter-spacing:-.015em; display:flex; align-items:center; }
+header .pc { margin-left:auto; font-size:.85em; color:var(--leise); padding:5px 10px; border-radius:999px; background:var(--bg); }
+header a.lehrer { white-space:nowrap; }
+@media (max-width: 640px) { main { padding:8px 16px 24px; } .balken, h1.abschnitt { margin-left:16px; margin-right:16px; } }
 </style></head>
-<body><header>%(marke)s <span class="unter">Welt wählen</span><span class="pc">Dein PC: %(pc)s</span>
-<a class="lehrer" href="/lehrer">%(lehrer)s</a></header>
+<body><header>%(marke)s <span class="unter">Roboterumgebung wählen</span><span class="pc">Dein PC: %(pc)s</span>
+<a class="lehrer btn" href="/lehrer">%(lehrer)s</a></header>
 %(balken)s
-<h1 class="abschnitt">%(dreieck)sVerfügbare Welten</h1>
+<h1 class="abschnitt">%(dreieck)sRoboterumgebungen</h1>
 <main>%(karten)s</main>
 <script>
 document.querySelectorAll('button[data-welt]').forEach(b => b.onclick = async () => {
@@ -1576,7 +1681,7 @@ def seite_viewer(platz, welt=None):
         knoepfe = ('<button id="l-teile" title="Alle Werkstücke zurück auf ihre Startlage">Teile zurück</button>'
                    '<button id="l-reset" title="Webots neu starten, wenn etwas hängt">Neu starten</button>'
                    '<button id="l-ende" class="warnen">Beenden</button>'
-                   '<a href="/lehrer">Lehrerbereich</a>')
+                   '<a class="btn" href="/lehrer">Lehrerbereich</a>')
         aufgabe = ""
         schueler_js = LEHRER_VIEWER_JS.replace("%%PLATZ%%", html.escape(platz["platz"]))
     else:
@@ -1585,7 +1690,7 @@ def seite_viewer(platz, welt=None):
                    '<button id="knopf-aufgabe">Aufgabe</button>'
                    '<button id="knopf-teile" title="Alle Werkstücke zurück auf ihre Startlage">Teile zurück</button>'
                    '<button id="knopf-reset" title="Webots neu starten, wenn etwas hängt">Neu starten</button>'
-                   '<a href="/?wechseln=1">Welt wechseln</a>'
+                   '<a class="btn" href="/?wechseln=1">Umgebung wechseln</a>'
                    '<button id="knopf-ende" class="warnen">Beenden</button>')
         pdf = ('<a class="pdf" href="/welten/%s" target="_blank">Arbeitsblatt (PDF) öffnen</a>' % html.escape(welt["pdf"])
                if welt["pdf"] else "")
@@ -1613,10 +1718,10 @@ def seite_wahl(pc, welten, eigener, frei, max_sim, meldung=None, lehrkraft=False
         balken.append('<div class="balken warnen">Deine Simulation wurde beendet: %s.</div>' % html.escape(meldung))
     if eigener is not None:
         titel = next((w["titel"] for w in welten if w["datei"] == eigener["welt"]), eigener["welt"])
-        balken.append('<div class="balken">Deine Simulation läuft mit <b>%s</b>. Wähle eine andere Welt '
+        balken.append('<div class="balken">Deine Simulation läuft mit <b>%s</b>. Wähle eine andere Roboterumgebung '
                       'oder <a href="/">gehe zurück</a>.</div>' % html.escape(titel))
     elif frei > 0:
-        balken.append('<div class="balken">Starte zuerst iRC auf diesem PC, dann eine Welt. '
+        balken.append('<div class="balken">Starte zuerst iRC auf diesem PC, dann eine Roboterumgebung. '
                       'Noch %d von %d Simulationen frei.</div>' % (frei, max_sim))
     else:
         balken.append('<div class="balken warnen">Alle %d Simulationen sind belegt. '
@@ -1633,11 +1738,11 @@ def seite_wahl(pc, welten, eigener, frei, max_sim, meldung=None, lehrkraft=False
         aktuell = eigener is not None and eigener["welt"] == w["datei"]
         knopf = ('<button class="knopf" data-welt="%s"%s>%s</button>'
                  % (html.escape(w["datei"]), " disabled" if gesperrt or aktuell else "",
-                    "läuft gerade" if aktuell else ("Diese Welt nehmen" if eigener else "Simulation starten")))
+                    "läuft gerade" if aktuell else ("Diese nehmen" if eigener else "Simulation starten")))
         karten.append('<div class="platz welt">%s<div class="text"><h2>%s</h2><div class="aufgabe md">%s</div>%s%s'
                       '</div></div>' % (bild, html.escape(w["titel"]), aufgabe_md.zu_html(w["aufgabe"]), pdf, knopf))
     if not karten:
-        karten.append('<div class="leer">Es sind noch keine Welten freigegeben.</div>')
+        karten.append('<div class="leer">Es sind noch keine Roboterumgebungen freigegeben.</div>')
     return WAHL % {"stil": STIL, "marke": marke(), "dreieck": DREIECK, "pc": html.escape(pc),
                    "lehrer": "Lehrerbereich" if lehrkraft else "Anmeldung Lehrkraft",
                    "balken": "\n".join(balken), "karten": "\n".join(karten)}
@@ -1853,7 +1958,7 @@ def teil_ersetzen(name, inhalt, erzwingen, wer_name, quelle=None):
             e = (satz or {}).get("entwurf")
             if e and (b["teil"] == name or baukasten.teil_verweise(e, name)):
                 plan.append(("backensatz", b["name"], e) + baukasten.entwurf_umstellen(e, name, alt, neu))
-        offen = [{"wo": ("Welt " if art == "welt" else "Backensatz ") + wo, "punkte": o}
+        offen = [{"wo": ("Roboterumgebung " if art == "welt" else "Backensatz ") + wo, "punkte": o}
                  for art, wo, _e, _n, o, _v in plan if o]
         if offen and not erzwingen:
             raise TeilKonflikt("Im neuen Modell fehlen Verbindungspunkte, an denen andere Teile hängen.", offen)
@@ -1863,7 +1968,7 @@ def teil_ersetzen(name, inhalt, erzwingen, wer_name, quelle=None):
         shutil.rmtree(zwischen, ignore_errors=True)
     bericht = dict(ergebnis, papierkorb=papierkorb, neu_gerechnet=[], neu_verbinden=offen, verschoben=[], fehler=[])
     for art, wo, _e, e_neu, o, verschoben in plan:
-        titel = ("Welt " if art == "welt" else "Backensatz ") + wo
+        titel = ("Roboterumgebung " if art == "welt" else "Backensatz ") + wo
         bericht["verschoben"] += [{"wo": titel, "punkt": text, "mm": mm} for text, mm in verschoben]
         try:
             if o:   # nur die umgestellten Punkte speichern; neu gerechnet wird nach dem Verbinden im Baukasten
@@ -1982,7 +2087,7 @@ def welt_importieren(inhalt, name, ersetzen, wer_name):
     """Paket einspielen; bringt es einen neuen Backensatz mit, das Robotermodell neu erzeugen."""
     ziel = (name or "") + ".wbt"
     if ersetzen and name and any(p["welt"] == ziel for p in lese_plaetze()):
-        raise welt_paket.PaketFehler("Die Welt %s läuft gerade. Erst die Simulation beenden." % name)
+        raise welt_paket.PaketFehler("Die Roboterumgebung %s läuft gerade. Erst die Simulation beenden." % name)
     bericht = welt_paket.importieren(inhalt, WELTEN_DIR, TEILE_DIR, BACKEN_DIR, neuer_name=name, ersetzen=ersetzen,
                                      besitzer="lehrer:%s" % wer_name,
                                      fest_backen=[b["name"] for b in backensaetze_liste() if b["fest"]])
@@ -1993,14 +2098,17 @@ def welt_importieren(inhalt, name, ersetzen, wer_name):
         except baukasten.BaukastenFehler as e:
             bericht["hinweise"].append(str(e))
     if bericht["greifer"] and bericht["greifer"] not in greifer_liste():
-        bericht["hinweise"].append("Den Greifer %s kennt das Robotermodell hier nicht; im Welt-Dialog einen anderen wählen."
+        bericht["hinweise"].append("Den Greifer %s kennt das Robotermodell hier nicht; im Dialog der Roboterumgebung einen anderen wählen."
                                    % bericht["greifer"])
     return bericht
 
 
 def seite(text):
-    """Gemeinsame Bausteine in eine Seitenvorlage einsetzen (Stil, Kopfzeile mit Logo)."""
-    return text.replace("%%STIL%%", STIL).replace("%%MARKE%%", marke()).replace("%%DREIECK%%", DREIECK)
+    """Gemeinsame Bausteine in eine Seitenvorlage einsetzen (Stil, Kopfzeile mit Logo, Symbole)."""
+    text = text.replace("%%STIL%%", STIL).replace("%%MARKE%%", marke()).replace("%%DREIECK%%", DREIECK)
+    for name, pfade in SYMBOLE.items():
+        text = text.replace("%%ICON_" + name + "%%", symbol(pfade))
+    return text
 
 
 def modell_erzeugen():
@@ -2137,11 +2245,11 @@ def baukasten_rechnen(entwurf):
 def baukasten_speichern(welt, entwurf, wer_name):
     """Entwurf loesen, als Welt schreiben (wbt + Entwurf + Titel/Aufgabe), Vorschaubild erzeugen."""
     if not WELT_NAME.fullmatch(welt or ""):
-        raise baukasten.BaukastenFehler("Weltname: 1 bis 50 Zeichen, nur a-z, 0-9, - und _.")
+        raise baukasten.BaukastenFehler("Dateiname: 1 bis 50 Zeichen, nur a-z, 0-9, - und _.")
     wbt = os.path.join(WELTEN_DIR, welt + ".wbt")
     entwurf_datei = os.path.join(WELTEN_DIR, welt + ".baukasten.json")
     if os.path.exists(wbt) and not os.path.exists(entwurf_datei):
-        raise baukasten.BaukastenFehler("Die Welt %s wurde nicht mit dem Baukasten gebaut und bleibt unveraendert." % welt)
+        raise baukasten.BaukastenFehler("Die Roboterumgebung %s wurde nicht mit dem Baukasten gebaut und bleibt unverändert." % welt)
     lade = baukasten.teile_lader(TEILE_DIR)
     lagen = baukasten.loese(entwurf, lade)
     entwurf = dict(entwurf, besitzer=entwurf.get("besitzer") or "lehrer:%s" % wer_name,
@@ -2514,7 +2622,7 @@ class Handler(BaseHTTPRequestHandler):
             datei = str(daten.get("datei", ""))
             plaetze = [p["platz"] for p in lese_plaetze() if p["welt"] == datei]
             if plaetze:
-                raise lehrer.LehrerFehler("Die Welt läuft gerade auf Platz %s. Erst die Simulation beenden." % ", ".join(plaetze))
+                raise lehrer.LehrerFehler("Die Roboterumgebung läuft gerade auf Platz %s. Erst die Simulation beenden." % ", ".join(plaetze))
             zusatz = {"dateien": lehrer.loesche_welt(WELTEN_DIR, datei)}
             protokoll = "Welt %s geloescht (Papierkorb: %s)" % (datei, ", ".join(zusatz["dateien"]))
         elif aktion == "markdown":
