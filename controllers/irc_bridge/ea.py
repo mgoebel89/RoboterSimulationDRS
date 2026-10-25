@@ -75,12 +75,14 @@ def lade_ea(welt_pfad):
         with open(os.path.splitext(welt_pfad)[0] + ".json", encoding="utf-8") as f:
             ea = json.load(f).get("ea") or {}
     except (OSError, ValueError, AttributeError):
-        return {"taster": [], "leuchten": []}
+        return {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []}
     taster = [t for t in ea.get("taster", []) if isinstance(t, dict) and isinstance(t.get("din"), int)]
     leuchten = [l for l in ea.get("leuchten", []) if isinstance(l, dict) and isinstance(l.get("dout"), int)]
     sensoren = [s for s in ea.get("sensoren", []) if isinstance(s, dict) and isinstance(s.get("knoten"), str)
                 and (isinstance(s.get("din"), int) or s.get("typ") == "farbe")]
-    return {"taster": taster[:16], "leuchten": leuchten[:16], "sensoren": sensoren[:32]}
+    naeherung = [n for n in ea.get("naeherung", []) if isinstance(n, dict) and isinstance(n.get("knoten"), str)
+                 and isinstance(n.get("din"), int)]
+    return {"taster": taster[:16], "leuchten": leuchten[:16], "sensoren": sensoren[:32], "naeherung": naeherung[:32]}
 
 
 class Taster:
@@ -222,6 +224,107 @@ class Sensoren:
             else:
                 for f in s.get("farben", []):
                     setze(f["din"], wert == f["farbe"])
+        return sig
+
+
+# --- Naeherungssensoren (Stufe G2) ---
+# Schaltabstand = Sn x Faktor des Materials (Reduktionsfaktoren wie in Datenblaettern, gerundet). Induktiv: nur Metall;
+# kapazitiv: alles, Kunststoff und Holz schwaecher. Material steht im Feld "material" des Werkstuecks (Stufe G1).
+FAKTOR = {"induktiv": {"stahl": 1.0, "edelstahl": 0.7, "messing": 0.5, "alu": 0.4, "pla": 0.0, "holz": 0.0},
+          "kapazitiv": {"stahl": 1.0, "edelstahl": 1.0, "messing": 1.0, "alu": 1.0, "pla": 0.5, "holz": 0.4}}
+HYSTERESE = 1.1           # einmal geschaltet, faellt der Sensor erst bei 10 % mehr Abstand ab
+LED_AN, LED_AUS = [1.0, 0.82, 0.1], [0.35, 0.3, 0.1]
+
+
+def faktor(typ, material):
+    return FAKTOR.get(typ, {}).get(material or "pla", 0.0)
+
+
+def _mv9(r, v):   # 3x3 (9 Zahlen, zeilenweise wie Webots) mal Vektor
+    return [r[0] * v[0] + r[1] * v[1] + r[2] * v[2], r[3] * v[0] + r[4] * v[1] + r[5] * v[2],
+            r[6] * v[0] + r[7] * v[1] + r[8] * v[2]]
+
+
+def _mtv9(r, v):  # transponiert mal Vektor
+    return [r[0] * v[0] + r[3] * v[1] + r[6] * v[2], r[1] * v[0] + r[4] * v[1] + r[7] * v[2],
+            r[2] * v[0] + r[5] * v[1] + r[8] * v[2]]
+
+
+def abstand_vor_sensor(sensor, durchmesser, laenge, reichweite, teil, wolke):
+    """Kleinster Abstand (m) einer Teil-Oberflaeche vor der aktiven Flaeche, im aktiven Durchmesser und hoechstens
+    `reichweite` weit; None, wenn nichts davor liegt. sensor/teil: (Position, Drehung als 9 Zahlen) in der Welt,
+    wolke: Punktwolke der Teil-Oberflaeche im Teilsystem (kollision.Punktwolke)."""
+    (o_s, r_s), (o_t, r_t) = sensor, teil
+    r = durchmesser / 2.0
+    # Erfassungsbereich (Zylinder vor der Flaeche, als Quader) ins Teilsystem, dort nur Punkte im Kasten holen
+    ecken = []
+    for x in (-r, r):
+        for y in (-r, r):
+            for z in (laenge - 0.002, laenge + reichweite):
+                w = _mv9(r_s, [x, y, z])
+                ecken.append(_mtv9(r_t, [o_s[i] + w[i] - o_t[i] for i in range(3)]))
+    lo = [min(e[i] for e in ecken) for i in range(3)]
+    hi = [max(e[i] for e in ecken) for i in range(3)]
+    bester = None
+    for q in wolke.in_box(lo, hi):
+        w = _mv9(r_t, q)
+        s = _mtv9(r_s, [o_t[i] + w[i] - o_s[i] for i in range(3)])   # Punkt im Sensorsystem
+        vor = s[2] - laenge
+        if -0.002 <= vor <= reichweite and s[0] * s[0] + s[1] * s[1] <= r * r and (bester is None or vor < bester):
+            bester = vor
+    return None if bester is None else max(0.0, bester)
+
+
+class Naeherungssensoren:
+    """Naeherungssensoren der Welt (DEF NAEHERUNG_n, Typ Naeherungssensor): Werkstueck davor -> Eingang, LED."""
+
+    def __init__(self, liste, robot, din_versatz=-1, log=print, wolke_fn=None):
+        self.liste, self.knoten, self.versatz, self.wolke_fn = [], [], din_versatz, wolke_fn
+        for n in liste:
+            knoten = robot.getFromDef(n["knoten"])
+            if knoten is None:
+                log("E/A: Naeherungssensor %s fehlt in der Welt" % n["knoten"])
+                continue
+            self.liste.append(n)
+            self.knoten.append(knoten)
+        self.an = [False] * len(self.liste)
+        self.abstand_mm = [None] * len(self.liste)
+
+    @staticmethod
+    def material(node):
+        feld = node.getField("material")
+        return feld.getSFString() if feld is not None else "pla"
+
+    def pruefen(self, teile):
+        for i, (n, k) in enumerate(zip(self.liste, self.knoten)):
+            d, laenge = n.get("durchmesser_mm", 12.0) / 1000.0, n.get("laenge_mm", 50.0) / 1000.0
+            lage_s = (k.getPosition(), k.getOrientation())
+            flaeche = [lage_s[0][j] + _mv9(lage_s[1], [0.0, 0.0, laenge])[j] for j in range(3)]
+            bester = None
+            for t in teile:
+                f = faktor(n.get("typ"), self.material(t))
+                if f <= 0:
+                    continue
+                reichweite = n["sn_mm"] / 1000.0 * f * (HYSTERESE if self.an[i] else 1.0)
+                wolke = self.wolke_fn(t)
+                pos = t.getPosition()
+                if sum((pos[j] - flaeche[j]) ** 2 for j in range(3)) ** 0.5 > reichweite + wolke.radius + d:
+                    continue   # zu weit weg, ohne Punkte anzusehen
+                a = abstand_vor_sensor(lage_s, d, laenge, reichweite, (pos, t.getOrientation()), wolke)
+                if a is not None and (bester is None or a < bester):
+                    bester = a
+            an = bester is not None
+            self.abstand_mm[i] = None if bester is None else round(bester * 1000.0, 1)
+            if an != self.an[i]:
+                self.an[i] = an
+                k.getField("led").setSFColor(LED_AN if an else LED_AUS)
+
+    def signale(self):
+        sig = {}
+        for n, an in zip(self.liste, self.an):
+            nr = n["din"] + self.versatz
+            if 0 <= nr < 64:
+                sig[nr] = sig.get(nr, False) or (an != (n.get("art") == "oeffner"))
         return sig
 
 

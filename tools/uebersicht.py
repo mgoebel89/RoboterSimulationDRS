@@ -269,6 +269,7 @@ SYMBOLE = {
     "NEU": '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 11v6M9 14h6"/>',
     "KOLLISION": '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
     "SPERRZONE": '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+    "NAEHERUNG": '<rect x="9" y="7" width="6" height="14" rx="1"/><path d="M8 4h8M10 10h4M10 13h4M10 16h4"/>',
 }
 
 
@@ -1227,6 +1228,8 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 .ea .sensor { display:flex; align-items:center; gap:8px; padding:2px 4px; }
 .ea .sensor .lampe { width:16px; height:16px; margin:0 7px; border-radius:3px; }
 .ea .sensor.an .lampe { background:#2ecc71; box-shadow:0 0 10px #2ecc71; border-color:#fff; }
+.ea .sensor.ini .lampe { border-radius:50%%; } .ea .ini small b { font-weight:400; color:#ffd27a; }
+.ea .sensor.ini.an .lampe { background:#f5c518; box-shadow:0 0 10px #f5c518; }
 .ea .leuchte.an[data-farbe=gruen] .lampe { background:#2ecc71; box-shadow:0 0 12px #2ecc71; }
 .ea .leuchte.an[data-farbe=gelb] .lampe { background:#f1c40f; box-shadow:0 0 12px #f1c40f; }
 .ea .leuchte.an[data-farbe=rot] .lampe { background:#e74c3c; box-shadow:0 0 12px #e74c3c; }
@@ -1749,7 +1752,7 @@ def kamera_ansichten(welt_datei):
             "oben": [[cx, cy, h + 1.3], [cx, cy, h], [1, 0, 0]]}
 
 
-WBT_TEIL = re.compile(r'(?:DEF \S+ )?(Werkstueck|Aufbau|Sensorfeld) \{(.*?)\n\}', re.S)
+WBT_TEIL = re.compile(r'(?:DEF \S+ )?(Werkstueck|Aufbau|Sensorfeld|Naeherungssensor) \{(.*?)\n\}', re.S)
 
 
 def _wbt_vektor(inhalt, feld):
@@ -1787,7 +1790,9 @@ def welt_beschriftungen(welt_datei):
             for t in entwurf["teile"]:
                 if t.get("art") == "sensor":
                     sensor_namen["sensor_" + t["id"]] = (t.get("sensor") or {}).get("name") or t["id"]
-                elif t.get("art") not in ("werkstueck", "sperrzone"):
+                elif t.get("art") == "naeherung":
+                    sensor_namen["naeherung_" + t["id"]] = (t.get("naeherung") or {}).get("name") or t["id"]
+                elif t.get("art") not in ("werkstueck", "sperrzone", "naeherung"):
                     b = lade(t["teil"])["box"]
                     ecken = [lagen[t["id"]].punkt([x, y, z]) for x in (b[0], b[3]) for y in (b[1], b[4]) for z in (b[2], b[5])]
                     oben[t["id"]] = [round((min(p[0] for p in ecken) + max(p[0] for p in ecken)) / 2000, 5),
@@ -1808,6 +1813,10 @@ def welt_beschriftungen(welt_datei):
             groesse = _wbt_vektor(inhalt, "groesse") or [0.04, 0.04, 0.02]
             anzeige = sensor_namen.get(name) or (name[7:] if name.startswith("sensor_") else name)
             schilder.append({"name": name, "text": anzeige, "art": "sensor", "folgen": True, "hoehe_m": groesse[2] / 2})
+        elif art == "Naeherungssensor":   # fest, am Fuss des Sensors
+            punkt = _wbt_vektor(inhalt, "translation")
+            if punkt:
+                schilder.append({"name": name, "text": sensor_namen.get(name) or name[10:], "art": "sensor", "punkt": punkt})
         else:
             punkt = oben.get(name) or _wbt_vektor(inhalt, "translation")
             if punkt:
@@ -1846,6 +1855,13 @@ async function eaZustand() {
     s.querySelector('.lampe').style.background = typeof wert === 'string' ? (SENSOR_FARBEN[wert] || '') : '';
     s.querySelector('.lampe').title = typeof wert === 'string' ? wert : (wert ? 'belegt' : 'frei');
   });
+  (d.naeherung || []).forEach((an, i) => {   // Naeherungssensoren: LED und Abstand des naechsten Teils
+    const s = document.querySelector('.ea .ini[data-ini="' + i + '"]');
+    if (!s) return;
+    s.classList.toggle('an', !!an);
+    const mm = (d.naeherung_mm || [])[i];
+    s.querySelector('.ini-abstand').textContent = mm == null ? '' : ' · ' + String(mm).replace('.', ',') + ' mm';
+  });
   const m = document.getElementById('ea-meldung');
   if (m) { m.hidden = d.ea_ok !== false; m.textContent = d.ea_meldung || ''; }
 }
@@ -1859,7 +1875,7 @@ def ea_von_welt(welt_datei):
     try:
         return baukasten.ea_werte({"ea": (welt or {}).get("ea") or {}})
     except baukasten.BaukastenFehler:
-        return {"taster": [], "leuchten": [], "sensoren": []}
+        return {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []}
 
 
 def sensor_text(s):
@@ -1875,7 +1891,7 @@ def sensor_text(s):
 def ea_html(ea, steuern):
     """Taster unten links, Leuchtmelder unten rechts (leer, wenn die Welt keine hat)."""
     teile = []
-    if ea["taster"] or ea["sensoren"]:
+    if ea["taster"] or ea["sensoren"] or ea.get("naeherung"):
         knoepfe = "".join(
             '<button class="taster" data-nr="%d" title="%s"><span class="kappe"></span><span>%s<small>DIn%d · %s · %s</small>'
             '</span></button>' % (i, "Gedrückt halten" if t["modus"] == "tastend" else "Drücken schaltet um",
@@ -1884,6 +1900,12 @@ def ea_html(ea, steuern):
         knoepfe += "".join(   # Sensorflaechen: nur Anzeige, gruen = belegt bzw. erkannte Farbe
             '<div class="sensor" data-nr="%d"><span class="lampe"></span><span>%s<small>%s</small></span></div>'
             % (i, html.escape(s["name"]), html.escape(sensor_text(s))) for i, s in enumerate(ea["sensoren"]))
+        knoepfe += "".join(   # Naeherungssensoren: gelbe LED wie am echten Sensor
+            '<div class="sensor ini" data-ini="%d"><span class="lampe"></span><span>%s<small>%s %s · Sn %s mm · DIn%d · %s'
+            '<b class="ini-abstand"></b></small></span></div>'
+            % (i, html.escape(n["name"]), "Induktiv" if n["typ"] == "induktiv" else "Kapazitiv", n["bauform"],
+               ("%g" % n["sn_mm"]).replace(".", ","), n["din"], "Öffner" if n["art"] == "oeffner" else "Schließer")
+            for i, n in enumerate(ea.get("naeherung") or []))
         teile.append('<div class="ea links%s">%s<div id="ea-meldung" hidden></div></div>'
                      % ("" if steuern else " nur-sehen", knoepfe))
     if ea["leuchten"]:
@@ -2547,7 +2569,7 @@ def baukasten_speichern(welt, entwurf, wer_name):
     except (OSError, ValueError):   # neue Welt: erst freigeben, wenn sie fertig ist
         angaben = {"titel": entwurf.get("titel") or welt, "aufgabe": entwurf.get("aufgabe", ""), "sichtbar": False}
     # Taster, Leuchten und Sensorflaechen liest der Controller beim Start der Simulation
-    angaben["ea"] = dict(entwurf["ea"], sensoren=baukasten.ea_sensoren(entwurf))
+    angaben["ea"] = dict(entwurf["ea"], sensoren=baukasten.ea_sensoren(entwurf), naeherung=baukasten.ea_naeherung(entwurf))
     angaben["kollision"] = entwurf["kollision"]   # liest der Controller beim Start (welt_kollision)
     angaben["grenzen"] = baukasten.grenzen_fuer_welt(entwurf, lagen)   # Arbeitsraum, Sperrzonen, Achsgrenzen (K4)
     lehrer.schreibe_json(angaben_datei, angaben)
@@ -2640,7 +2662,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 st = lese_status(platz["platz"]) or {}
                 self._json(200, {k: st.get(k) for k in ("tcp", "tcp_y", "hilfe", "greifer_zu", "teil", "taster",
-                                                        "leuchten", "sensoren", "ea_meldung", "ea_ok", "kollision", "crash")})
+                                                        "leuchten", "sensoren", "naeherung", "naeherung_mm", "ea_meldung", "ea_ok",
+                                                        "kollision", "crash")})
         elif re.fullmatch(r"/welten/[A-Za-z0-9_-]{1,60}\.(png|jpg|pdf)", pfad):
             datei = os.path.join(WELTEN_DIR, pfad.rsplit("/", 1)[1])
             try:

@@ -319,7 +319,8 @@ class TestSchuelerseiten(Grundlage):
                          {"name": "Farbe", "typ": "farbe", "ausgabe": "bits", "din": 30, "bits": 2, "knoten": "SENSOR_1",
                           "farben": [{"farbe": "rot", "code": 1}, {"farbe": "blau", "code": 2}]},
                          {"name": "Farbe 2", "typ": "farbe", "knoten": "SENSOR_2",
-                          "farben": [{"farbe": "gelb", "din": 40}]}]}})
+                          "farben": [{"farbe": "gelb", "din": 40}]}],
+            "naeherung": [{"name": "Metall?", "knoten": "NAEHERUNG_0", "typ": "induktiv", "bauform": "M12", "din": 22}]}})
         self.senden("/api/starten", {"welt": "tisch.wbt"})
         ansicht = self.holen("/")
         self.assertIn('class="taster" data-nr="0"', ansicht)
@@ -331,6 +332,7 @@ class TestSchuelerseiten(Grundlage):
         self.assertIn("Farbsensor · Code an DIn30–31: rot=1, blau=2", ansicht)
         self.assertIn("Farbsensor · gelb→DIn40", ansicht)
         self.assertIn("const EA_STEUERN = true;", ansicht)
+        self.assertIn("Metall?<small>Induktiv M12 · Sn 2 mm · DIn22 · Schließer", ansicht)
         self.status("01", taster=[True], leuchten=[False], sensoren=[True], ea_ok=False, ea_meldung="App fehlt")
         d = json.loads(self.holen("/api/platz/01"))
         self.assertEqual((d["taster"], d["leuchten"], d["sensoren"], d["ea_ok"]), ([True], [False], [True], False))

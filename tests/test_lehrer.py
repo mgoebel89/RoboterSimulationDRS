@@ -108,6 +108,19 @@ class TestBenutzer(unittest.TestCase):
         self.assertEqual(s.wartezeit("pc"), 0)
 
 
+class TestSeitenvorlagen(unittest.TestCase):
+    def test_keine_doppelten_ids(self):
+        """Doppelte IDs machen Knoepfe stumm (getElementById nimmt das erste Element; so passiert 25.10.2026)."""
+        import re
+        with open(os.path.join(os.path.dirname(uebersicht.__file__), "baukasten_seite.html"), encoding="utf-8") as f:
+            seiten = {"baukasten_seite.html": f.read()}
+        seiten.update(LEHRER_SEITE=uebersicht.LEHRER_SEITE, VIEWER=uebersicht.VIEWER)
+        for name, text in seiten.items():
+            ids = re.findall(r'(?<![-\w])id="([\w-]+)"', text)   # nur feste IDs, nicht data-id oder zusammengesetzte
+            self.assertGreater(len(ids), 5, name)
+            self.assertEqual(sorted({i for i in ids if ids.count(i) > 1}), [], name)
+
+
 class TestEinstellungenUndWelten(Grundlage):
     def test_einstellungen_pruefen_und_ueberlagern(self):
         werte = lehrer.pruefe_einstellungen({"max_simulationen": "8", "leerlauf_minuten": 20,
@@ -452,7 +465,7 @@ class TestLehrerSeiten(Grundlage):
             self.assertIn('modell [ "../teile/vorrichtung/netz.obj" ]', f.read())
         with open(os.path.join(self.welten, "lager.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f), {"titel": "Magazin", "aufgabe": "Teile einsortieren", "sichtbar": False,
-                                            "ea": {"taster": [], "leuchten": [], "sensoren": []},
+                                            "ea": {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []},
                                             "kollision": {"an": True, "reaktion": "stopp", "abstand_mm": 2.0, "ablage_mm": 2.0},
                                     "grenzen": {"arbeitsraum": None, "sperrzonen": [], "achsen": None, "achsen_reaktion": "stopp"}})
         self.assertEqual(self.vorschauen, ["lager.wbt"])

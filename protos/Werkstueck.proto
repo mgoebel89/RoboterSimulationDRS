@@ -9,6 +9,7 @@
 #                  Huellquader fuer Physik und Greifen, "skalierung" 0.001 fuer mm-Dateien.
 #                  "modellversatz" (m) verschiebt das CAD-Teil so, dass die Mitte seines
 #                  Huellquaders im Ursprung liegt (setzt der Weltbaukasten).
+# material: pla, stahl, edelstahl, alu, messing, holz (fuer Naeherungssensoren, Stufe G1); rauheit/metall: Aussehen.
 
 PROTO Werkstueck [
   field SFVec3f    translation 0 0 0.02
@@ -21,6 +22,9 @@ PROTO Werkstueck [
   field MFString   modell      []
   field SFFloat    skalierung  0.001
   field SFVec3f    modellversatz 0 0 0
+  field SFString   material    "pla"
+  field SFFloat    rauheit     0.5
+  field SFFloat    metall      0
 ]
 {
   Solid {
@@ -32,12 +36,12 @@ PROTO Werkstueck [
       Transform {
         translation IS modellversatz
         scale %<= fields.skalierung.value >% %<= fields.skalierung.value >% %<= fields.skalierung.value >%
-        children [ Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.5 metalness 0 } geometry Mesh { url IS modell } } ]
+        children [ Shape { appearance PBRAppearance { baseColor IS farbe roughness IS rauheit metalness IS metall } geometry Mesh { url IS modell } } ]
       }
       %< } else if (fields.form.value === 'zylinder') { >%
-      Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.5 metalness 0 } geometry Cylinder { radius %<= fields.size.value.x / 2 >% height %<= fields.size.value.z >% } }
+      Shape { appearance PBRAppearance { baseColor IS farbe roughness IS rauheit metalness IS metall } geometry Cylinder { radius %<= fields.size.value.x / 2 >% height %<= fields.size.value.z >% } }
       %< } else { >%
-      Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.5 metalness 0 } geometry Box { size IS size } }
+      Shape { appearance PBRAppearance { baseColor IS farbe roughness IS rauheit metalness IS metall } geometry Box { size IS size } }
       %< } >%
     ]
     %< if (fields.form.value === 'zylinder') { >%

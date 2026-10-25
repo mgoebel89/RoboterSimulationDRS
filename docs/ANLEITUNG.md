@@ -341,6 +341,32 @@ Die Unterseite ist schon gewählt; nur noch das Gegenstück anklicken.
 |---|---|---|
 | ![](bilder/schueler_ansicht_sensor.jpg) | ![](bilder/schueler_ansicht_farbsensor.jpg) | ![](bilder/sensorflaeche_belegt.jpg) |
 
+**Material** (Eigenschaften eines Aufbaus oder Werkstücks): Kunststoff (PLA, Standard), Stahl, Edelstahl, Aluminium,
+Messing oder Holz. Es bestimmt das Aussehen (metallisch oder matt; die Farbe wird passend vorgeschlagen und bleibt
+änderbar), die Masse von Werkstücken (aus Volumen × Dichte, wenn keine Masse eingetragen ist) und vor allem, ob
+Näherungssensoren das Teil erkennen.
+
+**Näherungssensoren** (Werkzeugleiste „Näherung“): induktiv oder kapazitiv, Bauform M12 oder M18, bündig oder nicht
+bündig eingebaut. Der Sensor ist ein Zylinder mit der aktiven Fläche oben (Kappe: induktiv blau, kapazitiv orange).
+Man setzt ihn wie ein Teil: auf Tisch oder Fläche (steht senkrecht) oder mit der Achse in die Bohrung eines Halters
+(„Was anklicken: Bohrung“), dann z.B. waagerecht, sodass der Roboter ein Werkstück davor halten kann. Er schaltet,
+wenn eine Werkstück-Oberfläche im Sensordurchmesser näher als **Sn × Materialfaktor** vor der aktiven Fläche liegt, auch
+ein gegriffenes Teil; einmal geschaltet, fällt er erst bei 10 % mehr Abstand ab.
+
+| Material | induktiv | kapazitiv |
+|---|---|---|
+| Stahl | 1,0 | 1,0 |
+| Edelstahl | 0,7 | 1,0 |
+| Messing | 0,5 | 1,0 |
+| Aluminium | 0,4 | 1,0 |
+| Kunststoff | – (nie) | 0,5 |
+| Holz | – (nie) | 0,4 |
+
+Sn ist mit Datenblattwerten vorbelegt (induktiv M12 2/4 mm, M18 5/8 mm; kapazitiv M12 4/8 mm, M18 8/12 mm, jeweils
+bündig/nicht bündig) und lässt sich ändern; die Eigenschaften zeigen die Schaltabstände je Material. Eingang (DIn) und
+Schließer/Öffner wie bei den Sensorflächen. In der Schüleransicht steht jeder Sensor links mit gelber LED und dem
+Abstand des erkannten Teils; im 3D-Bild leuchtet die LED am Sensor.
+
 Fehlt die App in iRC, steht unter den Tastern ein Hinweis („App WebotsSim … nicht freigeschaltet“).
 Laufende Simulationen übernehmen geänderte Taster und Sensoren nach **Neu starten**.
 

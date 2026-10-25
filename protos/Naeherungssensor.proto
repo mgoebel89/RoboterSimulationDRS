@@ -1,0 +1,55 @@
+#VRML_SIM R2025a utf8
+# template language: javascript
+# Naeherungssensor fuer die ReBeL-Simulation (Stufe G2): induktiv oder kapazitiv, Bauform M12/M18.
+# Zylinder entlang z, Ursprung = Mitte der Unterseite, aktive Flaeche oben (z = laenge). Ohne Physik.
+# Der Controller "irc_bridge" prueft, ob die Oberflaeche eines Werkstuecks naeher als Sn x Materialfaktor vor
+# der aktiven Flaeche liegt, setzt den zugeordneten Eingang in iRC und schaltet die gelbe LED ("led").
+# Schaltabstand, Eingang und Schliesser/Oeffner stehen in worlds/<welt>.json unter "ea" -> "naeherung".
+
+PROTO Naeherungssensor [
+  field SFVec3f    translation 0 0 0
+  field SFRotation rotation    0 0 1 0
+  field SFString   name        "naeherung"
+  field SFString{"induktiv", "kapazitiv"} typ "induktiv"
+  field SFFloat    durchmesser 0.012
+  field SFFloat    laenge      0.05
+  field SFColor    led         0.35 0.3 0.1
+]
+{
+  %< const d = fields.durchmesser.value, l = fields.laenge.value, kappe = 0.004, mutter = 0.004; >%
+  %< const kappenfarbe = fields.typ.value === 'kapazitiv' ? '0.9 0.45 0.1' : '0.2 0.45 0.75'; >%
+  Pose {
+    translation IS translation
+    rotation IS rotation
+    children [
+      Pose {   # Gewindehuelse
+        translation 0 0 %<= (l - kappe) / 2 >%
+        children [ Shape {
+          appearance PBRAppearance { baseColor 0.7 0.71 0.73 roughness 0.3 metalness 0.6 }
+          geometry Cylinder { radius %<= d / 2 >% height %<= l - kappe >% subdivision 24 }
+        } ]
+      }
+      Pose {   # aktive Flaeche (Kappe): induktiv blau, kapazitiv orange
+        translation 0 0 %<= l - kappe / 2 >%
+        children [ Shape {
+          appearance PBRAppearance { baseColor %<= kappenfarbe >% roughness 0.6 metalness 0 }
+          geometry Cylinder { radius %<= d / 2 * 0.96 >% height %<= kappe >% subdivision 24 }
+        } ]
+      }
+      Pose {   # Kontermutter etwa in der Mitte
+        translation 0 0 %<= l * 0.55 >%
+        children [ Shape {
+          appearance PBRAppearance { baseColor 0.6 0.61 0.63 roughness 0.35 metalness 0.6 }
+          geometry Cylinder { radius %<= d / 2 * 1.45 >% height %<= mutter >% subdivision 6 }
+        } ]
+      }
+      Pose {   # Schalt-LED am Kabelende
+        translation 0 0 %<= -0.003 >%
+        children [ Shape {
+          appearance PBRAppearance { baseColor IS led emissiveColor IS led roughness 0.4 metalness 0 }
+          geometry Cylinder { radius %<= d / 2 * 0.8 >% height 0.006 subdivision 16 }
+        } ]
+      }
+    ]
+  }
+}

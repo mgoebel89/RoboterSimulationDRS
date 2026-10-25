@@ -551,7 +551,7 @@ class TestEinUndAusgaenge(unittest.TestCase):
                 json.dump({"titel": "x", "ea": {"taster": self.TASTER + [{"din": "21"}], "leuchten": [{"dout": 32}]}}, f)
             cfg = ea.lade_ea(os.path.join(tmp, "w.wbt"))
             self.assertEqual((len(cfg["taster"]), len(cfg["leuchten"])), (3, 1))
-            self.assertEqual(ea.lade_ea(os.path.join(tmp, "fehlt.wbt")), {"taster": [], "leuchten": []})
+            self.assertEqual(ea.lade_ea(os.path.join(tmp, "fehlt.wbt")), {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []})
 
 
 class _Sensorknoten:
@@ -609,6 +609,49 @@ class TestSensorflaechen(unittest.TestCase):
         f.pruefen([stift])
         self.assertEqual((f.belegt, f.signale()), ([False, True], {24: False, 25: False}))
         self.assertEqual(knoten["SENSOR_0"].werte["farbe"], ea.FREI)
+
+    def test_naeherungssensoren(self):
+        """Wuerfel 20 mm vor einem Sensor M12 (aktive Flaeche bei z = 50 mm): Material und Abstand entscheiden."""
+        import kollision
+
+        class Ini(_Sensorknoten):
+            def __init__(self, pos):
+                super().__init__(pos, [0.012, 0.012, 0.05])
+                self.werte["led"] = None
+
+        knoten = {"NAEHERUNG_0": Ini([0.5, 0.0, 0.0]), "NAEHERUNG_1": Ini([0.5, 0.0, 0.0])}
+        robot = types.SimpleNamespace(getFromDef=knoten.get)
+        n = ea.Naeherungssensoren([
+            {"knoten": "NAEHERUNG_0", "typ": "induktiv", "sn_mm": 4.0, "din": 22, "durchmesser_mm": 12, "laenge_mm": 50},
+            {"knoten": "NAEHERUNG_1", "typ": "kapazitiv", "sn_mm": 8.0, "din": 23, "art": "oeffner", "durchmesser_mm": 12,
+             "laenge_mm": 50}], robot, wolke_fn=lambda t: kollision.Punktwolke(kollision.quader_punkte([0.01] * 3, 0.001),
+                                                                                duenn=0.0007))
+        wuerfel = _Teil("w", (0.5, 0.0, 0.063), (0.02, 0.02, 0.02), material="stahl")   # 3 mm vor der Flaeche
+        n.pruefen([wuerfel])
+        self.assertEqual(n.an, [True, True])
+        self.assertAlmostEqual(n.abstand_mm[0], 3.0, delta=0.6)
+        self.assertEqual(n.signale(), {21: True, 22: False})                            # zweiter ist Oeffner
+        self.assertEqual(knoten["NAEHERUNG_0"].werte["led"], ea.LED_AN)
+        wuerfel.werte["material"] = "alu"                                               # induktiv: 4 x 0,4 = 1,6 mm
+        n.pruefen([wuerfel])
+        self.assertEqual(n.an, [False, True])
+        wuerfel.werte["material"] = "pla"                                               # induktiv nie, kapazitiv 4 mm
+        n.pruefen([wuerfel])
+        self.assertEqual(n.an, [False, True])
+        wuerfel.pos[2] = 0.0643                                                          # 4,3 mm: Hysterese haelt
+        n.pruefen([wuerfel])
+        self.assertEqual(n.an, [False, True])
+        wuerfel.pos[2] = 0.0648                                                          # 4,8 mm: faellt ab
+        n.pruefen([wuerfel])
+        self.assertEqual(n.an, [False, False])
+        wuerfel.pos = [0.52, 0.0, 0.062]                                                 # seitlich daneben (2 mm Rand)
+        wuerfel.werte["material"] = "stahl"
+        n.pruefen([wuerfel])
+        self.assertEqual(n.an, [False, False])
+        self.assertEqual(knoten["NAEHERUNG_0"].werte["led"], ea.LED_AUS)
+        self.assertEqual(ea.faktor("induktiv", "messing"), 0.5)
+        self.assertEqual(ea.faktor("kapazitiv", "holz"), 0.4)
+        self.assertEqual(ea.faktor("induktiv", None), 0.0)
 
     def test_farbe_erkennen(self):
         self.assertEqual(ea.farbe_erkennen([0.1, 0.4, 0.9]), "blau")      # Standardfarbe der Werkstuecke

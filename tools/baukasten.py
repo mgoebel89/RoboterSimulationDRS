@@ -259,7 +259,14 @@ def ea_werte(entwurf=None):
     ea = (entwurf or {}).get("ea") or {}
     if not isinstance(ea, dict):
         raise BaukastenFehler("'ea' muss ein Objekt sein.")
-    ergebnis = {"taster": [], "leuchten": [], "sensoren": []}
+    ergebnis = {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []}
+    for n in ea.get("naeherung") or []:   # schreibt baukasten_speichern aus den Naeherungssensoren (ea_naeherung)
+        if not isinstance(n, dict) or not re.fullmatch(r"NAEHERUNG_\d{1,3}", str(n.get("knoten", ""))):
+            continue
+        try:
+            ergebnis["naeherung"].append(dict(naeherung_werte({"id": n["knoten"], "naeherung": n}), knoten=n["knoten"]))
+        except BaukastenFehler:
+            continue
     for s in ea.get("sensoren") or []:   # schreibt baukasten_speichern aus den Sensorflaechen (ea_sensoren)
         if not isinstance(s, dict) or not re.fullmatch(r"SENSOR_\d{1,3}", str(s.get("knoten", ""))):
             continue
@@ -503,6 +510,78 @@ def kollision_werte(entwurf=None):
     return e
 
 
+# --- Material je Teil (Stufe G1): Aussehen, Dichte (Masse aus dem Volumen) und Naeherungssensoren ---
+# rauheit/metall: PBR in Webots (ohne Umgebungsbild wirken volle Metalle dunkel, daher nur 0,55 bis 0,65)
+
+MATERIALIEN = {
+    "pla": {"name": "Kunststoff (PLA)", "dichte": 1.24, "rauheit": 0.5, "metall": 0.0, "farbe": None},
+    "stahl": {"name": "Stahl", "dichte": 7.85, "rauheit": 0.35, "metall": 0.6, "farbe": [0.56, 0.58, 0.61]},
+    "edelstahl": {"name": "Edelstahl", "dichte": 7.9, "rauheit": 0.25, "metall": 0.65, "farbe": [0.78, 0.79, 0.8]},
+    "alu": {"name": "Aluminium", "dichte": 2.70, "rauheit": 0.3, "metall": 0.55, "farbe": [0.86, 0.87, 0.89]},
+    "messing": {"name": "Messing", "dichte": 8.5, "rauheit": 0.3, "metall": 0.6, "farbe": [0.8, 0.65, 0.3]},
+    "holz": {"name": "Holz", "dichte": 0.6, "rauheit": 0.85, "metall": 0.0, "farbe": [0.72, 0.53, 0.32]},
+}
+
+
+def material_von(t):
+    """Material eines Teils (Schluessel aus MATERIALIEN), Standard PLA."""
+    m = t.get("material") or "pla"
+    if m not in MATERIALIEN:
+        raise BaukastenFehler("%s: Material %r gibt es nicht (%s)." % (t.get("id"), m, ", ".join(MATERIALIEN)))
+    return m
+
+
+# --- Naeherungssensoren (Stufe G2): induktiv/kapazitiv, Bauform M12/M18, aktive Flaeche oben (+z) ---
+# Ursprung = Mitte der Unterseite, Achse z. Schaltet, wenn eine Werkstueck-Oberflaeche im aktiven Durchmesser naeher
+# als Sn x Materialfaktor vor der aktiven Flaeche liegt (Faktoren im Controller, ea.py).
+
+NAEHERUNG_BAUFORM = {"M12": {"durchmesser_mm": 12.0, "laenge_mm": 50.0}, "M18": {"durchmesser_mm": 18.0, "laenge_mm": 60.0}}
+NAEHERUNG_SN = {("induktiv", "M12", "buendig"): 2.0, ("induktiv", "M12", "nicht_buendig"): 4.0,
+                ("induktiv", "M18", "buendig"): 5.0, ("induktiv", "M18", "nicht_buendig"): 8.0,
+                ("kapazitiv", "M12", "buendig"): 4.0, ("kapazitiv", "M12", "nicht_buendig"): 8.0,
+                ("kapazitiv", "M18", "buendig"): 8.0, ("kapazitiv", "M18", "nicht_buendig"): 12.0}
+NAEHERUNG_STANDARD = {"typ": "induktiv", "bauform": "M12", "einbau": "buendig", "din": 22, "art": "schliesser"}
+
+
+def naeherung_werte(t):
+    """Einstellungen eines Naeherungssensors (Eintrag mit "art": "naeherung"), geprueft; sn_mm leer = Datenblatt."""
+    n = t.get("naeherung") or {}
+    if not isinstance(n, dict):
+        raise BaukastenFehler("%s: 'naeherung' muss ein Objekt sein." % t.get("id"))
+    w = dict(NAEHERUNG_STANDARD, **{k: v for k, v in n.items() if v not in (None, "")})
+    if w["typ"] not in ("induktiv", "kapazitiv"):
+        raise BaukastenFehler("%s: Typ ist 'induktiv' oder 'kapazitiv'." % t.get("id"))
+    if w["bauform"] not in NAEHERUNG_BAUFORM:
+        raise BaukastenFehler("%s: Bauform ist M12 oder M18." % t.get("id"))
+    if w["einbau"] not in ("buendig", "nicht_buendig"):
+        raise BaukastenFehler("%s: Einbau ist 'buendig' oder 'nicht_buendig'." % t.get("id"))
+    sn = w.get("sn_mm", NAEHERUNG_SN[(w["typ"], w["bauform"], w["einbau"])])
+    if isinstance(sn, bool) or not isinstance(sn, (int, float)) or not 0.5 <= sn <= 40:
+        raise BaukastenFehler("%s: Schaltabstand Sn von 0,5 bis 40 mm." % t.get("id"))
+    return {"name": str(w.get("name") or t.get("id"))[:24], "typ": w["typ"], "bauform": w["bauform"], "einbau": w["einbau"],
+            "sn_mm": float(sn), "din": _din(w["din"], t.get("id")), "art": "oeffner" if w["art"] == "oeffner" else "schliesser",
+            "durchmesser_mm": NAEHERUNG_BAUFORM[w["bauform"]]["durchmesser_mm"],
+            "laenge_mm": NAEHERUNG_BAUFORM[w["bauform"]]["laenge_mm"]}
+
+
+def naeherung_merkmale(d, laenge):
+    """Zylinder mit Ursprung in der Mitte der Unterseite: Flaechen unten/oben (oben = aktive Flaeche) und die Achse als
+    Zapfen (z.B. in die Bohrung eines Halters stecken)."""
+    r = d / 2.0
+    return {"box": [-r, -r, 0.0, r, r, laenge], "volumen_mm3": math.pi * r * r * laenge,
+            "flaechen": [{"id": "unten", "normale": [0.0, 0.0, -1.0], "mitte": [0.0, 0.0, 0.0]},
+                         {"id": "oben", "normale": [0.0, 0.0, 1.0], "mitte": [0.0, 0.0, laenge]}],
+            "bohrungen": [{"id": "achse", "innen": False, "durchmesser": d, "enden": [[0.0, 0.0, 0.0], [0.0, 0.0, laenge]],
+                           "flaechen": ["mantel"]}],
+            "kanten": [], "ecken": []}
+
+
+def ea_naeherung(entwurf):
+    """Naeherungssensoren fuer worlds/<welt>.json ("ea" -> "naeherung"); "knoten" = DEF-Name in der Welt."""
+    return [dict(naeherung_werte(t), knoten="NAEHERUNG_%d" % i)
+            for i, t in enumerate(t for t in entwurf.get("teile", []) if t.get("art") == "naeherung")]
+
+
 # --- Wegbegrenzungen (Stufe K4): Arbeitsraum, Sperrzonen, Achsgrenzen ---
 # Gelten fuer Greifer, Backen und gegriffenes Teil (Achsgrenzen fuer die Gelenke). Reaktion je Grenze:
 # "warnung" (nur Hinweis) oder "stopp" (wie eine Kollision: Programm anhalten, quittieren).
@@ -696,8 +775,12 @@ def pruefe_entwurf(entwurf):
         if t["id"] in ids or t["id"] == "greifer":
             raise BaukastenFehler("Der Name %s kommt doppelt vor oder ist vergeben." % t["id"])
         ids.add(t["id"])
-        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor", "sperrzone"):
-            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck', 'sensor' oder 'sperrzone'." % t["id"])
+        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor", "sperrzone", "naeherung"):
+            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck', 'sensor', 'sperrzone' oder 'naeherung'." % t["id"])
+        if t.get("art") == "naeherung":
+            naeherung_werte(t)
+        if t.get("art", "aufbau") in ("aufbau", "werkstueck"):
+            material_von(t)
         if t.get("art") == "sensor":
             sensor_werte(t)
         if t.get("art") == "sperrzone":
@@ -725,6 +808,9 @@ def loese(entwurf, merkmale_von):
             return quader_merkmale(*sensor_werte(t)["groesse_mm"])
         if t.get("art") == "sperrzone":
             return quader_merkmale(*sperrzone_werte(t)["groesse_mm"])
+        if t.get("art") == "naeherung":
+            n = naeherung_werte(t)
+            return naeherung_merkmale(n["durchmesser_mm"], n["laenge_mm"])
         return merkmale_von(t["teil"])
     lagen, in_arbeit = {}, set()
 
@@ -770,6 +856,7 @@ EXTERNPROTO "../protos/IgusRebel6DOF.proto"
 EXTERNPROTO "../protos/Werkstueck.proto"
 EXTERNPROTO "../protos/Aufbau.proto"
 EXTERNPROTO "../protos/Sensorfeld.proto"
+EXTERNPROTO "../protos/Naeherungssensor.proto"
 
 WorldInfo {
   info [ %(info)s ]
@@ -926,7 +1013,7 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
         "tisch_kinder": kinder, "tisch_dicke": dicke, "tisch_dicke_halb": dicke / 2,
         "blick_drehung": _zahlen(_blick(ort, ziel), 4), "blick_ort": _zahlen(ort, 3), "sockel": sockel,
     })
-    sensor_nr = 0
+    sensor_nr = naeherung_nr = 0
     for t in entwurf["teile"]:
         lage = lagen[t["id"]]
         if t.get("art") == "sensor":   # DEF-Name wie in ea_sensoren: SENSOR_<Reihenfolge>
@@ -938,7 +1025,18 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
             continue
         if t.get("art") == "sperrzone":   # nur in worlds/<welt>.json ("grenzen"), nicht sichtbar in Webots
             continue
+        if t.get("art") == "naeherung":   # DEF-Name wie in ea_naeherung: NAEHERUNG_<Reihenfolge>
+            n = naeherung_werte(t)
+            text += ("DEF NAEHERUNG_%d Naeherungssensor {\n  translation %s\n  rotation %s\n  name %s\n  typ %s\n"
+                     "  durchmesser %.4f\n  laenge %.4f\n}\n" % (
+                         naeherung_nr, _zahlen([v / 1000 for v in lage.o]), _zahlen(achse_winkel(lage.r)),
+                         _vrml_text("naeherung_" + t["id"]), _vrml_text(n["typ"]),
+                         n["durchmesser_mm"] / 1000, n["laenge_mm"] / 1000))
+            naeherung_nr += 1
+            continue
         m = merkmale_von(t["teil"])
+        mat = MATERIALIEN[material_von(t)]
+        stoff = "  material %s\n  rauheit %.2f\n  metall %.2f\n" % (_vrml_text(material_von(t)), mat["rauheit"], mat["metall"])
         url = "%s/%s/netz.obj" % (teile_url, t["teil"])
         farbe = _zahlen(t.get("farbe") or ([0.1, 0.4, 0.9] if t.get("art") == "werkstueck" else [0.7, 0.7, 0.72]), 3)
         if t.get("art") == "werkstueck":
@@ -946,16 +1044,17 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
             box = m["box"]
             mitte = [(box[i] + box[i + 3]) / 2 for i in range(3)]
             groesse = [(box[i + 3] - box[i]) / 1000 for i in range(3)]
-            masse = t.get("masse_kg") or round(m.get("volumen_mm3", 1000.0) * 1.24e-6, 4)   # PLA, falls nichts angegeben
+            # Masse: angegeben, sonst aus Volumen und Dichte des Materials (g/cm3 = 1e-6 kg/mm3)
+            masse = t.get("masse_kg") or round(m.get("volumen_mm3", 1000.0) * mat["dichte"] * 1e-6, 4)
             text += ("Werkstueck {\n  translation %s\n  rotation %s\n  name %s\n  form \"modell\"\n  modell [ %s ]\n"
-                     "  skalierung 0.001\n  modellversatz %s\n  size %s\n  farbe %s\n  masse %.4f\n}\n" % (
+                     "  skalierung 0.001\n  modellversatz %s\n  size %s\n  farbe %s\n  masse %.4f\n%s}\n" % (
                          _zahlen([v / 1000 for v in lage.punkt(mitte)]), _zahlen(achse_winkel(lage.r)),
                          _vrml_text(t["id"]), _vrml_text(url), _zahlen([-v / 1000 for v in mitte]),
-                         _zahlen(groesse), farbe, max(0.001, float(masse))))
+                         _zahlen(groesse), farbe, max(0.001, float(masse)), stoff))
         else:
             text += ("Aufbau {\n  translation %s\n  rotation %s\n  name %s\n  modell [ %s ]\n  skalierung 0.001\n"
-                     "  farbe %s\n}\n" % (_zahlen([v / 1000 for v in lage.o]), _zahlen(achse_winkel(lage.r)),
-                                          _vrml_text(t["id"]), _vrml_text(url), farbe))
+                     "  farbe %s\n%s}\n" % (_zahlen([v / 1000 for v in lage.o]), _zahlen(achse_winkel(lage.r)),
+                                            _vrml_text(t["id"]), _vrml_text(url), farbe, stoff))
     return text
 
 
@@ -1065,10 +1164,10 @@ def teil_verweise(entwurf, name):
     ergebnis = []
     for t in entwurf.get("teile", []):
         v = t.get("verbindung") or {}
-        if t.get("art") not in ("sensor", "sperrzone") and t.get("teil") == name and v.get("punkt"):
+        if t.get("art") not in ("sensor", "sperrzone", "naeherung") and t.get("teil") == name and v.get("punkt"):
             ergebnis.append((t, "punkt"))
         ziel = teile.get(v.get("an"))
-        if v.get("an_punkt") and ((ziel is not None and ziel.get("art") not in ("sensor", "sperrzone") and ziel.get("teil") == name)
+        if v.get("an_punkt") and ((ziel is not None and ziel.get("art") not in ("sensor", "sperrzone", "naeherung") and ziel.get("teil") == name)
                                   or (v.get("an") == "greifer" and greifer == name)):
             ergebnis.append((t, "an_punkt"))
     return ergebnis

@@ -1088,12 +1088,23 @@ def main():
     ea_cfg = ea.lade_ea(robot.getWorldPath())
     taster = ea.Taster(ea_cfg["taster"], cfg["din_versatz"])
     sensorfelder = ea.Sensoren(ea_cfg["sensoren"], robot, cfg["din_versatz"], log=print)
+    # Naeherungssensoren (G2) brauchen die Oberflaeche jedes Werkstuecks fein abgetastet (1 mm, einmal je Teil)
+    feine_wolken = {}
+
+    def feine_wolke(node):
+        if node.getId() not in feine_wolken:
+            netz = greifer._netz(node)
+            punkte = (kollision.abtasten(netz[0], netz[1], 0.001) if netz and netz[0] else
+                      kollision.quader_punkte([v / 2 for v in node.getField("size").getSFVec3f()], 0.001))
+            feine_wolken[node.getId()] = kollision.Punktwolke(punkte, duenn=0.0007)
+        return feine_wolken[node.getId()]
+    naeherung = ea.Naeherungssensoren(ea_cfg["naeherung"], robot, cfg["din_versatz"], log=print, wolke_fn=feine_wolke)
     app = None
-    if (ea_cfg["taster"] or sensorfelder.liste) and not os.environ.get("VORSCHAU_BILD"):
+    if (ea_cfg["taster"] or sensorfelder.liste or naeherung.liste) and not os.environ.get("VORSCHAU_BILD"):
         app = ea.AppVerbindung(cfg["host"], cfg["app_port"], cfg["app_name"], log=print).start()
-        print("E/A: %d Taster, %d Leuchtmelder, %d Sensorflaechen"
-              % (len(ea_cfg["taster"]), len(ea_cfg["leuchten"]), len(sensorfelder.liste)))
-    status_takt = 0.25 if ea_cfg["taster"] or ea_cfg["leuchten"] or sensorfelder.liste else 1.0
+        print("E/A: %d Taster, %d Leuchtmelder, %d Sensorflaechen, %d Naeherungssensoren"
+              % (len(ea_cfg["taster"]), len(ea_cfg["leuchten"]), len(sensorfelder.liste), len(naeherung.liste)))
+    status_takt = 0.25 if ea_cfg["taster"] or ea_cfg["leuchten"] or sensorfelder.liste or naeherung.liste else 1.0
     sensor_zeit = 0.0
     teile_zeit = start_zeit = time.monotonic()
     label_zeit = hilfe_zeit = 0.0
@@ -1143,14 +1154,16 @@ def main():
             for art, programm, text in stopper.ergebnisse():
                 crash_zustand.ergebnis(art, jetzt, programm, text)
                 stopper.sperren(crash_zustand.gesperrt)
-        if sensorfelder.liste and jetzt - sensor_zeit >= 0.1:   # 10x pro Sekunde reicht fuer "belegt"
+        if (sensorfelder.liste or naeherung.liste) and jetzt - sensor_zeit >= 0.1:   # 10x pro Sekunde reicht
             sensor_zeit = jetzt
             sensorfelder.pruefen(teile)
+            naeherung.pruefen(teile)
         if app is not None:
             taster.weiter(jetzt)
             signale = taster.signale()
-            for nr, pegel in sensorfelder.signale().items():   # Taster und Sensor am selben Eingang: ODER
-                signale[nr] = signale.get(nr, False) or pegel
+            for quelle in (sensorfelder.signale(), naeherung.signale()):   # mehrere am selben Eingang: ODER
+                for nr, pegel in quelle.items():
+                    signale[nr] = signale.get(nr, False) or pegel
             app.setze(signale)
         if jetzt - teile_zeit > 2.0:   # neu eingefuegte Teile erkennen
             teile = werkstuecke(robot)
@@ -1277,6 +1290,8 @@ def main():
                 "kollision_ms": round(waechter.dauer_ms, 2) if waechter.an else None,
                 "taster": list(taster.gedrueckt),
                 "sensoren": list(sensorfelder.belegt),
+                "naeherung": list(naeherung.an),
+                "naeherung_mm": list(naeherung.abstand_mm),
                 "leuchten": ea.leuchten_zustand(ea_cfg["leuchten"], None if letzter is None else letzter.dout,
                                                 cfg["dout_versatz"]),
                 "ea_meldung": None if app is None else app.meldung,

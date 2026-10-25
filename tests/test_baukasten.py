@@ -280,7 +280,7 @@ class TestEinUndAusgaenge(unittest.TestCase):
         self.assertEqual(w["taster"][0], {"name": "Start", "din": 21, "art": "oeffner", "modus": "rastend"})
         self.assertEqual(w["taster"][1], {"name": "DIN5", "din": 5, "art": "schliesser", "modus": "tastend"})
         self.assertEqual(w["leuchten"][0], {"name": "x" * 24, "dout": 32, "umkehren": True, "farbe": "gruen"})
-        self.assertEqual(bk.ea_werte({}), {"taster": [], "leuchten": [], "sensoren": []})
+        self.assertEqual(bk.ea_werte({}), {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []})
         for falsch in ({"taster": [{"din": 0}]}, {"taster": [{"din": 65}]}, {"leuchten": [{"dout": "3"}]},
                        {"taster": [{"din": True}]}, {"taster": [{"din": 1}] * 9}, {"taster": "x"}, "x"):
             with self.assertRaises(bk.BaukastenFehler, msg=falsch):
@@ -341,6 +341,45 @@ class TestSensorflaechen(unittest.TestCase):
                        {"ausgabe": "bits", "din": 64, "bits": 2, "farben": [{"farbe": "rot", "code": 1}]}):
             with self.assertRaises(bk.BaukastenFehler, msg=falsch):
                 bk.loese(entwurf(self.sensor(TISCH, typ="farbe", **falsch)), TEILE.__getitem__)
+
+    def test_material(self):
+        e = entwurf(teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)),
+                    teil("w", "wuerfel", UNTEN, "v", {"art": "flaeche", "id": 2}, art="werkstueck"))
+        e["teile"][0]["material"] = "alu"
+        e["teile"][1]["material"] = "stahl"
+        lagen = bk.loese(e, TEILE.__getitem__)
+        text = bk.welt_text(e, lagen, TEILE.__getitem__)
+        self.assertIn('material "alu"\n  rauheit 0.30\n  metall 0.55\n', text)              # Aufbau
+        self.assertIn('material "stahl"\n  rauheit 0.35\n  metall 0.60\n', text)            # Werkstueck
+        masse = TEILE["wuerfel"]["volumen_mm3"] * 7.85e-6                                    # Volumen x Dichte Stahl
+        self.assertIn("masse %.4f" % masse, text)
+        e["teile"][1]["material"] = "gold"
+        with self.assertRaises(bk.BaukastenFehler):
+            bk.loese(e, TEILE.__getitem__)
+
+    def test_naeherungssensor(self):
+        sensor = {"id": "ini1", "art": "naeherung", "naeherung": {"name": "Metall?", "typ": "induktiv", "bauform": "M18",
+                                                                   "einbau": "nicht_buendig", "din": 23},
+                  "verbindung": {"punkt": {"art": "flaeche", "id": "unten"}, "an": "tisch", "an_punkt": TISCH,
+                                 "versatz_mm": [300, 0, 0], "drehung_grad": 0}}
+        e = entwurf(sensor)
+        lagen = bk.loese(e, TEILE.__getitem__)
+        self.assertEqual(huelle(lagen["ini1"], bk.naeherung_merkmale(18, 60)), [541, -9, 0, 559, 9, 60])
+        text = bk.welt_text(e, lagen, TEILE.__getitem__)
+        self.assertIn('EXTERNPROTO "../protos/Naeherungssensor.proto"', text)
+        self.assertIn('DEF NAEHERUNG_0 Naeherungssensor {\n  translation 0.550000 0.000000 0.000000', text)
+        self.assertIn('typ "induktiv"\n  durchmesser 0.0180\n  laenge 0.0600', text)
+        n = bk.ea_naeherung(e)[0]
+        self.assertEqual((n["knoten"], n["sn_mm"], n["din"], n["art"], n["name"]), ("NAEHERUNG_0", 8.0, 23, "schliesser", "Metall?"))
+        # liegend in die Bohrung eines Halters gesteckt (Zapfen "achse" an Bohrung)
+        e = entwurf(teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)),
+                    dict(sensor, verbindung={"punkt": {"art": "bohrung", "id": "achse", "ende": 0}, "an": "v",
+                                             "an_punkt": {"art": "bohrung", "id": 31, "ende": 0}, "versatz_mm": [0, 0, 0]}))
+        bk.loese(e, TEILE.__getitem__)
+        self.assertEqual(bk.ea_werte({"ea": {"naeherung": [n, {"knoten": "kaputt"}]}})["naeherung"][0]["typ"], "induktiv")
+        for falsch in ({"typ": "optisch"}, {"bauform": "M8"}, {"sn_mm": 0}, {"din": 70}, {"einbau": "schraeg"}):
+            with self.assertRaises(bk.BaukastenFehler, msg=falsch):
+                bk.loese(entwurf(dict(sensor, naeherung=dict(sensor["naeherung"], **falsch))), TEILE.__getitem__)
 
     def test_sperrzone_und_grenzen(self):
         zone = {"id": "zone1", "art": "sperrzone", "sperrzone": {"name": "Magazin", "groesse_mm": [100, 60, 80], "reaktion": "warnung"},

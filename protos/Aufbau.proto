@@ -3,6 +3,7 @@
 # z.B. Magazin, Vorrichtung, Foerderband-Attrappe. Bewegt sich nicht, Werkstuecke
 # koennen darauf abgelegt werden und der Roboter kann damit kollidieren.
 # "skalierung" 0.001 fuer Dateien in Millimetern (FreeCAD, Fusion, Onshape).
+# material: pla, stahl, edelstahl, alu, messing, holz (Stufe G1); rauheit/metall: Aussehen.
 
 PROTO Aufbau [
   field SFVec3f    translation 0 0 0
@@ -11,6 +12,9 @@ PROTO Aufbau [
   field MFString   modell      []
   field SFFloat    skalierung  0.001
   field SFColor    farbe       0.7 0.7 0.72
+  field SFString   material    "pla"
+  field SFFloat    rauheit     0.6
+  field SFFloat    metall      0.1
 ]
 {
   Solid {
@@ -20,7 +24,7 @@ PROTO Aufbau [
     children [
       DEF FORM Transform {
         scale %<= fields.skalierung.value >% %<= fields.skalierung.value >% %<= fields.skalierung.value >%
-        children [ Shape { appearance PBRAppearance { baseColor IS farbe roughness 0.6 metalness 0.1 } geometry Mesh { url IS modell } } ]
+        children [ Shape { appearance PBRAppearance { baseColor IS farbe roughness IS rauheit metalness IS metall } geometry Mesh { url IS modell } } ]
       }
     ]
     boundingObject USE FORM
