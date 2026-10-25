@@ -720,6 +720,15 @@ MESH_DIR = os.path.join(HERE, "..", "..", "protos", "meshes")
 HUELLEN_DATEI = os.path.join(MESH_DIR, "huellen.json")
 
 
+def welt_grenzen(welt_pfad):
+    """Wegbegrenzungen der Welt (worlds/<welt>.json, "grenzen", Stufe K4)."""
+    try:
+        with open(os.path.splitext(welt_pfad)[0] + ".json", encoding="utf-8") as f:
+            return kollision.Grenzen(json.load(f).get("grenzen"))
+    except (OSError, ValueError, AttributeError):
+        return kollision.Grenzen(None)
+
+
 def welt_kollision(welt_pfad):
     """Kollisions-Einstellungen der Welt (worlds/<welt>.json, "kollision"), siehe kollision.einstellungen."""
     try:
@@ -750,9 +759,8 @@ class KollisionsWaechter:
         self.zuletzt_los = (None, 0.0)   # eben losgelassenes Teil: die Backen beruehren es noch kurz
         self.treffer = []
         self.dauer_ms = 0.0
-        if not einst["an"]:
-            return
-        if huellen is None:
+        self.flansch = None
+        if huellen is None:   # auch ohne Kollisionspruefung: die Wegbegrenzungen (K4) brauchen Greifer und Backen
             try:
                 with open(HUELLEN_DATEI, encoding="utf-8") as f:
                     huellen = json.load(f)
@@ -774,6 +782,8 @@ class KollisionsWaechter:
             node = me.getFromProtoDef("FINGER_%s" % seite.upper())
             if node is not None:
                 self.finger[seite] = node
+        if not einst["an"]:
+            return
         self._selbst_vorbereiten(me, log)
         log("Kollisionen: an, Sicherheitsabstand %.1f mm, Ablagetoleranz %.1f mm, Reaktion %s, Selbstkollision %s"
             % (einst["abstand_mm"], einst["ablage_mm"],
@@ -854,9 +864,8 @@ class KollisionsWaechter:
                 self.formen[node.getId()] = None
         return self.formen[node.getId()]
 
-    def koerper(self, nahe):
-        """Huellkoerper in Weltlage; Glieder nur, wenn ihre Huellkugel `nahe` (Funktion Mitte, Radius) ist.
-        Greifer, Backen und gegriffenes Teil zuerst: dort kracht es meist, und nach wenigen Treffern ist Schluss."""
+    def hand(self):
+        """Greifer, Backen und gegriffenes Teil als Koerper in Weltlage (auch fuer die Wegbegrenzungen)."""
         liste = []
         if self.flansch is not None and "grund" in self.greifer_huelle:
             h = self.greifer_huelle["grund"]
@@ -873,6 +882,12 @@ class KollisionsWaechter:
                 liste.append(kollision.Formkoerper(name, lage, form[0], form[1]))
             else:
                 liste.append(kollision.Quader(name, lage, [0.0, 0.0, 0.0], [v / 2 for v in t.getField("size").getSFVec3f()]))
+        return liste
+
+    def koerper(self, nahe):
+        """Huellkoerper in Weltlage; Glieder nur, wenn ihre Huellkugel `nahe` (Funktion Mitte, Radius) ist.
+        Greifer, Backen und gegriffenes Teil zuerst: dort kracht es meist, und nach wenigen Treffern ist Schluss."""
+        liste = self.hand()
         for name, node, kugeln, (m, r) in reversed(self.glieder):   # vom Flansch zum Fuss
             lage = (node.getPosition(), node.getOrientation())
             if not nahe(kollision._welt(lage, m), r, name):
@@ -1045,8 +1060,17 @@ def main():
     greifer.beim_loslassen = waechter.losgelassen
     kollision_zeit = 0.0
     kollision_letzt = None   # letzte Meldung (bleibt 3 s stehen)
+    grenz_warnungen = []     # Grenzen mit Reaktion Warnung: nur Meldung
+    aktiv_jetzt = False      # Beruehrung bzw. Grenzverletzung bei der letzten Pruefung
     # Crash-Stopp (Stufe K2): laufendes iRC-Programm anhalten, bis der Schueler quittiert
-    crash_zustand = crash.CrashZustand(waechter.einst["reaktion"] if waechter.an else "melden", log=print)
+    grenzen = welt_grenzen(robot.getWorldPath())
+    if grenzen.an:
+        e = grenzen.e
+        print("Grenzen: %s, %d Sperrzone(n), Achsgrenzen %s" % (
+            "Arbeitsraum %s bis %s mm" % (e["arbeitsraum"]["min_mm"], e["arbeitsraum"]["max_mm"]) if e["arbeitsraum"] else "kein Arbeitsraum",
+            len(e["sperrzonen"]), "eigene" if e["achsen"] else "wie iRC"))
+    kollision_stoppt = waechter.an and waechter.einst["reaktion"] == "stopp"
+    crash_zustand = crash.CrashZustand("stopp" if kollision_stoppt or grenzen.stoppt else "melden", log=print)
     stopper = None
     if crash_zustand.stoppen and not os.environ.get("VORSCHAU_BILD"):
         stopper = crash.ProgrammStopp(cfg["host"], cfg["app_port"], cfg["app_name"], log=print).start()
@@ -1189,22 +1213,33 @@ def main():
         greifer.festhalten()
         # Takt nach Rechenzeit: 10-mal je Sekunde, bei teurer Pruefung (viele Teile nah am Roboter) seltener
         kollision_takt = 0.1 if waechter.dauer_ms < 8 else 0.2 if waechter.dauer_ms < 20 else 0.3
-        if waechter.an and not vorschau and jetzt - kollision_zeit >= kollision_takt and not erster_schritt:
+        if (waechter.an or grenzen.an) and not vorschau and jetzt - kollision_zeit >= kollision_takt and not erster_schritt:
             kollision_zeit = jetzt
-            treffer = waechter.pruefen(teile, aufbauten(robot), tischhoehe())
-            if crash_zustand.kollision(treffer, jetzt) and stopper is not None:
+            treffer = [dict(t, art="roboter") for t in waechter.pruefen(teile, aufbauten(robot), tischhoehe())]
+            if grenzen.an:   # Arbeitsraum, Sperrzonen, Achsgrenzen (K4)
+                gelenke = None if letzter is None else letzter.joints(cfg["gelenkwerte"])
+                for t in grenzen.pruefe(waechter.hand(), (me.getPosition(), me.getOrientation()), gelenke, tcp.getPosition()):
+                    (treffer if t["reaktion"] == "stopp" else grenz_warnungen).append(
+                        dict(t, art="grenze" if t["reaktion"] == "stopp" else "grenze_warnung"))
+            # angehalten wird bei Kollisionen (wenn so eingestellt) und bei Grenzen mit Reaktion Stopp
+            if crash_zustand.kollision([t for t in treffer if kollision_stoppt or t["art"] == "grenze"], jetzt) and stopper is not None:
                 stopper.anhalten()
             elif crash_zustand.zustand == "pruefe" and stopper is None:
                 crash_zustand.ergebnis("fehler", jetzt, text="keine Verbindung zu iRC vorgesehen")
             # Werkstueck gegen Werkstueck (fallend, geschoben): nur Meldung, haelt nichts an
             gemeldet = waechter.pruefe_werkstuecke(teile)
-            gemeldet = treffer or gemeldet
+            gemeldet = treffer or grenz_warnungen or gemeldet
+            aktiv_jetzt = bool(gemeldet)
+            grenz_warnungen = []
             if gemeldet:
                 neu = (gemeldet[0]["a"], gemeldet[0]["b"])
                 if kollision_letzt is None or (kollision_letzt["a"], kollision_letzt["b"]) != neu:
-                    p_mm = in_mm(gemeldet[0]["punkt"])
-                    print("KOLLISION%s: %s mit %s bei x=%.0f y=%.0f z=%.0f mm" % (
-                        " (Werkstueck, nur Meldung)" if not treffer else "", neu[0], neu[1], p_mm[0], p_mm[1], p_mm[2]))
+                    p_mm, art = in_mm(gemeldet[0]["punkt"]), gemeldet[0].get("art")
+                    if art in ("grenze", "grenze_warnung"):
+                        print("GRENZE%s: %s" % (" (Warnung)" if art == "grenze_warnung" else "", gemeldet[0]["text"]))
+                    else:
+                        print("KOLLISION%s: %s mit %s bei x=%.0f y=%.0f z=%.0f mm" % (
+                            " (Werkstueck, nur Meldung)" if art == "werkstueck" else "", neu[0], neu[1], p_mm[0], p_mm[1], p_mm[2]))
                 kollision_letzt = dict(gemeldet[0], zeit=jetzt)
             elif kollision_letzt is not None and jetzt - kollision_letzt["zeit"] > 3.0:
                 kollision_letzt = None
@@ -1235,8 +1270,9 @@ def main():
                     "a": kollision_letzt["a"], "b": kollision_letzt["b"],
                     "punkt": [round(v, 4) for v in kollision_letzt["punkt"]],
                     "punkt_mm": [round(v, 1) for v in in_mm(kollision_letzt["punkt"])],
-                    "aktiv": bool(waechter.treffer or waechter.teil_treffer),
-                    "art": kollision_letzt.get("art", "roboter")},
+                    "aktiv": aktiv_jetzt,
+                    "art": kollision_letzt.get("art", "roboter"), "text": kollision_letzt.get("text")},
+                "grenzen": grenzen.e if grenzen.an else None,
                 "crash": crash_zustand.status(in_mm),
                 "kollision_ms": round(waechter.dauer_ms, 2) if waechter.an else None,
                 "taster": list(taster.gedrueckt),

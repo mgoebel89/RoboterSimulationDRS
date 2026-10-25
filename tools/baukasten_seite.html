@@ -43,7 +43,10 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
 .liste .art { color:var(--leise); font-size:.8em; white-space:nowrap; }
 .symbol { width:22px; height:22px; border-radius:6px; flex:none; display:flex; align-items:center; justify-content:center;
   font-size:.7em; font-weight:800; color:#fff; }
-.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; }
+.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; } .symbol.sperrzone { background:var(--pink); }
+.achsgrenzen { display:grid; grid-template-columns:auto 1fr 1fr auto; gap:6px 10px; align-items:center; font-size:.9em; }
+.achsgrenzen input { width:100%; } .achsgrenzen .irc { color:var(--leise); font-size:.85em; white-space:nowrap; }
+.dialog-inhalt h3 { margin:10px 0 0; font-size:.95em; color:var(--blau); }
 .liste .offen { color:var(--pink); background:var(--pink-hell); font-size:.72em; font-weight:700; border-radius:999px; padding:2px 7px; }
 .baum .hilfe { padding:8px 10px 0; }
 #ansicht { position:relative; min-width:0; background:#eef1f4; }
@@ -153,9 +156,10 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <span class="trenner"></span>
   <button id="hinzufuegen" class="haupt" title="Teil aus der Teilebibliothek einfügen">%%ICON_PLUS%%Teil</button>
   <button id="plus-sensor" title="Fläche, die meldet, ob ein Werkstück darauf liegt (oder welche Farbe es hat)">%%ICON_SENSOR%%Sensorfläche</button>
+  <button id="plus-zone" title="Bereich, in den Greifer und gegriffenes Teil nicht dürfen (Warnung oder Stopp)">%%ICON_SPERRZONE%%Sperrzone</button>
   <button id="w-tisch" title="Tisch und Lage des Roboters">%%ICON_TISCH%%Tisch</button>
   <button id="w-ea" title="Taster und Leuchtmelder für die Schüleransicht">%%ICON_TASTER%%Taster &amp; Leuchten</button>
-  <button id="w-kollision" title="Kollisionsprüfung für diese Roboterumgebung">%%ICON_KOLLISION%%Kollisionen</button>
+  <button id="w-kollision" title="Kollisionsprüfung, Arbeitsraum und Achsgrenzen für diese Roboterumgebung">%%ICON_KOLLISION%%Kollisionen &amp; Grenzen</button>
   <span class="trenner"></span>
   <button id="k-gesamt" title="Ganzen Tisch zeigen">%%ICON_GESAMT%%Übersicht</button>
   <button id="k-teil" title="Kamera auf das gewählte Teil">%%ICON_FOKUS%%Teil zeigen</button>
@@ -190,6 +194,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <button class="baum-eintrag" id="baum-tisch" title="Tisch einstellen">%%ICON_TISCH%%Tisch<span class="kurz" id="tisch-kurz"></span></button>
   <button class="baum-eintrag" id="baum-ea" title="Taster und Leuchtmelder">%%ICON_TASTER%%Taster &amp; Leuchten<span class="kurz" id="ea-kurz"></span></button>
   <button class="baum-eintrag" id="baum-kollision" title="Kollisionsprüfung">%%ICON_KOLLISION%%Kollisionen<span class="kurz" id="kollision-kurz"></span></button>
+  <button class="baum-eintrag" id="baum-grenzen" title="Arbeitsraum und Achsgrenzen (Sperrzonen stehen bei den Teilen)">%%ICON_SPERRZONE%%Grenzen<span class="kurz" id="grenzen-kurz"></span></button>
   <div class="baum-kopf">Teile <span id="teile-anzahl"></span></div>
   <div class="liste" id="teileliste"></div>
   <div class="hilfe">Neue Teile stehen erst neben dem Tisch; mit einer Verbindung kommen sie an ihren Platz.
@@ -228,6 +233,17 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
         <label>Höhe (mm) <input id="s-lz" type="number" min="1" max="1000" step="1"></label>
       </div>
       <div class="hilfe">Meldet „belegt“, sobald ein Werkstück in den Quader ragt (Länge entlang X der Verbindung).</div>
+    </div>
+    <div class="abschnitt" id="e-zone" hidden><h3>Sperrzone</h3>
+      <div class="zeile"><label class="feldspalte" style="flex:1">Beschriftung <input id="z-name" maxlength="24"></label>
+        <label class="feldspalte">Reaktion <select id="z-reaktion"><option value="stopp">Stopp</option><option value="warnung">Warnung</option></select></label></div>
+      <div class="zahlen">
+        <label>Länge (mm) <input id="z-lx" type="number" min="1" max="3000" step="1"></label>
+        <label>Breite (mm) <input id="z-ly" type="number" min="1" max="3000" step="1"></label>
+        <label>Höhe (mm) <input id="z-lz" type="number" min="1" max="3000" step="1"></label>
+      </div>
+      <div class="hilfe">Greifer, Backen und das gegriffene Teil dürfen nicht in den Quader. Stopp hält das Programm an
+        wie eine Kollision, Warnung zeigt nur einen Hinweis. In Webots unsichtbar; Schüler sehen sie mit „Grenzen“.</div>
     </div>
     <div class="abschnitt"><h3>Verbindung</h3>
       <label class="feldspalte">Was anklicken
@@ -279,6 +295,22 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="sd-ok">Einfügen</button></div>
 </div></div>
 
+<!-- Dialog: Sperrzone einfuegen -->
+<div id="zone-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Sperrzone einfügen">
+  <div class="dialog-kopf"><h2>Sperrzone einfügen</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt">
+    <div class="zeile"><label class="feldspalte" style="flex:1">Beschriftung <input id="zd-name" maxlength="24"></label>
+      <label class="feldspalte">Reaktion <select id="zd-reaktion"><option value="stopp">Stopp (wie Kollision)</option>
+        <option value="warnung">nur Warnung</option></select></label></div>
+    <div class="zahlen">
+      <label>Länge (mm) <input id="zd-lx" type="number" min="1" max="3000" value="100"></label>
+      <label>Breite (mm) <input id="zd-ly" type="number" min="1" max="3000" value="100"></label>
+      <label>Höhe (mm) <input id="zd-lz" type="number" min="1" max="3000" value="100"></label></div>
+    <div class="hilfe">Ein Quader, in den Greifer, Backen und gegriffenes Teil nicht dürfen, z.B. über einem Magazin
+      oder vor einer Wand. Nach dem Einfügen das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).</div></div>
+  <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="zd-ok">Einfügen</button></div>
+</div></div>
+
 <!-- Dialog: Tisch -->
 <div id="tisch-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Tisch und Roboter">
   <div class="dialog-kopf"><h2>Tisch und Roboter</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
@@ -325,8 +357,8 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
 </div></div>
 
 <!-- Dialog: Kollisionspruefung -->
-<div id="kollision-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Kollisionen">
-  <div class="dialog-kopf"><h2>Kollisionen</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+<div id="kollision-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Kollisionen und Grenzen">
+  <div class="dialog-kopf"><h2>Kollisionen &amp; Grenzen</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
   <div class="dialog-inhalt" id="kollision-feld">
     <label class="zeile" style="font-size:.95em;color:var(--text)"><input type="checkbox" id="k-an"> Kollisionen prüfen</label>
     <div class="hilfe">Geprüft werden Greifer, Backen und das gegriffene Teil sowie der Roboterarm gegen Tisch, Aufbauten
@@ -345,6 +377,26 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
       <label>Ablagetoleranz (mm) <input id="k-ablage" type="number" min="0" max="20" step="0.5"></label></div>
     <div class="hilfe">Sicherheitsabstand: so nah darf der Roboter an Tisch und Teile kommen. Ablagetoleranz: so tief
       darf ein abgelegtes Teil in die Auflage drücken, bevor es als Kollision zählt.</div>
+    <h3 id="grenzen-anker">Arbeitsraum</h3>
+    <label class="zeile" style="font-size:.95em;color:var(--text)"><input type="checkbox" id="g-an"> Arbeitsraum begrenzen</label>
+    <div class="hilfe">Quader in iRC-Koordinaten (mm, Ursprung Roboterfuß), den Greifer, Backen und gegriffenes Teil nicht
+      verlassen dürfen. Im Bild: blau gestrichelt.</div>
+    <div class="zahlen"><label>x von <input id="g-x0" type="number" step="10"></label><label>y von <input id="g-y0" type="number" step="10"></label>
+      <label>z von <input id="g-z0" type="number" step="10"></label></div>
+    <div class="zahlen"><label>x bis <input id="g-x1" type="number" step="10"></label><label>y bis <input id="g-y1" type="number" step="10"></label>
+      <label>z bis <input id="g-z1" type="number" step="10"></label></div>
+    <div class="zeile"><label class="feldspalte" style="flex:1">Reaktion <select id="g-reaktion"><option value="stopp">Stopp (wie Kollision)</option>
+      <option value="warnung">nur Warnung</option></select></label>
+      <button id="g-tisch" style="align-self:flex-end" title="x und y auf die Tischplatte, z von der Platte bis 600 mm darüber">Tischplatte übernehmen</button></div>
+    <h3>Achsgrenzen</h3>
+    <div class="hilfe">Engere Grenzen als in iRC, z.B. damit der Arm nicht nach hinten schwenkt. Vorbelegt sind die
+      iRC-Grenzen des ReBeL; so bleibt es ohne eigene Prüfung.</div>
+    <div class="achsgrenzen" id="g-achsen"></div>
+    <div class="zeile"><label class="feldspalte" style="flex:1">Reaktion <select id="g-achsen-reaktion"><option value="stopp">Stopp (wie Kollision)</option>
+      <option value="warnung">nur Warnung</option></select></label>
+      <button id="g-irc" style="align-self:flex-end">iRC-Grenzen</button></div>
+    <div class="hilfe">Sperrzonen setzt man wie Sensorflächen über „Sperrzone“ in der Werkzeugleiste. Schüler sehen
+      Arbeitsraum und Sperrzonen mit dem Knopf „Grenzen“ im 3D-Bild.</div>
   </div>
   <div class="dialog-fuss"><button class="haupt" data-zu>Fertig</button></div>
 </div></div>
@@ -630,7 +682,7 @@ async function greiferAufbauen() {
   $('modus-wechsel').lastChild.textContent = 'Baukasten'; $('modus-wechsel').href = '/lehrer/baukasten';
   $('zurueck').lastChild.textContent = 'Alle Greifer'; $('zurueck').href = '/lehrer#greifer';
   for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor', 'w-tisch', 'w-ea', 'w-plan', 'baum-tisch', 'baum-ea', 'baum-kopf-umgebung',
-                    'w-kollision', 'baum-kollision']) $(id).hidden = true;
+                    'w-kollision', 'baum-kollision', 'plus-zone', 'baum-grenzen']) $(id).hidden = true;
   $('backen-feld').hidden = false; $('e-art').disabled = true;
 }
 async function greiferZeigen() {   // Schunk-Modell der gewaehlten Groesse (aus der Teilebibliothek)
@@ -705,9 +757,13 @@ function quaderMerkmale(lx, ly, lz) {
 }
 const sensorDaten = {};
 function sensorWerte(t) { return Object.assign({}, SENSOR_STANDARD, t.sensor || {}); }
+// Sperrzone (K4): Quader wie die Sensorflaeche, Werte wie SPERRZONE_STANDARD in baukasten.py
+const SPERRZONE_STANDARD = {groesse_mm: [100, 100, 100], reaktion: 'stopp'};
+function zoneWerte(t) { return Object.assign({}, SPERRZONE_STANDARD, t.sperrzone || {}); }
+const quaderArt = t => t.art === 'sensor' || t.art === 'sperrzone';   // ohne Teil aus der Bibliothek
 function datenVon(t) {
-  if (t.art !== 'sensor') return teilDaten[t.teil];
-  const [lx, ly, lz] = sensorWerte(t).groesse_mm, schluessel = [lx, ly, lz].join(':');
+  if (!quaderArt(t)) return teilDaten[t.teil];
+  const [lx, ly, lz] = (t.art === 'sensor' ? sensorWerte(t) : zoneWerte(t)).groesse_mm, schluessel = [lx, ly, lz].join(':');
   if (!sensorDaten[schluessel]) {
     const geo = new THREE.BoxGeometry(lx, ly, lz).translate(0, 0, lz / 2).toNonIndexed();
     // BoxGeometry: je zwei Dreiecke +x, -x, +y, -y, +z, -z
@@ -725,13 +781,14 @@ function datenVon(t) {
   return sensorDaten[schluessel];
 }
 function standardFarbe(t) {
-  return t.art === 'sensor' ? [0.15, 0.75, 0.35] : t.farbe || (t.art === 'werkstueck' ? [0.1, 0.4, 0.9] : [0.7, 0.7, 0.72]);
+  return t.art === 'sensor' ? [0.15, 0.75, 0.35] : t.art === 'sperrzone' ? [0.83, 0.0, 0.37] : t.farbe || (t.art === 'werkstueck' ? [0.1, 0.4, 0.9] : [0.7, 0.7, 0.72]);
 }
 async function objektBauen(t) {
-  const d = t.art === 'sensor' ? datenVon(t) : await teilLaden(t.teil);
+  const d = quaderArt(t) ? datenVon(t) : await teilLaden(t.teil);
   const g = new THREE.Group();
   const mesh = new THREE.Mesh(d.geo, new THREE.MeshStandardMaterial({color: new THREE.Color(...standardFarbe(t)), roughness: 0.65, metalness: 0.1,
-                                                                    transparent: t.art === 'sensor', opacity: t.art === 'sensor' ? 0.45 : 1}));
+                                                                    transparent: quaderArt(t), opacity: t.art === 'sensor' ? 0.45 : t.art === 'sperrzone' ? 0.28 : 1,
+                                                                    depthWrite: !quaderArt(t)}));
   mesh.userData = {teilId: t.id};
   g.add(mesh, new THREE.LineSegments(d.kanten, new THREE.LineBasicMaterial({color: 0x1d2330, transparent: true, opacity: 0.35})));
   g.userData = {mesh};
@@ -954,15 +1011,16 @@ function formularZeigen() {
   listeZeigen();
   if (!t) return;
   const v = t.verbindung || {};
-  const sensor = t.art === 'sensor';
-  $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : t.teil) + ')';
+  const sensor = t.art === 'sensor', zone = t.art === 'sperrzone';
+  $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : zone ? 'Sperrzone' : t.teil) + ')';
   $('e-symbol').className = 'symbol ' + (t.art || 'aufbau'); $('e-symbol').textContent = ART_KURZ[t.art || 'aufbau'];
   feld('e-id', t.id); $('e-art').value = t.art || 'aufbau';
   $('e-farbe').value = hex(standardFarbe(t));
-  $('e-art').hidden = $('e-farbe').hidden = sensor;
+  $('e-art').hidden = $('e-farbe').hidden = sensor || zone;
   $('e-masse-zeile').hidden = t.art !== 'werkstueck';
-  $('e-sensor').hidden = !sensor;
+  $('e-sensor').hidden = !sensor; $('e-zone').hidden = !zone;
   if (sensor) sensorFormular(t);
+  if (zone) zoneFormular(t);
   feld('e-masse', t.masse_kg ? Math.round(t.masse_kg * 1000) : '');
   $('p-teil').textContent = 'Punkt am Teil: ' + punktText(t.id, v.punkt);
   $('p-ziel').textContent = 'Gegenstück: ' + punktText(v.an, v.an_punkt);
@@ -975,13 +1033,14 @@ function formularZeigen() {
                               : 'Noch nicht platziert (steht neben dem Tisch).';
   punkteZeigen();
 }
-const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S'};
+const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S', sperrzone: 'Z'};
 function listeZeigen() {
   $('teile-anzahl').textContent = entwurf.teile.length || '';
   $('teileliste').innerHTML = entwurf.teile.map(t => '<div data-id="' + t.id + '" class="' + (t.id === auswahl ? 'an' : '') + '" title="'
-    + (t.art === 'werkstueck' ? 'Werkstück' : t.art === 'sensor' ? 'Sensorfläche' : 'Aufbau') + ' · Rechtsklick für das Menü">'
+    + (t.art === 'werkstueck' ? 'Werkstück' : t.art === 'sensor' ? 'Sensorfläche' : t.art === 'sperrzone' ? 'Sperrzone' : 'Aufbau') + ' · Rechtsklick für das Menü">'
     + '<span class="symbol ' + (t.art || 'aufbau') + '">' + ART_KURZ[t.art || 'aufbau'] + '</span><span class="name">' + t.id + '</span>'
-    + '<span class="art">' + (t.art === 'sensor' ? (sensorWerte(t).typ === 'farbe' ? 'Farbsensor' : 'DIn' + sensorWerte(t).din) : t.teil) + '</span>'
+    + '<span class="art">' + (t.art === 'sensor' ? (sensorWerte(t).typ === 'farbe' ? 'Farbsensor' : 'DIn' + sensorWerte(t).din)
+       : t.art === 'sperrzone' ? (zoneWerte(t).reaktion === 'stopp' ? 'Sperrzone, Stopp' : 'Sperrzone, Warnung') : t.teil) + '</span>'
     + (lagen[t.id] ? '' : '<span class="offen">offen</span>') + '</div>').join('')
     || '<span class="hilfe" style="padding:4px 10px">Noch keine Teile. Oben auf „Teil“ klicken.</span>';
 }
@@ -1183,6 +1242,41 @@ function sensorAusFormular() {
 ['s-name', 's-typ', 's-din', 's-art', 's-ausgabe', 's-bitdin', 's-bits', 's-lx', 's-ly', 's-lz']
   .forEach(i => $(i).addEventListener('change', sensorAusFormular));
 $('s-farben').addEventListener('change', sensorAusFormular);
+function zoneFormular(t) {
+  const z = zoneWerte(t);
+  $('z-name').value = z.name || t.id; $('z-reaktion').value = z.reaktion;
+  [$('z-lx').value, $('z-ly').value, $('z-lz').value] = z.groesse_mm;
+}
+function zoneAusFormular() {
+  const t = teil(auswahl); if (!t || t.art !== 'sperrzone') return;
+  const groesse = ['z-lx', 'z-ly', 'z-lz'].map(i => Math.min(3000, Math.max(1, Number($(i).value) || 1)));
+  const neueGroesse = groesse.join(':') !== zoneWerte(t).groesse_mm.join(':');
+  t.sperrzone = {name: $('z-name').value.trim().slice(0, 24) || t.id, reaktion: $('z-reaktion').value, groesse_mm: groesse};
+  if (neueGroesse) { objektEntfernen(t.id); objektBauen(t).then(() => { waehlen(t.id); rechnen(); }); }
+  else { listeZeigen(); rechnenSpaeter(); }
+  grenzenKurz();
+}
+['z-name', 'z-reaktion', 'z-lx', 'z-ly', 'z-lz'].forEach(i => $(i).addEventListener('change', zoneAusFormular));
+$('plus-zone').onclick = () => {
+  let n = 1;
+  while (teil('zone' + n)) n++;
+  $('zd-name').value = 'Sperrzone ' + n; $('zd-reaktion').value = 'stopp';
+  [$('zd-lx').value, $('zd-ly').value, $('zd-lz').value] = SPERRZONE_STANDARD.groesse_mm;
+  dialogAuf('zone-dialog');
+};
+$('zd-ok').onclick = async () => {
+  dialogZu('zone-dialog');
+  let n = 1;
+  while (teil('zone' + n)) n++;
+  const ganz = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
+  const sperrzone = {name: $('zd-name').value.trim().slice(0, 24) || 'Sperrzone ' + n, reaktion: $('zd-reaktion').value,
+                     groesse_mm: ['zd-lx', 'zd-ly', 'zd-lz'].map(i => ganz($(i).value, 1, 3000))};
+  const t = {id: 'zone' + n, art: 'sperrzone', sperrzone, verbindung: {punkt: {art: 'flaeche', id: 'unten'}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+  entwurf.teile.push(t); merken();
+  await objektBauen(t);
+  waehlen(t.id); await rechnen(); wahlStarten('ziel'); grenzenKurz();
+  status('Jetzt das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).');
+};
 $('titel').oninput = () => { entwurf.titel = $('titel').value; };
 for (const [k, id] of Object.entries(TISCH_FELDER)) $(id).addEventListener('change', () => {
   const v = Number($(id).value);
@@ -1332,7 +1426,73 @@ function kollisionAusFormular() {
   kollisionZeigen();
 }
 ['k-an', 'k-reaktion', 'k-abstand', 'k-ablage'].forEach(id => $(id).addEventListener('change', kollisionAusFormular));
-$('w-kollision').onclick = $('baum-kollision').onclick = () => { kollisionZeigen(); dialogAuf('kollision-dialog'); };
+$('w-kollision').onclick = $('baum-kollision').onclick = () => { kollisionZeigen(); grenzenZeigen(); dialogAuf('kollision-dialog'); };
+$('baum-grenzen').onclick = () => { kollisionZeigen(); grenzenZeigen(); dialogAuf('kollision-dialog');
+  setTimeout(() => $('grenzen-anker').scrollIntoView({block: 'start'}), 60); };
+// Wegbegrenzungen (K4), Werte wie GRENZEN_STANDARD / IRC_ACHSGRENZEN in baukasten.py
+const IRC_ACHSGRENZEN = [[-179, 179], [-80, 140], [-80, 140], [-179, 179], [-95, 95], [-179, 179]];
+const ARBEITSRAUM_STANDARD = {an: false, min_mm: [-200, -500, 0], max_mm: [700, 500, 700], reaktion: 'stopp'};
+function grenzenWerte() {
+  const g = entwurf.grenzen || {};
+  return {arbeitsraum: Object.assign({}, ARBEITSRAUM_STANDARD, g.arbeitsraum || {}),
+          achsen: g.achsen || IRC_ACHSGRENZEN.map(p => p.slice()), achsen_reaktion: g.achsen_reaktion || 'stopp'};
+}
+const ARBEITSRAUM_FELDER = [['g-x0', 0, 0], ['g-y0', 0, 1], ['g-z0', 0, 2], ['g-x1', 1, 0], ['g-y1', 1, 1], ['g-z1', 1, 2]];
+function grenzenZeigen() {
+  const g = grenzenWerte(), a = g.arbeitsraum;
+  $('g-an').checked = a.an; $('g-reaktion').value = a.reaktion; $('g-achsen-reaktion').value = g.achsen_reaktion;
+  for (const [id, mi, i] of ARBEITSRAUM_FELDER) { $(id).value = (mi ? a.max_mm : a.min_mm)[i]; $(id).disabled = !a.an; }
+  $('g-reaktion').disabled = $('g-tisch').disabled = !a.an;
+  $('g-achsen').innerHTML = '<b></b><b>min (°)</b><b>max (°)</b><b></b>' + g.achsen.map((p, i) =>
+    '<b>A' + (i + 1) + '</b><input type="number" step="5" data-achse="' + i + '" data-seite="0" value="' + p[0] + '">'
+    + '<input type="number" step="5" data-achse="' + i + '" data-seite="1" value="' + p[1] + '">'
+    + '<span class="irc">iRC ' + IRC_ACHSGRENZEN[i][0] + ' … ' + IRC_ACHSGRENZEN[i][1] + '</span>').join('');
+  grenzenKurz(); arbeitsraumZeichnen();
+}
+function grenzenAusFormular() {
+  const g = grenzenWerte(), zahl = (id, alt) => { const n = Number($(id).value); return $(id).value !== '' && Number.isFinite(n) ? n : alt; };
+  const a = {an: $('g-an').checked, reaktion: $('g-reaktion').value, min_mm: g.arbeitsraum.min_mm.slice(), max_mm: g.arbeitsraum.max_mm.slice()};
+  for (const [id, mi, i] of ARBEITSRAUM_FELDER) (mi ? a.max_mm : a.min_mm)[i] = zahl(id, (mi ? a.max_mm : a.min_mm)[i]);
+  for (let i = 0; i < 3; i++) if (a.max_mm[i] < a.min_mm[i] + 10) a.max_mm[i] = a.min_mm[i] + 10;
+  const achsen = g.achsen.map((p, i) => p.map((v, s) => {   // innerhalb der iRC-Grenzen halten
+    const e = $('g-achsen').querySelector('[data-achse="' + i + '"][data-seite="' + s + '"]');
+    return Math.min(IRC_ACHSGRENZEN[i][1], Math.max(IRC_ACHSGRENZEN[i][0], e ? zahl2(e.value, v) : v));
+  }));
+  achsen.forEach((p, i) => { if (p[1] <= p[0]) achsen[i] = IRC_ACHSGRENZEN[i].slice(); });
+  entwurf.grenzen = {arbeitsraum: a, achsen, achsen_reaktion: $('g-achsen-reaktion').value};
+  grenzenZeigen();
+}
+function zahl2(text, alt) { const n = Number(text); return text !== '' && Number.isFinite(n) ? n : alt; }
+['g-an', 'g-reaktion', 'g-achsen-reaktion', ...ARBEITSRAUM_FELDER.map(f => f[0])].forEach(id => $(id).addEventListener('change', grenzenAusFormular));
+$('g-achsen').addEventListener('change', grenzenAusFormular);
+$('g-irc').onclick = () => { entwurf.grenzen = Object.assign({}, entwurf.grenzen, {achsen: IRC_ACHSGRENZEN.map(p => p.slice())});
+  merken(); grenzenZeigen(); };
+$('g-tisch').onclick = () => {   // Tischplatte (in iRC-Koordinaten, auch bei gedrehtem Roboter) als Arbeitsraum
+  const t = tischWerte(), x0 = -t.roboter_von_hinten_mm, y1 = t.roboter_von_links_mm;
+  const ecken = [[x0, y1], [x0 + t.laenge_mm, y1], [x0, y1 - t.breite_mm], [x0 + t.laenge_mm, y1 - t.breite_mm]].map(([x, y]) => tischDrehen(t, x, y));
+  const g = grenzenWerte();
+  entwurf.grenzen = Object.assign({}, entwurf.grenzen, {arbeitsraum: Object.assign(g.arbeitsraum, {
+    min_mm: [Math.round(Math.min(...ecken.map(e => e[0]))), Math.round(Math.min(...ecken.map(e => e[1]))), Math.round(t.hoehe_mm)],
+    max_mm: [Math.round(Math.max(...ecken.map(e => e[0]))), Math.round(Math.max(...ecken.map(e => e[1]))), Math.round(t.hoehe_mm + 600)]})});
+  merken(); grenzenZeigen();
+};
+function grenzenKurz() {
+  const g = grenzenWerte(), zonen = entwurf.teile.filter(t => t.art === 'sperrzone').length;
+  const eigeneAchsen = g.achsen.some((p, i) => p[0] !== IRC_ACHSGRENZEN[i][0] || p[1] !== IRC_ACHSGRENZEN[i][1]);
+  $('grenzen-kurz').textContent = [g.arbeitsraum.an ? 'Arbeitsraum' : '', zonen ? zonen + ' Sperrzone' + (zonen > 1 ? 'n' : '') : '',
+                                   eigeneAchsen ? 'Achsen' : ''].filter(Boolean).join(', ') || 'keine';
+}
+// Arbeitsraum im Bild: blau gestrichelter Quader
+const arbeitsraumLinien = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+  new THREE.LineDashedMaterial({color: 0x00639C, dashSize: 0.03, gapSize: 0.02}));
+arbeitsraumLinien.visible = false; szene.add(arbeitsraumLinien);
+function arbeitsraumZeichnen() {
+  const a = grenzenWerte().arbeitsraum;
+  arbeitsraumLinien.visible = a.an && !BACKEN;
+  arbeitsraumLinien.scale.set(...[0, 1, 2].map(i => a.max_mm[i] - a.min_mm[i]));
+  arbeitsraumLinien.position.set(...[0, 1, 2].map(i => (a.max_mm[i] + a.min_mm[i]) / 2));
+  arbeitsraumLinien.computeLineDistances();
+}
 for (const id of ['kollision-dialog']) { $(id).addEventListener('change', merken); }
 $('e-zu').onclick = () => waehlen(null);
 
@@ -1526,7 +1686,21 @@ function planZeigen() {
     svg += '<path d="M' + (ax - 40) + ' ' + ay + 'H' + ax + 'V' + (ay + 40) + '" fill="none" stroke="#f26b00" stroke-width="4"/>'
       + masslinie(ax - 22, 0, ax - 22, ay, mm(tw.anschlag_hinten_mm), '#c45500') + masslinie(B, ay - 22, ax, ay - 22, mm(tw.anschlag_links_mm), '#c45500');
   }
-  const FARBE = {aufbau: ['#8a93a3', 'rgba(138,147,163,.35)'], werkstueck: ['#00639C', 'rgba(0,99,156,.28)'], sensor: ['#8fa300', 'rgba(177,200,0,.35)']};
+  const FARBE = {aufbau: ['#8a93a3', 'rgba(138,147,163,.35)'], werkstueck: ['#00639C', 'rgba(0,99,156,.28)'], sensor: ['#8fa300', 'rgba(177,200,0,.35)'],
+                 sperrzone: ['#D4005E', 'rgba(212,0,94,.12)']};
+  const ar = grenzenWerte().arbeitsraum;
+  if (ar.an) {   // Arbeitsraum (iRC-Koordinaten) ins Tischsystem, gestrichelt mit Massen zur hinteren und linken Kante
+    const ecken = [[ar.min_mm[0], ar.min_mm[1]], [ar.max_mm[0], ar.min_mm[1]], [ar.max_mm[0], ar.max_mm[1]], [ar.min_mm[0], ar.max_mm[1]]]
+      .map(p => tischLokal(tw, p));
+    const xs = ecken.map(p => p[0]), ys = ecken.map(p => p[1]), hinten = Math.min(...xs) - hx, links = ly - Math.max(...ys);
+    const ax = X(Math.max(...ys)), ay = Y(Math.min(...xs));   // Ecke hinten-links (im Bild oben rechts)
+    svg += '<polygon points="' + ecken.map(p => X(p[1]).toFixed(1) + ',' + Y(p[0]).toFixed(1)).join(' ')
+      + '" fill="none" stroke="#00639C" stroke-width="3" stroke-dasharray="14 9"/>'
+      + '<text x="' + (ax - 10) + '" y="' + (ay + 22) + '" font-size="15" text-anchor="end" fill="#00639C" font-weight="700">Arbeitsraum</text>'
+      // Masse nur, wenn der Arbeitsraum nicht an der Tischkante endet
+      + (Math.abs(hinten) >= 1 ? masslinie(ax - 130, 0, ax - 130, ay, mm(hinten)) : '')
+      + (Math.abs(links) >= 1 ? masslinie(B, ay + 40, ax, ay + 40, mm(links)) : '');
+  }
   teile.forEach((t, i) => {
     const f = fussabdruck(t, tw); if (!f) return;
     const [linie, flaeche] = FARBE[t.art] || FARBE.aufbau, nr = i + 1;
@@ -1550,8 +1724,9 @@ function planZeigen() {
     }
     const auf = v.an && v.an !== 'tisch' && v.an !== 'roboterfuss' ? 'auf ' + v.an : '';
     zeilen.push('<tr data-nr="' + nr + '"><td><b>' + nr + '</b></td><td><b>' + esc(t.id) + '</b><div class="hilfe">'
-      + esc(t.art === 'sensor' ? 'Sensorfläche' : t.teil) + (auf ? ' · ' + esc(auf) : '') + '</div></td>'
-      + '<td>' + ({aufbau: 'Aufbau', werkstueck: 'Werkstück (Start)', sensor: 'Sensor'}[t.art] || '') + '</td>'
+      + esc(t.art === 'sensor' ? 'Sensorfläche' : t.art === 'sperrzone' ? 'Höhe ' + mm(zoneWerte(t).groesse_mm[2]) + ' mm' : t.teil)
+      + (auf ? ' · ' + esc(auf) : '') + '</div></td>'
+      + '<td>' + ({aufbau: 'Aufbau', werkstueck: 'Werkstück (Start)', sensor: 'Sensor', sperrzone: 'Sperrzone'}[t.art] || '') + '</td>'
       + '<td class="zahl">' + mm(hinten) + '</td><td class="zahl">' + mm(links) + '</td>'
       + '<td class="zahl">' + mm(f.y1 - f.y0) + ' × ' + mm(f.x1 - f.x0) + '</td><td>' + esc(nut || '–') + '</td></tr>');
   });
@@ -1618,7 +1793,7 @@ async function weltLadenInnen(name) {
     $('b-hub').value = entwurf.hub_mm ?? '';
     await greiferZeigen(); uebersicht(); backenInfo(); tcpZeigen();
   }
-  else { tischZeichnen(); uebersicht(); eaZeigen(); kollisionZeigen(); }
+  else { tischZeichnen(); uebersicht(); eaZeigen(); kollisionZeigen(); grenzenZeigen(); }
   for (const t of entwurf.teile) await objektBauen(t);
   formularZeigen(); await rechnen();
 }

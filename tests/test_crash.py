@@ -187,6 +187,9 @@ class TestProgrammStopp(unittest.TestCase):
             s.anhalten()
             art, _, text = warte_auf(s.ergebnisse)[0]
             self.assertEqual((art, text), ("fehler", "App WebotsSim in iRC nicht installiert oder nicht freigeschaltet"))
+            irc.fehler = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:5000: Failed to connect"
+            s.anhalten()
+            self.assertEqual(warte_auf(s.ergebnisse)[0][2], "iRC am PC nicht erreichbar (läuft iRC? App-Schnittstelle Port 5000)")
         finally:
             s.beenden()
 

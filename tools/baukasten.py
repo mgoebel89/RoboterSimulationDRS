@@ -503,6 +503,99 @@ def kollision_werte(entwurf=None):
     return e
 
 
+# --- Wegbegrenzungen (Stufe K4): Arbeitsraum, Sperrzonen, Achsgrenzen ---
+# Gelten fuer Greifer, Backen und gegriffenes Teil (Achsgrenzen fuer die Gelenke). Reaktion je Grenze:
+# "warnung" (nur Hinweis) oder "stopp" (wie eine Kollision: Programm anhalten, quittieren).
+
+IRC_ACHSGRENZEN = [[-179.0, 179.0], [-80.0, 140.0], [-80.0, 140.0], [-179.0, 179.0], [-95.0, 95.0], [-179.0, 179.0]]   # ReBeL-6DOF-03
+SPERRZONE_STANDARD = {"groesse_mm": [100.0, 100.0, 100.0], "reaktion": "stopp"}
+GRENZEN_STANDARD = {"arbeitsraum": {"an": False, "min_mm": [-200.0, -500.0, 0.0], "max_mm": [700.0, 500.0, 700.0],
+                                    "reaktion": "stopp"},
+                    "achsen": None, "achsen_reaktion": "stopp"}
+REAKTIONEN = ("warnung", "stopp")
+
+
+def sperrzone_werte(t):
+    """Einstellungen einer Sperrzone (Eintrag mit "art": "sperrzone"), geprueft."""
+    z = t.get("sperrzone") or {}
+    if not isinstance(z, dict):
+        raise BaukastenFehler("%s: 'sperrzone' muss ein Objekt sein." % t.get("id"))
+    groesse = z.get("groesse_mm", SPERRZONE_STANDARD["groesse_mm"])
+    if (not isinstance(groesse, list) or len(groesse) != 3
+            or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and 1 <= v <= 3000 for v in groesse)):
+        raise BaukastenFehler("%s: Groesse der Sperrzone braucht drei Zahlen von 1 bis 3000 mm." % t.get("id"))
+    reaktion = z.get("reaktion", SPERRZONE_STANDARD["reaktion"])
+    if reaktion not in REAKTIONEN:
+        raise BaukastenFehler("%s: Reaktion ist 'warnung' oder 'stopp'." % t.get("id"))
+    return {"name": str(z.get("name") or t.get("id"))[:24], "groesse_mm": [float(v) for v in groesse], "reaktion": reaktion}
+
+
+def _drei_zahlen(werte, was):
+    if (not isinstance(werte, list) or len(werte) != 3
+            or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and -5000 <= v <= 5000 for v in werte)):
+        raise BaukastenFehler("%s braucht drei Zahlen (mm)." % was)
+    return [float(v) for v in werte]
+
+
+def grenzen_werte(entwurf=None):
+    """Arbeitsraum und Achsgrenzen des Entwurfs ("grenzen"), geprueft und mit Standardwerten.
+    arbeitsraum: an, min_mm/max_mm (Quader in iRC-Koordinaten), reaktion; achsen: None (= iRC-Grenzen, keine
+    eigene Pruefung) oder 6 x [min, max] in Grad; achsen_reaktion."""
+    g = (entwurf or {}).get("grenzen") or {}
+    if not isinstance(g, dict):
+        raise BaukastenFehler("'grenzen' muss ein Objekt sein.")
+    a_roh = g.get("arbeitsraum") or {}
+    if not isinstance(a_roh, dict):
+        raise BaukastenFehler("Arbeitsraum: muss ein Objekt sein.")
+    a = dict(GRENZEN_STANDARD["arbeitsraum"])
+    a["an"] = bool(a_roh.get("an", a["an"]))
+    a["min_mm"] = _drei_zahlen(a_roh.get("min_mm", a["min_mm"]), "Arbeitsraum von")
+    a["max_mm"] = _drei_zahlen(a_roh.get("max_mm", a["max_mm"]), "Arbeitsraum bis")
+    if any(a["max_mm"][i] - a["min_mm"][i] < 10 for i in range(3)):
+        raise BaukastenFehler("Arbeitsraum: 'bis' muss je Achse mindestens 10 mm groesser sein als 'von'.")
+    if a_roh.get("reaktion", a["reaktion"]) not in REAKTIONEN:
+        raise BaukastenFehler("Arbeitsraum: Reaktion ist 'warnung' oder 'stopp'.")
+    a["reaktion"] = a_roh.get("reaktion", a["reaktion"])
+    achsen = g.get("achsen")
+    if achsen is not None:
+        if not isinstance(achsen, list) or len(achsen) != 6:
+            raise BaukastenFehler("Achsgrenzen: sechs Paare (A1 bis A6).")
+        geprueft = []
+        for i, (paar, irc) in enumerate(zip(achsen, IRC_ACHSGRENZEN)):
+            if (not isinstance(paar, list) or len(paar) != 2
+                    or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in paar)):
+                raise BaukastenFehler("Achsgrenze A%d: zwei Zahlen (min, max) in Grad." % (i + 1))
+            lo, hi = float(paar[0]), float(paar[1])
+            if not irc[0] <= lo < hi <= irc[1]:
+                raise BaukastenFehler("Achsgrenze A%d: %g bis %g Grad, innerhalb der iRC-Grenzen %g bis %g."
+                                      % (i + 1, lo, hi, irc[0], irc[1]))
+            geprueft.append([lo, hi])
+        achsen = None if geprueft == IRC_ACHSGRENZEN else geprueft   # wie iRC: nichts eigenes zu pruefen
+    reaktion = g.get("achsen_reaktion", GRENZEN_STANDARD["achsen_reaktion"])
+    if reaktion not in REAKTIONEN:
+        raise BaukastenFehler("Achsgrenzen: Reaktion ist 'warnung' oder 'stopp'.")
+    return {"arbeitsraum": a, "achsen": achsen, "achsen_reaktion": reaktion}
+
+
+def grenzen_fuer_welt(entwurf, lagen):
+    """"grenzen" fuer worlds/<welt>.json (liest der Controller): Arbeitsraum (nur wenn an), Sperrzonen mit Mitte,
+    Drehung (Zeilen) und halber Groesse in iRC-Koordinaten (mm), Achsgrenzen."""
+    g = grenzen_werte(entwurf)
+    zonen = []
+    for t in entwurf.get("teile", []):
+        if t.get("art") != "sperrzone" or t["id"] not in lagen:
+            continue
+        z = sperrzone_werte(t)
+        lage = lagen[t["id"]]
+        lx, ly, lz = z["groesse_mm"]
+        zonen.append({"name": z["name"], "reaktion": z["reaktion"],
+                      "mitte_mm": [round(v, 2) for v in lage.punkt([0.0, 0.0, lz / 2.0])],
+                      "drehung": [[round(v, 9) for v in zeile] for zeile in lage.r],
+                      "halb_mm": [lx / 2.0, ly / 2.0, lz / 2.0]})
+    return {"arbeitsraum": g["arbeitsraum"] if g["arbeitsraum"]["an"] else None, "sperrzonen": zonen,
+            "achsen": g["achsen"], "achsen_reaktion": g["achsen_reaktion"]}
+
+
 def ea_sensoren(entwurf):
     """Sensorflaechen fuer worlds/<welt>.json ("ea" -> "sensoren"); "knoten" = DEF-Name in der Welt."""
     return [dict(sensor_werte(t), knoten="SENSOR_%d" % i)
@@ -603,10 +696,12 @@ def pruefe_entwurf(entwurf):
         if t["id"] in ids or t["id"] == "greifer":
             raise BaukastenFehler("Der Name %s kommt doppelt vor oder ist vergeben." % t["id"])
         ids.add(t["id"])
-        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor"):
-            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck' oder 'sensor'." % t["id"])
+        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor", "sperrzone"):
+            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck', 'sensor' oder 'sperrzone'." % t["id"])
         if t.get("art") == "sensor":
             sensor_werte(t)
+        if t.get("art") == "sperrzone":
+            sperrzone_werte(t)
         v = t.get("verbindung")
         if not isinstance(v, dict):
             raise BaukastenFehler("%s hat keine Verbindung." % t["id"])
@@ -628,6 +723,8 @@ def loese(entwurf, merkmale_von):
     def merkmale(t):
         if t.get("art") == "sensor":
             return quader_merkmale(*sensor_werte(t)["groesse_mm"])
+        if t.get("art") == "sperrzone":
+            return quader_merkmale(*sperrzone_werte(t)["groesse_mm"])
         return merkmale_von(t["teil"])
     lagen, in_arbeit = {}, set()
 
@@ -839,6 +936,8 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
                 _vrml_text("sensor_" + t["id"]), _zahlen([v / 1000 for v in s["groesse_mm"]])))
             sensor_nr += 1
             continue
+        if t.get("art") == "sperrzone":   # nur in worlds/<welt>.json ("grenzen"), nicht sichtbar in Webots
+            continue
         m = merkmale_von(t["teil"])
         url = "%s/%s/netz.obj" % (teile_url, t["teil"])
         farbe = _zahlen(t.get("farbe") or ([0.1, 0.4, 0.9] if t.get("art") == "werkstueck" else [0.7, 0.7, 0.72]), 3)
@@ -966,10 +1065,10 @@ def teil_verweise(entwurf, name):
     ergebnis = []
     for t in entwurf.get("teile", []):
         v = t.get("verbindung") or {}
-        if t.get("art") != "sensor" and t.get("teil") == name and v.get("punkt"):
+        if t.get("art") not in ("sensor", "sperrzone") and t.get("teil") == name and v.get("punkt"):
             ergebnis.append((t, "punkt"))
         ziel = teile.get(v.get("an"))
-        if v.get("an_punkt") and ((ziel is not None and ziel.get("art") != "sensor" and ziel.get("teil") == name)
+        if v.get("an_punkt") and ((ziel is not None and ziel.get("art") not in ("sensor", "sperrzone") and ziel.get("teil") == name)
                                   or (v.get("an") == "greifer" and greifer == name)):
             ergebnis.append((t, "an_punkt"))
     return ergebnis

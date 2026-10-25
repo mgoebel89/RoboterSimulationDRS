@@ -342,6 +342,40 @@ class TestSensorflaechen(unittest.TestCase):
             with self.assertRaises(bk.BaukastenFehler, msg=falsch):
                 bk.loese(entwurf(self.sensor(TISCH, typ="farbe", **falsch)), TEILE.__getitem__)
 
+    def test_sperrzone_und_grenzen(self):
+        zone = {"id": "zone1", "art": "sperrzone", "sperrzone": {"name": "Magazin", "groesse_mm": [100, 60, 80], "reaktion": "warnung"},
+                "verbindung": {"punkt": {"art": "flaeche", "id": "unten"}, "an": "tisch", "an_punkt": TISCH,
+                               "versatz_mm": [300, -100, 0], "drehung_grad": 0}}
+        e = entwurf(teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)), zone)
+        e["grenzen"] = {"arbeitsraum": {"an": True, "min_mm": [0, -400, -10], "max_mm": [600, 400, 500], "reaktion": "stopp"},
+                        "achsen": [[-179, 179], [-30, 120], [-80, 140], [-179, 179], [-95, 95], [-179, 179]]}
+        lagen = bk.loese(e, TEILE.__getitem__)
+        text = bk.welt_text(e, lagen, TEILE.__getitem__)
+        self.assertNotIn("zone1", text)                               # nur in worlds/<welt>.json
+        g = bk.grenzen_fuer_welt(e, lagen)
+        z = g["sperrzonen"][0]
+        self.assertEqual((z["name"], z["reaktion"], z["halb_mm"]), ("Magazin", "warnung", [50.0, 30.0, 40.0]))
+        self.assertEqual(z["mitte_mm"], [550.0, -100.0, 40.0])        # Tischmitte 250 + Versatz 300, halbe Hoehe
+        self.assertEqual(g["arbeitsraum"]["max_mm"], [600.0, 400.0, 500.0])
+        self.assertEqual(g["achsen"][1], [-30.0, 120.0])
+        # Achsgrenzen wie iRC: nichts eigenes; Arbeitsraum aus: fehlt in der Welt
+        e["grenzen"] = {"achsen": bk.IRC_ACHSGRENZEN, "arbeitsraum": {"an": False}}
+        self.assertEqual(bk.grenzen_fuer_welt(e, lagen)["achsen"], None)
+        self.assertIsNone(bk.grenzen_fuer_welt(e, lagen)["arbeitsraum"])
+        self.assertEqual(bk.grenzen_werte(None)["arbeitsraum"]["an"], False)
+        for falsch in ({"arbeitsraum": {"min_mm": [0, 0, 0], "max_mm": [5, 100, 100]}},
+                       {"arbeitsraum": {"reaktion": "explodieren"}},
+                       {"achsen": [[-179, 179]] * 5},
+                       {"achsen": [[-179, 179], [-90, 140], [-80, 140], [-179, 179], [-95, 95], [-179, 179]]},   # A2 unter iRC
+                       {"achsen": [[-179, 179], [100, 50], [-80, 140], [-179, 179], [-95, 95], [-179, 179]]},
+                       {"achsen_reaktion": "laut"}):
+            with self.assertRaises(bk.BaukastenFehler, msg=falsch):
+                bk.grenzen_werte({"grenzen": falsch})
+        for falsch in ({"groesse_mm": [0, 10, 10]}, {"reaktion": "melden"}):
+            z = dict(zone, sperrzone=dict(zone["sperrzone"], **falsch))
+            with self.assertRaises(bk.BaukastenFehler, msg=falsch):
+                bk.loese(entwurf(z), TEILE.__getitem__)
+
     def test_ungueltige_sensoren(self):
         for falsch in ({"din": 0}, {"din": "3"}, {"groesse_mm": [40, 30]}, {"groesse_mm": [0, 30, 10]}):
             with self.assertRaises(bk.BaukastenFehler, msg=falsch):

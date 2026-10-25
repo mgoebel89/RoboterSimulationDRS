@@ -181,7 +181,7 @@ class CrashZustand:
         if self.zustand in ("crash", "pruefe", "freifahren") and self.ausloeser:
             p = self.ausloeser["punkt"]
             d.update(a=self.ausloeser["a"], b=self.ausloeser["b"], punkt=[round(v, 4) for v in p],
-                     punkt_mm=[round(v, 1) for v in in_mm(p)])
+                     punkt_mm=[round(v, 1) for v in in_mm(p)], text=self.ausloeser.get("text"))
         return d
 
 
@@ -248,7 +248,10 @@ class ProgrammStopp:
         return ("wieder_gestoppt" if gesperrt else "gestoppt", z["programm"])
 
     def _lauf(self):
-        aufruf = None
+        try:   # gRPC schon jetzt laden und den Kanal anlegen: sonst kostet der erste Stopp 1 bis 2 s
+            aufruf = self._aufrufer()
+        except Exception:   # noqa: BLE001 - fehlt gRPC, meldet es der erste Auftrag
+            aufruf = None
         while not self._stopp.is_set():
             self._neu.wait(SPERRE_TAKT_S if self._gesperrt else None)
             self._neu.clear()
@@ -267,11 +270,7 @@ class ProgrammStopp:
                 if auftrag:
                     self._melden("fehler", "", "gRPC fehlt im Container (python3-grpcio)")
             except Exception as e:   # grpc.RpcError und Netzfehler
-                text = str(getattr(e, "details", lambda: e)() or e)
-                if "not installed or enabled" in text:
-                    text = "App %s in iRC nicht installiert oder nicht freigeschaltet" % self.app
-                else:
-                    text = "iRC-App nicht erreichbar (%s)" % text[:80]
+                text = ea.fehlertext(e, self.app)
                 if auftrag:
                     self._melden("fehler", "", text)
                 time.sleep(0.5)

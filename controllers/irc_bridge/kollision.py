@@ -18,6 +18,10 @@ def _sub(a, b):
     return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 
 
+def _add(a, b):
+    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+
+
 def _dot(a, b):
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
@@ -435,6 +439,127 @@ def bewegt(geschwindigkeit):
     """Faellt oder rutscht ein Werkstueck? geschwindigkeit: [vx, vy, vz, ...] in m/s (Webots getVelocity)."""
     vx, vy, vz = geschwindigkeit[:3]
     return vz < -FALLEN_MS or math.hypot(vx, vy) > SCHIEBEN_MS
+
+
+# ---------------------------------------------------------------- Stufe K4: Arbeitsraum, Sperrzonen, Achsgrenzen
+
+def _zeilen(rot):
+    """Drehung als 3 Zeilen (Webots liefert 9 Zahlen zeilenweise)."""
+    return [list(rot[0:3]), list(rot[3:6]), list(rot[6:9])] if len(rot) == 9 else [list(z) for z in rot]
+
+
+def _mm_mal(a, b):
+    return [[sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+
+
+def obb_schneiden(c1, r1, h1, c2, r2, h2):
+    """Ueberschneiden sich zwei gedrehte Quader (Mitte, Drehung als Zeilen, halbe Kanten)? Trennende Achsen (SAT)."""
+    a = [[r1[0][i], r1[1][i], r1[2][i]] for i in range(3)]   # Achsen = Spalten der Drehung
+    b = [[r2[0][i], r2[1][i], r2[2][i]] for i in range(3)]
+    t = _sub(c2, c1)
+    achsen = a + b + [[x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]] for x in a for y in b]
+    for n in achsen:
+        if _dot(n, n) < 1e-12:   # parallele Kanten
+            continue
+        ra = sum(h1[i] * abs(_dot(a[i], n)) for i in range(3))
+        rb = sum(h2[i] * abs(_dot(b[i], n)) for i in range(3))
+        if abs(_dot(t, n)) > ra + rb:
+            return False
+    return True
+
+
+def grenzen_einstellungen(daten):
+    """"grenzen" aus worlds/<welt>.json (schreibt tools/baukasten.grenzen_fuer_welt), fehlerhafte Teile entfallen."""
+    e = {"arbeitsraum": None, "sperrzonen": [], "achsen": None, "achsen_reaktion": "stopp"}
+    if not isinstance(daten, dict):
+        return e
+    reaktion = lambda w: w if w in ("warnung", "stopp") else "stopp"   # noqa: E731
+    a = daten.get("arbeitsraum")
+    try:
+        if isinstance(a, dict):
+            e["arbeitsraum"] = {"min_mm": [float(v) for v in a["min_mm"]][:3], "max_mm": [float(v) for v in a["max_mm"]][:3],
+                                "reaktion": reaktion(a.get("reaktion"))}
+    except (KeyError, TypeError, ValueError):
+        pass
+    for z in daten.get("sperrzonen") or []:
+        try:
+            e["sperrzonen"].append({"name": str(z.get("name") or "Sperrzone")[:24], "reaktion": reaktion(z.get("reaktion")),
+                                    "mitte_mm": [float(v) for v in z["mitte_mm"]][:3],
+                                    "drehung": [[float(v) for v in zeile][:3] for zeile in z["drehung"]][:3],
+                                    "halb_mm": [float(v) for v in z["halb_mm"]][:3]})
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
+    achsen = daten.get("achsen")
+    if isinstance(achsen, list) and len(achsen) == 6:
+        try:
+            e["achsen"] = [[float(p[0]), float(p[1])] for p in achsen]
+        except (TypeError, ValueError, IndexError):
+            pass
+    e["achsen_reaktion"] = reaktion(daten.get("achsen_reaktion"))
+    return e
+
+
+def _ecken_welt(k):
+    """Acht Ecken eines Quaders bzw. des Huellquaders eines Formkoerpers (Welt)."""
+    return [_welt((k.mitte_welt, k.rot), [sx * k.halb[0], sy * k.halb[1], sz * k.halb[2]])
+            for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+
+
+class Grenzen:
+    """Wegbegrenzungen einer Welt pruefen. Koordinaten der Grenzen: iRC-Basis (mm), Pruefung in der Welt (m)."""
+
+    def __init__(self, daten):
+        self.e = grenzen_einstellungen(daten)
+
+    @property
+    def an(self):
+        return bool(self.e["arbeitsraum"] or self.e["sperrzonen"] or self.e["achsen"])
+
+    @property
+    def stoppt(self):
+        """Haelt mindestens eine Grenze das Programm an?"""
+        return any(r == "stopp" for r in ([self.e["arbeitsraum"]["reaktion"]] if self.e["arbeitsraum"] else [])
+                   + [z["reaktion"] for z in self.e["sperrzonen"]] + ([self.e["achsen_reaktion"]] if self.e["achsen"] else []))
+
+    def pruefe(self, hand, basis, gelenke_grad=None, tcp=None):
+        """hand: Koerper (Quader/Formkoerper, Welt), basis: (Position, Drehung) des Roboterfusses in der Welt,
+        gelenke_grad: A1..A6 aus iRC, tcp: Weltpunkt fuer die Anzeige. Rueckgabe: [{a, b, punkt, text, reaktion}]."""
+        o, rb = basis[0], _zeilen(basis[1])
+        rbt = [[rb[j][i] for j in range(3)] for i in range(3)]
+        in_basis = lambda p: [v * 1000.0 for v in _mv(rbt, _sub(p, o))]   # noqa: E731
+        treffer = []
+        a = self.e["arbeitsraum"]
+        if a:
+            schlimmst = None   # (wie weit draussen in mm, Koerper, Ecke, Achse, Wert)
+            for k in hand:
+                for p in _ecken_welt(k):
+                    q = in_basis(p)
+                    for i in range(3):
+                        raus = max(a["min_mm"][i] - q[i], q[i] - a["max_mm"][i])
+                        if raus > 0 and (schlimmst is None or raus > schlimmst[0]):
+                            schlimmst = (raus, k.name, p, i, q[i])
+            if schlimmst:
+                raus, name, p, i, wert = schlimmst
+                grenze = a["min_mm"][i] if wert < a["min_mm"][i] else a["max_mm"][i]
+                treffer.append({"a": name, "b": "Arbeitsraum", "punkt": p, "reaktion": a["reaktion"],
+                                "text": "%s außerhalb des Arbeitsraums (%s = %.0f mm, Grenze %.0f mm)"
+                                        % (name, "xyz"[i], wert, grenze)})
+        for z in self.e["sperrzonen"]:
+            c = _add(o, _mv(rb, [v / 1000.0 for v in z["mitte_mm"]]))
+            r = _mm_mal(rb, z["drehung"])
+            h = [v / 1000.0 for v in z["halb_mm"]]
+            for k in hand:
+                if obb_schneiden(k.mitte_welt, _zeilen(k.rot), k.halb, c, r, h):
+                    treffer.append({"a": k.name, "b": "Sperrzone „%s“" % z["name"], "punkt": k.mitte_welt,
+                                    "reaktion": z["reaktion"], "text": "%s in der Sperrzone „%s“" % (k.name, z["name"])})
+                    break
+        if self.e["achsen"] and gelenke_grad:
+            for i, (q, (lo, hi)) in enumerate(zip(gelenke_grad, self.e["achsen"])):
+                if q < lo - 0.05 or q > hi + 0.05:
+                    treffer.append({"a": "A%d" % (i + 1), "b": "Achsgrenze A%d" % (i + 1), "punkt": tcp or o,
+                                    "reaktion": self.e["achsen_reaktion"],
+                                    "text": "A%d = %.0f° (erlaubt %.0f° bis %.0f°)" % (i + 1, q, lo, hi)})
+        return treffer
 
 
 def einstellungen(daten):

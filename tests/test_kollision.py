@@ -192,6 +192,41 @@ class TestK3(unittest.TestCase):
         self.assertEqual(k.pruefe([oben(0.035)], [unten], None, 0.001, 0.0), [])                 # noch in der Luft
 
 
+class TestK4(unittest.TestCase):
+    def test_obb(self):
+        e = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        self.assertTrue(k.obb_schneiden([0, 0, 0], e, [1, 1, 1], [1.9, 0, 0], e, [1, 1, 1]))
+        self.assertFalse(k.obb_schneiden([0, 0, 0], e, [1, 1, 1], [2.1, 0, 0], e, [1, 1, 1]))
+        d = [[math.cos(math.pi / 4), -math.sin(math.pi / 4), 0], [math.sin(math.pi / 4), math.cos(math.pi / 4), 0], [0, 0, 1]]
+        self.assertFalse(k.obb_schneiden([0, 0, 0], e, [1, 1, 1], [2.5, 0, 0], d, [1, 1, 1]))   # Ecke reicht bis 2,5-1,41
+        self.assertTrue(k.obb_schneiden([0, 0, 0], e, [1, 1, 1], [2.5, 0, 0], d, [1.5, 1, 1]))  # bis 2,5-1,77
+
+    def test_grenzen(self):
+        g = k.Grenzen({"arbeitsraum": {"min_mm": [0, -400, 0], "max_mm": [600, 400, 500], "reaktion": "stopp"},
+                       "sperrzonen": [{"name": "Magazin", "reaktion": "warnung", "mitte_mm": [350, 0, 40],
+                                       "drehung": [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "halb_mm": [50, 30, 40]}],
+                       "achsen": [[-179, 179], [-30, 120], [-80, 140], [-179, 179], [-95, 95], [-179, 179]],
+                       "achsen_reaktion": "warnung"})
+        self.assertTrue(g.an and g.stoppt)
+        basis = ([0.0, 0.0, 0.0], EINHEIT)
+        greifer = lambda x, y, z: k.Quader("Greifer", ([x, y, z], EINHEIT), [0, 0, 0], [0.02, 0.02, 0.04])   # noqa: E731
+        self.assertEqual(g.pruefe([greifer(0.3, 0.2, 0.3)], basis, [0, 0, 90, 0, 0, 0]), [])
+        t = g.pruefe([greifer(0.3, 0.0, 0.1)], basis)
+        self.assertEqual((t[0]["b"], t[0]["reaktion"]), ("Sperrzone „Magazin“", "warnung"))
+        t = g.pruefe([greifer(0.3, 0.0, 0.02)], basis)                 # unter z = 0 und in der Zone
+        self.assertEqual([(x["b"], x["reaktion"]) for x in t], [("Arbeitsraum", "stopp"), ("Sperrzone „Magazin“", "warnung")])
+        self.assertIn("z = -20 mm, Grenze 0 mm", t[0]["text"])
+        t = g.pruefe([greifer(0.3, 0.2, 0.3)], basis, [0, -40, 90, 0, 0, 0], [0.3, 0.2, 0.3])
+        self.assertEqual((t[0]["a"], t[0]["text"]), ("A2", "A2 = -40° (erlaubt -30° bis 120°)"))
+        # Roboter steht verschoben in der Welt: Grenzen gelten im System des Fusses
+        self.assertEqual(g.pruefe([greifer(1.3, 0.0, 0.1)], ([1.0, 0.0, 0.0], EINHEIT))[0]["b"], "Sperrzone „Magazin“")
+        # kaputte oder fehlende Angaben
+        self.assertFalse(k.Grenzen(None).an)
+        self.assertFalse(k.Grenzen({"arbeitsraum": {"min_mm": "x"}, "sperrzonen": [{"name": "z"}], "achsen": [1, 2]}).an)
+        self.assertFalse(k.Grenzen({"sperrzonen": [{"name": "z", "reaktion": "warnung", "mitte_mm": [0, 0, 0],
+                                                    "drehung": [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "halb_mm": [1, 1, 1]}]}).stoppt)
+
+
 MESHES = os.path.join(ROOT, "protos", "meshes")
 
 

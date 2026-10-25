@@ -54,6 +54,19 @@ def io_anfrage(app, eingaenge):
     return daten
 
 
+def fehlertext(fehler, app="WebotsSim"):
+    """Kurze, verstaendliche Meldung zu einem Fehler der App-Schnittstelle (grpc.RpcError oder Netzfehler)."""
+    text = str(getattr(fehler, "details", lambda: fehler)() or fehler)
+    klein = text.lower()
+    if "not installed or enabled" in klein:
+        return "App %s in iRC nicht installiert oder nicht freigeschaltet" % app
+    if "simulation" in klein:
+        return "iRC ist nicht im Simulationsmodus"
+    if any(w in klein for w in ("failed to connect", "connection refused", "unavailable", "deadline", "connect")):
+        return "iRC am PC nicht erreichbar (läuft iRC? App-Schnittstelle Port 5000)"
+    return "iRC-App meldet: %s" % text[:60]
+
+
 # --- Konfiguration ---
 
 def lade_ea(welt_pfad):
@@ -282,13 +295,7 @@ class AppVerbindung:
                 self.ok, self.meldung = False, "gRPC fehlt im Container (python3-grpcio)"
             except Exception as e:   # grpc.RpcError und Netzfehler
                 self.ok = False
-                text = str(getattr(e, "details", lambda: e)() or e)
-                if "not installed or enabled" in text:
-                    self.meldung = "App WebotsSim in iRC nicht installiert oder nicht freigeschaltet"
-                elif "simulation" in text.lower():
-                    self.meldung = "iRC ist nicht im Simulationsmodus"
-                else:
-                    self.meldung = "iRC-App nicht erreichbar (%s)" % text[:80]
+                self.meldung = fehlertext(e, self.app)
             if self.meldung != letzte_meldung:
                 self.log("E/A: %s" % self.meldung)
                 letzte_meldung = self.meldung

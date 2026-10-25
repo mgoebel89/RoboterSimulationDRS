@@ -268,6 +268,7 @@ SYMBOLE = {
     "DRUCKEN": '<path d="M7 8V4h10v4M7 17H4v-7h16v7h-3"/><path d="M7 14h10v6H7z"/>',
     "NEU": '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 11v6M9 14h6"/>',
     "KOLLISION": '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+    "SPERRZONE": '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
 }
 
 
@@ -1181,6 +1182,11 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 .ansichten .trenner { width:1px; background:rgba(255,255,255,.3); margin:2px 3px; }
 /* Beschriftungen: Namen der Teile, an 3D-Punkte gehaengt (Projektion im Browser, siehe schilderZeichnen) */
 #schilder { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:4; }
+/* Wegbegrenzungen (K4): Drahtgitter von Arbeitsraum und Sperrzonen, Achsgrenzen als Liste */
+#grenzlinien { position:absolute; inset:0; width:100%%; height:100%%; pointer-events:none; z-index:3; overflow:hidden; }
+#grenzlinien text { font:700 12px Calibri, Arial, sans-serif; paint-order:stroke; stroke:#fff; stroke-width:3px; }
+#achsgrenzen-info { position:absolute; right:10px; top:10px; z-index:5; background:rgba(26,26,26,.75); color:#fff;
+  padding:7px 10px; border-radius:var(--ecke) 0 0 0; font-size:.82em; line-height:1.45; pointer-events:none; }
 .schild { position:absolute; left:0; top:0; padding:2px 7px; border-radius:var(--ecke) 0 0 0; font-size:.8em;
   font-weight:700; white-space:nowrap; color:#fff; background:rgba(0,99,156,.9); box-shadow:0 1px 4px rgba(0,0,0,.35); }
 .schild::after { content:""; position:absolute; left:50%%; bottom:-6px; margin-left:-5px; border:5px solid transparent;
@@ -1236,8 +1242,9 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 <button data-ansicht="standard" class="an">Standard</button><button data-ansicht="vorne">Vorne</button>
 <button data-ansicht="seite">Seite</button><button data-ansicht="oben">Oben</button>
 <button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button>
-<span class="trenner"></span><button data-schilder title="Namen der Teile im 3D-Bild ein- oder ausblenden">Namen</button></div>
-<div id="schilder"></div><div id="kollision" hidden><span id="kollision-text"></span><small id="kollision-zusatz" hidden></small>
+<span class="trenner"></span><button data-schilder title="Namen der Teile im 3D-Bild ein- oder ausblenden">Namen</button>
+<button data-grenzen title="Arbeitsraum und Sperrzonen im 3D-Bild ein- oder ausblenden" hidden>Grenzen</button></div>
+<svg id="grenzlinien" hidden></svg><div id="achsgrenzen-info" hidden></div><div id="schilder"></div><div id="kollision" hidden><span id="kollision-text"></span><small id="kollision-zusatz" hidden></small>
 <button id="kollision-quittieren" hidden title="Erst danach darf das Programm wieder laufen. Den Roboter dann von Hand frei fahren.">Kollision quittieren</button></div>
 <div id="kollisionspunkt" hidden></div>%(ea)s</div>%(aufgabe)s</div>
 <script type="module">
@@ -1343,6 +1350,66 @@ schildKnopf.hidden = !SCHILDER.length;
 schildKnopf.previousElementSibling.hidden = !SCHILDER.length;
 schildKnopf.onclick = () => schilderSchalten(!schilderAn);
 schilderSchalten(schilderAn);
+// Grenzen: Ecken in Weltkoordinaten (m); die Roboterumgebungen aus dem Baukasten haben den Roboterfuss im Ursprung
+const GRENZEN = %(grenzen)s;
+const grenzKaesten = [];
+if (GRENZEN && GRENZEN.arbeitsraum) {
+  const a = GRENZEN.arbeitsraum, ecken = [];
+  for (const x of [a.min_mm[0], a.max_mm[0]]) for (const y of [a.min_mm[1], a.max_mm[1]]) for (const z of [a.min_mm[2], a.max_mm[2]])
+    ecken.push([x / 1000, y / 1000, z / 1000]);
+  grenzKaesten.push({name: 'Arbeitsraum', farbe: '#00639C', strich: '8 6', ecken});
+}
+for (const z of (GRENZEN && GRENZEN.sperrzonen) || []) {
+  const ecken = [], d = z.drehung, h = z.halb_mm;
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const l = [sx * h[0], sy * h[1], sz * h[2]];
+    ecken.push([0, 1, 2].map(i => (z.mitte_mm[i] + d[i][0] * l[0] + d[i][1] * l[1] + d[i][2] * l[2]) / 1000));
+  }
+  grenzKaesten.push({name: z.name + (z.reaktion === 'warnung' ? ' (Warnung)' : ''), farbe: z.reaktion === 'warnung' ? '#c98a00' : '#D4005E', strich: '', ecken});
+}
+const KANTEN = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+const grenzSvg = document.getElementById('grenzlinien'), grenzKnopf = document.querySelector('[data-grenzen]');
+const achsInfo = document.getElementById('achsgrenzen-info');
+if (GRENZEN && GRENZEN.achsen) achsInfo.innerHTML = '<b>Achsgrenzen</b><br>' + GRENZEN.achsen.map((p, i) => 'A' + (i + 1) + ': '
+  + Math.round(p[0]) + '° bis ' + Math.round(p[1]) + '°').join('<br>');
+let grenzenAn = false;
+try { grenzenAn = localStorage.getItem('rebel-grenzen') === 'an'; } catch (e) {}
+function grenzenSchalten(an) {
+  grenzenAn = an; grenzKnopf.classList.toggle('an', an);
+  grenzSvg.toggleAttribute('hidden', !an || !grenzKaesten.length);   // SVG kennt .hidden nicht, nur das Attribut
+  achsInfo.hidden = !an || !(GRENZEN && GRENZEN.achsen);
+  try { localStorage.setItem('rebel-grenzen', an ? 'an' : 'aus'); } catch (e) {}
+}
+grenzKnopf.hidden = !(grenzKaesten.length || (GRENZEN && GRENZEN.achsen));
+grenzKnopf.onclick = () => grenzenSchalten(!grenzenAn);
+grenzenSchalten(grenzenAn && !grenzKnopf.hidden);
+function grenzenZeichnen(r, m, k, tanX, tanY) {
+  if (grenzSvg.hasAttribute('hidden')) return;
+  const e = grenzSvg.getBoundingClientRect();
+  const bildpunkt = p => {   // wie bei den Schildern: Kamera x vor, y links, z oben
+    const v = [p[0] - k.x, p[1] - k.y, p[2] - k.z];
+    const vor = v[0] * m[0][0] + v[1] * m[1][0] + v[2] * m[2][0];
+    if (vor < 0.02) return null;
+    const links = v[0] * m[0][1] + v[1] * m[1][1] + v[2] * m[2][1], oben = v[0] * m[0][2] + v[1] * m[1][2] + v[2] * m[2][2];
+    return [r.left - e.left + r.width / 2 * (1 - links / (vor * tanX)), r.top - e.top + r.height / 2 * (1 - oben / (vor * tanY))];
+  };
+  let text = '';
+  for (const kasten of grenzKaesten) {
+    const p = kasten.ecken.map(bildpunkt);
+    for (const [a, b] of KANTEN) {
+      if (!p[a] || !p[b]) continue;
+      text += '<line x1="' + p[a][0].toFixed(1) + '" y1="' + p[a][1].toFixed(1) + '" x2="' + p[b][0].toFixed(1) + '" y2="' + p[b][1].toFixed(1)
+        + '" stroke="' + kasten.farbe + '" stroke-width="2"' + (kasten.strich ? ' stroke-dasharray="' + kasten.strich + '"' : '') + '/>';
+    }
+    const oben = p.filter((q, i) => q && i %% 2 === 1);   // Ecken mit z = max
+    if (oben.length) {
+      const x = oben.reduce((s, q) => s + q[0], 0) / oben.length, y = Math.min(...oben.map(q => q[1])) - 6;
+      text += '<text x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" text-anchor="middle" fill="' + kasten.farbe + '">'
+        + kasten.name.replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c])) + '</text>';
+    }
+  }
+  grenzSvg.innerHTML = text;
+}
 let solids = new Map(), solidsWelt = null;
 function solidVon(name) {
   const welt = WbWorld.instance;
@@ -1387,11 +1454,14 @@ async function kollisionHolen() {   // Stand aus der Statusdatei des Platzes
   const kz = d && d.kollision, cr = d && d.crash, zustand = cr ? cr.zustand : 'frei';
   let text = null, zusatz = cr && cr.meldung, art = '';
   if (zustand === 'crash') {
-    text = 'Crash: ' + ortText(cr); art = 'crash';
+    text = cr.text ? 'Grenze verletzt: ' + cr.text : 'Crash: ' + ortText(cr); art = 'crash';
     zusatz = (cr.programm ? 'Programm „' + cr.programm + '“ angehalten. ' : 'Programm angehalten. ') + (cr.meldung || '');
   } else if (zustand === 'freifahren') {
     text = 'Quittiert: Roboter jetzt von Hand frei fahren'; art = 'freifahren';
     zusatz = 'Berührung mit ' + cr.b + ' zählt nicht, bis der Roboter frei ist.' + (kz && kz.aktiv ? ' Noch: ' + ortText(kz) : '');
+  } else if (kz && (kz.art === 'grenze' || kz.art === 'grenze_warnung')) {   // Arbeitsraum, Sperrzone, Achsgrenze (K4)
+    text = 'Grenze: ' + kz.text; art = kz.aktiv ? '' : 'vorbei';
+    zusatz = kz.art === 'grenze_warnung' ? 'Nur Warnung, das Programm läuft weiter.' : zustand === 'pruefe' ? 'Programm wird angehalten ...' : '';
   } else if (kz && kz.art === 'werkstueck') {   // Teil faellt auf ein anderes oder wird dagegen geschoben
     text = 'Werkstück stößt an: ' + ortText(kz); art = kz.aktiv ? '' : 'vorbei';
     zusatz = 'Nur Hinweis, das Programm läuft weiter. Zu hoch losgelassen oder angestoßen?';
@@ -1423,6 +1493,7 @@ function schilderZeichnen() {
   const tanY = aspekt < 1 ? halb : halb / aspekt, tanX = tanY * aspekt;
   const o = vp.orientation, m = drehung(o.x, o.y, o.z, o.w), k = vp.position;
   kollisionZeichnen(r, e, m, k, tanX, tanY);
+  grenzenZeichnen(r, m, k, tanX, tanY);
   if (!schilderAn || !SCHILDER.length) return;
   const belegt = [];   // schon gesetzte Schilder (Rechtecke); Werkstuecke zuerst, sie liegen oft auf Aufbauten
   SCHILDER_REIHE.forEach(i => {
@@ -1686,6 +1757,18 @@ def _wbt_vektor(inhalt, feld):
     return [float(v) for v in m.groups()] if m else None
 
 
+def welt_grenzen(welt_datei):
+    """Wegbegrenzungen einer Welt fuer den Knopf "Grenzen" (worlds/<welt>.json, "grenzen"), None wenn keine."""
+    try:
+        with open(os.path.join(WELTEN_DIR, os.path.splitext(os.path.basename(welt_datei))[0] + ".json"), encoding="utf-8") as f:
+            g = json.load(f).get("grenzen")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(g, dict) or not (g.get("arbeitsraum") or g.get("sperrzonen") or g.get("achsen")):
+        return None
+    return {"arbeitsraum": g.get("arbeitsraum"), "sperrzonen": g.get("sperrzonen") or [], "achsen": g.get("achsen")}
+
+
 def welt_beschriftungen(welt_datei):
     """Schilder fuer die 3D-Ansicht: Werkstuecke, Aufbauten und Sensorflaechen der Welt (aus der .wbt).
     folgen: der Browser haengt das Schild an das Solid dieses Namens, hoehe_m ueber dessen Ursprung (Werkstueck:
@@ -1704,7 +1787,7 @@ def welt_beschriftungen(welt_datei):
             for t in entwurf["teile"]:
                 if t.get("art") == "sensor":
                     sensor_namen["sensor_" + t["id"]] = (t.get("sensor") or {}).get("name") or t["id"]
-                elif t.get("art") != "werkstueck":
+                elif t.get("art") not in ("werkstueck", "sperrzone"):
                     b = lade(t["teil"])["box"]
                     ecken = [lagen[t["id"]].punkt([x, y, z]) for x in (b[0], b[3]) for y in (b[1], b[4]) for z in (b[2], b[5])]
                     oben[t["id"]] = [round((min(p[0] for p in ecken) + max(p[0] for p in ecken)) / 2000, 5),
@@ -1844,6 +1927,7 @@ def seite_viewer(platz, welt=None):
     return VIEWER % {"stil": STIL, "marke": marke(), "platz": html.escape(platz["platz"]), "titel": titel, "ea": ea_teil, "ea_js": ea_js,
                      "ansichten": json.dumps(kamera_ansichten(platz["welt"])),
                      "beschriftungen": json.dumps(welt_beschriftungen(platz["welt"]), ensure_ascii=False).replace("</", "<\\/"),
+                     "grenzen": json.dumps(welt_grenzen(platz["welt"]), ensure_ascii=False).replace("</", "<\\/"),
                      "knoepfe": knoepfe, "aufgabe": aufgabe, "schueler_js": schueler_js,
                      "kollision_zeigen": "true" if welt is not None else "false",
                      "irc_host": html.escape(platz["irc_host"]), "stream_port": platz["stream_port"],
@@ -2448,7 +2532,8 @@ def baukasten_speichern(welt, entwurf, wer_name):
     lade = baukasten.teile_lader(TEILE_DIR)
     lagen = baukasten.loese(entwurf, lade)
     entwurf = dict(entwurf, besitzer=entwurf.get("besitzer") or "lehrer:%s" % wer_name,
-                   ea=baukasten.ea_werte(entwurf), kollision=baukasten.kollision_werte(entwurf))
+                   ea=baukasten.ea_werte(entwurf), kollision=baukasten.kollision_werte(entwurf),
+                   grenzen=baukasten.grenzen_werte(entwurf))
     text = baukasten.welt_text(entwurf, lagen, lade, os.path.basename(entwurf_datei))
     lehrer.schreibe_json(entwurf_datei, entwurf)
     tmp = wbt + ".tmp"
@@ -2464,6 +2549,7 @@ def baukasten_speichern(welt, entwurf, wer_name):
     # Taster, Leuchten und Sensorflaechen liest der Controller beim Start der Simulation
     angaben["ea"] = dict(entwurf["ea"], sensoren=baukasten.ea_sensoren(entwurf))
     angaben["kollision"] = entwurf["kollision"]   # liest der Controller beim Start (welt_kollision)
+    angaben["grenzen"] = baukasten.grenzen_fuer_welt(entwurf, lagen)   # Arbeitsraum, Sperrzonen, Achsgrenzen (K4)
     lehrer.schreibe_json(angaben_datei, angaben)
     try:
         lehrer.loesche_weltdatei(WELTEN_DIR, welt + ".wbt", "bild")

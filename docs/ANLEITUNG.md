@@ -290,6 +290,21 @@ den Roboter in iRC von Hand frei fahren: Berührungen mit dem Teil des Crashs z�
 ist, danach wird wieder normal geprüft. Wird der Roboter von Hand verfahren (kein Programm aktiv), gibt es nur die
 Meldung, ohne Anhalten.
 
+**Grenzen** (Werkzeugleiste „Kollisionen & Grenzen“, Teilebaum „Grenzen“): Wegbegrenzungen je Roboterumgebung. Sie
+gelten für Greifer, Backen und das gegriffene Teil. Für jede Grenze wählt man die Reaktion: **Stopp** (wie eine
+Kollision: Programm anhalten, „Kollision quittieren“) oder **Warnung** (nur Hinweis).
+- **Arbeitsraum:** Quader in iRC-Koordinaten (mm, Ursprung Roboterfuß), den die Hand nicht verlassen darf.
+  „Tischplatte übernehmen“ setzt x und y auf die Platte und z von der Platte bis 600 mm darüber. Im Bild blau gestrichelt.
+- **Sperrzonen:** über „Sperrzone“ in der Werkzeugleiste einfügen und wie eine Sensorfläche an Tisch, Nut oder ein Teil
+  hängen (Länge, Breite, Höhe, Beschriftung und Reaktion stehen in den Eigenschaften). In Webots unsichtbar.
+- **Achsgrenzen:** engere Grenzen als in iRC für A1–A6, z.B. damit der Arm nicht nach hinten schwenkt. Vorbelegt sind
+  die iRC-Grenzen des ReBeL; bleiben sie so, wird nichts zusätzlich geprüft.
+
+Der Aufbauplan zeigt Sperrzonen wie andere Teile (rosa, mit Maßen) und den Arbeitsraum gestrichelt mit seinen Abständen
+zur hinteren und linken Tischkante. In der Schüleransicht blendet der Knopf **Grenzen** Arbeitsraum und Sperrzonen als
+Drahtgitter ins 3D-Bild ein, dazu eine Liste der Achsgrenzen; die Meldung lautet z.B. „Grenze: Greifer in der Sperrzone
+„Schutzgitter““ oder „Grenze: A2 = 65° (erlaubt -80° bis 60°)“. Die Grenzen gelten auch, wenn die Kollisionsprüfung aus ist.
+
 **Greifer** (Lehrerbereich → Greifer): alle Greifer als Karten, oben die eigenen, darunter die Schunk-Greifer, die iRC
 mitbringt. Jede Karte zeigt TCP ab Flansch, Backen offen/zu, den Werkzeugnamen in iRC und die Roboterumgebungen, die
 den Greifer verwenden. Knöpfe: **Werkzeug für iRC** (ZIP mit Werkzeugdatei samt TCP und Greifer-Ausgängen, 3D-Modellen
