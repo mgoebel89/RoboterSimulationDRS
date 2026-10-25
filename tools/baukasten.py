@@ -478,6 +478,31 @@ def quader_merkmale(lx, ly, lz):
             "kanten": kanten, "ecken": ecken, "bohrungen": []}
 
 
+# Kollisionspruefung je Welt (Stufe K1), Werte wie kollision.einstellungen im Controller
+KOLLISION_STANDARD = {"an": True, "reaktion": "stopp", "abstand_mm": 2.0, "ablage_mm": 2.0}
+
+
+def kollision_werte(entwurf=None):
+    """Einstellungen "kollision" des Entwurfs, geprueft: an (bool), reaktion (melden|stopp), abstand_mm und
+    ablage_mm (0 bis 20)."""
+    e = dict(KOLLISION_STANDARD)
+    k = (entwurf or {}).get("kollision") or {}
+    if not isinstance(k, dict):
+        raise BaukastenFehler("'kollision' muss ein Objekt sein.")
+    if "an" in k:
+        e["an"] = bool(k["an"])
+    if k.get("reaktion", e["reaktion"]) not in ("melden", "stopp"):
+        raise BaukastenFehler("Kollision: Reaktion ist 'melden' oder 'stopp'.")
+    e["reaktion"] = k.get("reaktion", e["reaktion"])
+    for feld, text in (("abstand_mm", "Sicherheitsabstand"), ("ablage_mm", "Ablagetoleranz")):
+        if feld in k:
+            wert = k[feld]
+            if isinstance(wert, bool) or not isinstance(wert, (int, float)) or not 0 <= wert <= 20:
+                raise BaukastenFehler("Kollision: %s von 0 bis 20 mm." % text)
+            e[feld] = float(wert)
+    return e
+
+
 def ea_sensoren(entwurf):
     """Sensorflaechen fuer worlds/<welt>.json ("ea" -> "sensoren"); "knoten" = DEF-Name in der Welt."""
     return [dict(sensor_werte(t), knoten="SENSOR_%d" % i)

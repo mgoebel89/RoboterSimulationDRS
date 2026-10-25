@@ -267,6 +267,7 @@ SYMBOLE = {
     "GESAMT": '<path d="M3 12l9-8 9 8M5 10v10h14V10"/>',
     "DRUCKEN": '<path d="M7 8V4h10v4M7 17H4v-7h16v7h-3"/><path d="M7 14h10v6H7z"/>',
     "NEU": '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 11v6M9 14h6"/>',
+    "KOLLISION": '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
 }
 
 
@@ -1119,7 +1120,16 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
   border-bottom:0; border-top:6px solid rgba(0,99,156,.9); }
 .schild.aufbau { background:rgba(60,64,72,.85); } .schild.aufbau::after { border-top-color:rgba(60,64,72,.85); }
 .schild.sensor { background:rgba(177,200,0,.92); color:var(--schwarz); } .schild.sensor::after { border-top-color:rgba(177,200,0,.92); }
-.schild.versetzt::after { display:none; }   /* nach oben ausgewichen: zeigt nicht mehr genau auf den Punkt */
+.schild.versetzt::after { display:none; }
+/* Kollision: Meldung oben in der Mitte, roter Punkt an der Kontaktstelle (nur fuer den Schueler, Stufe K1) */
+#kollision { position:absolute; left:50%%; top:12px; transform:translateX(-50%%); z-index:7; background:var(--pink);
+  color:#fff; padding:9px 18px; border-radius:999px; font-weight:700; box-shadow:0 6px 18px rgba(212,0,94,.35);
+  max-width:calc(100%% - 24px); text-align:center; pointer-events:none; }
+#kollision.vorbei { background:rgba(212,0,94,.75); }
+#kollisionspunkt { position:absolute; left:0; top:0; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%%;
+  border:3px solid #fff; background:var(--pink); box-shadow:0 0 0 4px rgba(212,0,94,.35); z-index:6; pointer-events:none;
+  animation:pochen 1s ease-in-out infinite; }
+@keyframes pochen { 50%% { box-shadow:0 0 0 10px rgba(212,0,94,.15); } }   /* nach oben ausgewichen: zeigt nicht mehr genau auf den Punkt */
 .ea { position:absolute; bottom:52px; z-index:5; display:flex; flex-direction:column; gap:5px; max-width:44%%;
   background:rgba(26,26,26,.75); padding:8px; border-radius:var(--ecke) 0 0 0; color:#fff; font-size:.88em; }
 .ea.links { left:10px; bottom:100px; } .ea.rechts { right:10px; bottom:100px; }   /* unten links steht die Einteach-Hilfe */
@@ -1152,7 +1162,7 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 <button data-ansicht="seite">Seite</button><button data-ansicht="oben">Oben</button>
 <button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button>
 <span class="trenner"></span><button data-schilder title="Namen der Teile im 3D-Bild ein- oder ausblenden">Namen</button></div>
-<div id="schilder"></div>%(ea)s</div>%(aufgabe)s</div>
+<div id="schilder"></div><div id="kollision" hidden></div><div id="kollisionspunkt" hidden></div>%(ea)s</div>%(aufgabe)s</div>
 <script type="module">
 import "%(webots_js)s";
 import MeshLoader from "%(wwi)s/MeshLoader.js";
@@ -1275,16 +1285,39 @@ function drehung(x, y, z, w) {   // Achse-Winkel -> Matrix (Zeilen), wie Webots-
           [t * x * y + s * z, t * y * y + c, t * y * z - s * x],
           [t * x * z - s * y, t * y * z + s * x, t * z * z + c]];
 }
+let kollisionPunkt = null;
+const kollisionMarke = document.getElementById('kollisionspunkt');
+function kollisionZeichnen(r, e, m, k, tanX, tanY) {
+  if (!kollisionPunkt) { kollisionMarke.hidden = true; return; }
+  const p = kollisionPunkt, v = [p[0] - k.x, p[1] - k.y, p[2] - k.z];
+  const vor = v[0] * m[0][0] + v[1] * m[1][0] + v[2] * m[2][0];
+  if (vor < 0.02) { kollisionMarke.hidden = true; return; }
+  const links = v[0] * m[0][1] + v[1] * m[1][1] + v[2] * m[2][1], oben = v[0] * m[0][2] + v[1] * m[1][2] + v[2] * m[2][2];
+  kollisionMarke.hidden = false;
+  kollisionMarke.style.transform = 'translate(' + (r.left - e.left + r.width / 2 * (1 - links / (vor * tanX))).toFixed(1) + 'px,'
+    + (r.top - e.top + r.height / 2 * (1 - oben / (vor * tanY))).toFixed(1) + 'px)';
+}
+async function kollisionHolen() {   // Stand aus der Statusdatei des Platzes
+  const d = await fetch('/api/platz/%(platz)s', {cache: 'no-store'}).then(r => r.json()).catch(() => null);
+  const kz = d && d.kollision, el = document.getElementById('kollision');
+  if (!kz) { el.hidden = true; kollisionPunkt = null; return; }
+  const mm = kz.punkt_mm || [0, 0, 0];
+  el.textContent = 'Kollision: ' + kz.a + ' mit ' + kz.b + ' · X ' + Math.round(mm[0]) + ' Y ' + Math.round(mm[1]) + ' Z ' + Math.round(mm[2]) + ' mm';
+  el.classList.toggle('vorbei', !kz.aktiv); el.hidden = false;
+  kollisionPunkt = kz.punkt;
+}
+setInterval(kollisionHolen, 400);
 function schilderZeichnen() {
   requestAnimationFrame(schilderZeichnen);
   const welt = WbWorld.instance, vp = welt && welt.viewpoint, bild = view.querySelector('canvas');
-  if (!schilderAn || !SCHILDER.length) return;
-  if (!vp || !vp.position || !bild) { schildDivs.forEach(d => d.hidden = true); return; }
+  if (!vp || !vp.position || !bild) { schildDivs.forEach(d => d.hidden = true); kollisionMarke.hidden = true; return; }
   const r = bild.getBoundingClientRect(), e = schilderEbene.getBoundingClientRect();
   if (!r.width || !r.height) return;
   const aspekt = r.width / r.height, halb = Math.tan(vp.fieldOfView / 2);
   const tanY = aspekt < 1 ? halb : halb / aspekt, tanX = tanY * aspekt;
   const o = vp.orientation, m = drehung(o.x, o.y, o.z, o.w), k = vp.position;
+  kollisionZeichnen(r, e, m, k, tanX, tanY);
+  if (!schilderAn || !SCHILDER.length) return;
   const belegt = [];   // schon gesetzte Schilder (Rechtecke); Werkstuecke zuerst, sie liegen oft auf Aufbauten
   SCHILDER_REIHE.forEach(i => {
     const s = SCHILDER[i], d = schildDivs[i];
@@ -2253,7 +2286,7 @@ def baukasten_speichern(welt, entwurf, wer_name):
     lade = baukasten.teile_lader(TEILE_DIR)
     lagen = baukasten.loese(entwurf, lade)
     entwurf = dict(entwurf, besitzer=entwurf.get("besitzer") or "lehrer:%s" % wer_name,
-                   ea=baukasten.ea_werte(entwurf))
+                   ea=baukasten.ea_werte(entwurf), kollision=baukasten.kollision_werte(entwurf))
     text = baukasten.welt_text(entwurf, lagen, lade, os.path.basename(entwurf_datei))
     lehrer.schreibe_json(entwurf_datei, entwurf)
     tmp = wbt + ".tmp"
@@ -2268,6 +2301,7 @@ def baukasten_speichern(welt, entwurf, wer_name):
         angaben = {"titel": entwurf.get("titel") or welt, "aufgabe": entwurf.get("aufgabe", ""), "sichtbar": False}
     # Taster, Leuchten und Sensorflaechen liest der Controller beim Start der Simulation
     angaben["ea"] = dict(entwurf["ea"], sensoren=baukasten.ea_sensoren(entwurf))
+    angaben["kollision"] = entwurf["kollision"]   # liest der Controller beim Start (welt_kollision)
     lehrer.schreibe_json(angaben_datei, angaben)
     try:
         lehrer.loesche_weltdatei(WELTEN_DIR, welt + ".wbt", "bild")
@@ -2358,7 +2392,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 st = lese_status(platz["platz"]) or {}
                 self._json(200, {k: st.get(k) for k in ("tcp", "tcp_y", "hilfe", "greifer_zu", "teil", "taster",
-                                                        "leuchten", "sensoren", "ea_meldung", "ea_ok")})
+                                                        "leuchten", "sensoren", "ea_meldung", "ea_ok", "kollision")})
         elif re.fullmatch(r"/welten/[A-Za-z0-9_-]{1,60}\.(png|jpg|pdf)", pfad):
             datei = os.path.join(WELTEN_DIR, pfad.rsplit("/", 1)[1])
             try:

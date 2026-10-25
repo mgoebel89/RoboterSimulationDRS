@@ -27,6 +27,7 @@ from controller import Supervisor
 
 from cri_client import CriClient
 import ea
+import kollision
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -280,6 +281,7 @@ class Greifer:
         self.abgelegt = {}           # Node-Id -> (Node, Lage, Drehung): auf Aufbauten abgelegt, festgehalten
         self.tischhoehe = lambda: None   # Oberkante des Tischs in m (setzt main)
         self.ablage = "auflage"          # oder "liegen_lassen" (Einstellung der Welt, siehe _auf_auflage)
+        self.beim_loslassen = lambda node: None   # setzt main (Kollisionswaechter)
 
     def beschreibung(self):
         if self.bit_auf is not None:
@@ -597,6 +599,8 @@ class Greifer:
                 self.teil_name, hub * 1000)
         else:
             self.meldung = "Greifer offen"
+        if self.teil is not None:
+            self.beim_loslassen(self.teil)
         self.teil = None
         for f in self.fingers:
             f.setPosition(0.0)
@@ -709,6 +713,148 @@ def auflage_hoehe(netze, mitte, halb, z_max):
     return hoechste
 
 
+# --- Kollisionen (Stufe K1): Roboter, Greifer und gegriffenes Teil gegen Tisch, Aufbauten und Werkstuecke ---
+
+HUELLEN_DATEI = os.path.join(HERE, "..", "..", "protos", "meshes", "huellen.json")
+
+
+def welt_kollision(welt_pfad):
+    """Kollisions-Einstellungen der Welt (worlds/<welt>.json, "kollision"), siehe kollision.einstellungen."""
+    try:
+        with open(os.path.splitext(welt_pfad)[0] + ".json", encoding="utf-8") as f:
+            return kollision.einstellungen(json.load(f).get("kollision"))
+    except (OSError, ValueError, AttributeError):
+        return kollision.einstellungen(None)
+
+
+class KollisionsWaechter:
+    """Prueft etwa 10-mal je Sekunde. Huellen der Glieder aus huellen.json (Generator), Greifer als Quader in der
+    aktuellen Backenstellung, das gegriffene Teil als sein Huellquader; Umgebung als Punktwolken (kollision.py)."""
+
+    GLIED_NAMEN = {1: "Glied 1 (Drehteller)", 2: "Glied 2 (Oberarm)", 3: "Glied 3 (Ellbogen)", 4: "Glied 4 (Unterarm)",
+                   5: "Glied 5 (Handgelenk)", 6: "Glied 6 (Flansch)"}
+
+    def __init__(self, robot, me, greifer, einst, huellen=None, log=print):
+        self.robot, self.greifer, self.einst = robot, greifer, einst
+        self.glieder = []   # (Name, Node, Kugeln lokal, Huellkugel lokal (Mitte, Radius))
+        self.greifer_huelle = {}
+        self.finger = {}
+        self.wolken = {}     # Node-Id -> Punktwolke im Teilsystem
+        self.zuletzt_los = (None, 0.0)   # eben losgelassenes Teil: die Backen beruehren es noch kurz
+        self.treffer = []
+        self.dauer_ms = 0.0
+        if not einst["an"]:
+            return
+        if huellen is None:
+            try:
+                with open(HUELLEN_DATEI, encoding="utf-8") as f:
+                    huellen = json.load(f)
+            except (OSError, ValueError):
+                log("Kollisionen: %s fehlt (Modell neu erzeugen), Pruefung aus" % HUELLEN_DATEI)
+                self.einst = dict(einst, an=False)
+                return
+        for n in range(1, 7):
+            node = me.getFromProtoDef("GLIED%d" % n)
+            kugeln = huellen.get("glieder", {}).get(str(n)) or []
+            if node is None or not kugeln:
+                continue
+            m = [sum(k[i] for k in kugeln) / len(kugeln) for i in range(3)]
+            r = max(math.dist(m, k[:3]) + k[3] for k in kugeln)
+            self.glieder.append((self.GLIED_NAMEN[n], node, kugeln, (m, r)))
+        self.greifer_huelle = huellen.get("greifer", {}).get(greifer.typ, {})
+        self.flansch = me.getFromProtoDef("GLIED6")
+        for seite in ("links", "rechts"):
+            node = me.getFromProtoDef("FINGER_%s" % seite.upper())
+            if node is not None:
+                self.finger[seite] = node
+        log("Kollisionen: an, Sicherheitsabstand %.1f mm, Ablagetoleranz %.1f mm, Reaktion %s (Stufe K1: nur Meldung)"
+            % (einst["abstand_mm"], einst["ablage_mm"], einst["reaktion"]))
+
+    @property
+    def an(self):
+        return self.einst["an"]
+
+    def losgelassen(self, node):
+        self.zuletzt_los = (node, time.monotonic())
+
+    def _wolke_aufbau(self, node):
+        if node.getId() not in self.wolken:
+            try:
+                url = node.getField("modell").getMFString(0)
+                skal = node.getField("skalierung").getSFFloat()
+                roh = lies_netz(os.path.join(os.path.dirname(self.robot.getWorldPath()), url), skal, [0.0, 0.0, 0.0])
+            except (AttributeError, IndexError, TypeError):
+                roh = None
+            self.wolken[node.getId()] = kollision.Punktwolke(kollision.abtasten(*roh) if roh and roh[0] else [])
+        return self.wolken[node.getId()]
+
+    def _wolke_werkstueck(self, node):
+        if node.getId() not in self.wolken:
+            netz = self.greifer._netz(node)
+            if netz is not None and netz[0]:
+                punkte = kollision.abtasten(netz[0], netz[1])
+            else:
+                punkte = kollision.quader_punkte([v / 2 for v in node.getField("size").getSFVec3f()])
+            self.wolken[node.getId()] = kollision.Punktwolke(punkte)
+        return self.wolken[node.getId()]
+
+    def koerper(self, nahe):
+        """Huellkoerper in Weltlage; Glieder nur, wenn ihre Huellkugel `nahe` (Funktion Mitte, Radius) ist."""
+        liste = []
+        for name, node, kugeln, (m, r) in self.glieder:
+            lage = (node.getPosition(), node.getOrientation())
+            if not nahe(kollision._welt(lage, m), r):
+                continue
+            liste += [kollision.Kugel(name, kollision._welt(lage, k[:3]), k[3]) for k in kugeln]
+        if self.flansch is not None and "grund" in self.greifer_huelle:
+            h = self.greifer_huelle["grund"]
+            liste.append(kollision.Quader("Greifer", (self.flansch.getPosition(), self.flansch.getOrientation()), h["mitte"], h["halb"]))
+        for seite, node in self.finger.items():
+            h = self.greifer_huelle.get(seite)
+            if h:
+                liste.append(kollision.Quader("Backe %s" % seite, (node.getPosition(), node.getOrientation()), h["mitte"], h["halb"]))
+        t = self.greifer.teil
+        if t is not None:
+            liste.append(kollision.Quader("%s (gegriffen)" % self.greifer.teil_name, (t.getPosition(), t.getOrientation()),
+                                          [0.0, 0.0, 0.0], [v / 2 for v in t.getField("size").getSFVec3f()]))
+        return liste
+
+    def pruefen(self, teile, aufbau_nodes, tisch_z):
+        """Neue Liste der Treffer (auch leer); Rechenzeit in dauer_ms."""
+        if not self.an:
+            return []
+        t0 = time.perf_counter()
+        umgebung = []
+        for node in aufbau_nodes:
+            umgebung.append(kollision.Umgebungsteil(node.getField("name").getSFString(), "aufbau",
+                                                    self._wolke_aufbau(node), (node.getPosition(), node.getOrientation()), node.getId()))
+        for node in teile:
+            if node is self.greifer.teil:
+                continue
+            umgebung.append(kollision.Umgebungsteil(node.getField("name").getSFString(), "werkstueck",
+                                                    self._wolke_werkstueck(node), (node.getPosition(), node.getOrientation()), node.getId()))
+        rand = self.einst["abstand_mm"] / 1000.0
+
+        def nahe(m, r):
+            if tisch_z is not None and m[2] - r < tisch_z + rand:
+                return True
+            return any(math.dist(m, u.lage[0]) < r + u.wolke.radius + rand for u in umgebung)
+        # Ausnahmen: Fuss/Drehteller stehen auf Basisplatte und Tisch; die Backen beruehren das gegriffene und
+        # das eben losgelassene Teil
+        ausnahmen = set()
+        for u in umgebung:
+            if u.name == "basisplatte":
+                ausnahmen.add((self.GLIED_NAMEN[1], u.kennung))
+        los, wann = self.zuletzt_los
+        if los is not None and time.monotonic() - wann < 1.5:
+            for seite in ("links", "rechts"):
+                ausnahmen.add(("Backe %s" % seite, los.getId()))
+        self.treffer = kollision.pruefe(self.koerper(nahe), umgebung, tisch_z, rand, self.einst["ablage_mm"] / 1000.0,
+                                        ausnahmen=ausnahmen, tisch_frei={self.GLIED_NAMEN[1]})
+        self.dauer_ms = 0.8 * self.dauer_ms + 0.2 * (time.perf_counter() - t0) * 1000
+        return self.treffer
+
+
 def merke_startlagen(teile, startlagen):
     """Startlage jedes Werkstuecks beim ersten Sehen merken (Schluessel: Node-Id)."""
     for node in teile:
@@ -767,6 +913,10 @@ def main():
                              ", zu tief abgelegte Teile bleiben liegen" if greifer.ablage == "liegen_lassen" else ""))
 
     cri = CriClient(cfg["host"], cfg["ports"], passive=cfg["nur_mithoeren"], log=print).start()
+    waechter = KollisionsWaechter(robot, me, greifer, welt_kollision(robot.getWorldPath()), log=print)
+    greifer.beim_loslassen = waechter.losgelassen
+    kollision_zeit = 0.0
+    kollision_letzt = None   # letzte Meldung (bleibt 3 s stehen)
 
     teile = werkstuecke(robot)
     startlagen = {}
@@ -894,6 +1044,17 @@ def main():
 
         greifer.mitfuehren()
         greifer.festhalten()
+        if waechter.an and not vorschau and jetzt - kollision_zeit >= 0.1 and not erster_schritt:
+            kollision_zeit = jetzt
+            treffer = waechter.pruefen(teile, aufbauten(robot), tischhoehe())
+            if treffer:
+                neu = (treffer[0]["a"], treffer[0]["b"])
+                if kollision_letzt is None or (kollision_letzt["a"], kollision_letzt["b"]) != neu:
+                    p_mm = [v * 1000.0 for v in m_vec(m_t(me.getOrientation()), sub(treffer[0]["punkt"], me.getPosition()))]
+                    print("KOLLISION: %s mit %s bei x=%.0f y=%.0f z=%.0f mm" % (neu[0], neu[1], p_mm[0], p_mm[1], p_mm[2]))
+                kollision_letzt = dict(treffer[0], zeit=jetzt)
+            elif kollision_letzt is not None and jetzt - kollision_letzt["zeit"] > 3.0:
+                kollision_letzt = None
         if jetzt - hilfe_zeit >= 0.25:   # 4x pro Sekunde reicht (Netzschnitt bei CAD-Werkstuecken)
             hilfe_zeit = jetzt
             hilfe = greifer.einteach_hilfe(teile, me.getOrientation())
@@ -916,6 +1077,13 @@ def main():
                 "echtzeit": round(echtzeit, 2),
                 "laufzeit_s": round(jetzt - start_zeit),
                 "hilfe": hilfe,
+                "kollision": None if kollision_letzt is None else {
+                    "a": kollision_letzt["a"], "b": kollision_letzt["b"],
+                    "punkt": [round(v, 4) for v in kollision_letzt["punkt"]],
+                    "punkt_mm": [round(v * 1000.0, 1) for v in m_vec(m_t(me.getOrientation()),
+                                                                     sub(kollision_letzt["punkt"], me.getPosition()))],
+                    "aktiv": bool(waechter.treffer)},
+                "kollision_ms": round(waechter.dauer_ms, 2) if waechter.an else None,
                 "taster": list(taster.gedrueckt),
                 "sensoren": list(sensorfelder.belegt),
                 "leuchten": ea.leuchten_zustand(ea_cfg["leuchten"], None if letzter is None else letzter.dout,

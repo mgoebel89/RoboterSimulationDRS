@@ -27,6 +27,13 @@ import xml.etree.ElementTree as ET
 DEFAULT_IRC = r"C:\Program Files\iRC-igusRobotControl-V15"
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.dirname(HERE)
+sys.path.insert(0, os.path.join(PROJECT, "controllers", "irc_bridge"))
+import kollision  # noqa: E402 - Huellkoerper fuer die Kollisionspruefung (Kugelketten, Quader)
+
+# Huellkoerper je Greifer-Variante (convert_egp), geschrieben nach protos/meshes/huellen.json
+HUELLEN_GREIFER = {
+    "vakuum": {"grund": {"mitte": [0.0, 0.0, 0.0372], "halb": [0.03, 0.03, 0.036]}},
+}
 PROTO_DIR = os.path.join(PROJECT, "protos")
 MESH_DIR = os.path.join(PROTO_DIR, "meshes")
 
@@ -414,6 +421,10 @@ def convert_egp(irc, key, xml_name, satz=None):
                                  " (Lage provisorisch)" if satz.get("provisorisch") else "")
     spalt = min(abs(p[0]) for p in greif_v)             # halbe Innenweite bei offenem Greifer
     hub = min(hub, spalt - 0.0001)                      # Backen beruehren sich zuerst
+    backe = {"links": links[0] + (b_links[0] if satz is not None else []),
+             "rechts": rechts[0] + (b_rechts[0] if satz is not None else [])}
+    HUELLEN_GREIFER[key] = {"grund": kollision.quader_um(grund[0]),
+                            "links": kollision.quader_um(backe["links"]), "rechts": kollision.quader_um(backe["rechts"])}
     daten = {
         "typ": key,
         "tcp": tcp,
@@ -439,7 +450,7 @@ def convert_egp(irc, key, xml_name, satz=None):
             "SliderJoint {",
             "  jointParameters JointParameters { axis %s }" % achse,
             '  device [ LinearMotor { name "finger_%s" minPosition 0 maxPosition %.5f maxVelocity 0.05 } ]' % (seite, hub),
-            '  endPoint Solid { name "finger_%s" children [ %s ] }' % (seite, " ".join(kinder)),
+            '  endPoint DEF FINGER_%s Solid { name "finger_%s" children [ %s ] }' % (seite.upper(), seite, " ".join(kinder)),
             "}",
         ]
     text.append("DEF TCP Pose { translation 0 0 %.5f }" % tcp)
@@ -569,7 +580,7 @@ def build_proto(robot_type, kin_type, k, limits, links, source_dir, egp):
             out.append(pad + '    device [ RotationalMotor { name "A%d" maxVelocity 100 maxTorque 1000 } '
                        'PositionSensor { name "A%d_sensor" } ]' % (j + 1, j + 1))
             out.append(pad + "    # iRC-Softwaregrenzen A%d: %.0f .. %.0f Grad (werden hier nicht erzwungen)" % (j + 1, lo, hi))
-            out.append(pad + "    endPoint Solid {")
+            out.append(pad + "    endPoint DEF GLIED%d Solid {" % (j + 1))
             out.append(pad + "      translation %.5f %.5f %.5f" % (x, y, z))
             out.append(pad + '      name "glied%d"' % (j + 1))
             out.extend(emit_link(idx + 1, indent + 6))
@@ -639,6 +650,22 @@ def main():
     for key, (_text, daten) in egp:
         print("Greifer %s: TCP %.1f mm, Backen offen %.1f mm auseinander, Hub je Backe %.1f mm"
               % (key, daten["tcp"] * 1000, daten["spalt"] * 2000, daten["hub"] * 1000))
+    glieder = {}
+    for i in range(1, 7):
+        quelle = os.path.join(robot_dir, "Joint%dColl.obj" % i)
+        if not os.path.exists(quelle):
+            quelle = os.path.join(robot_dir, "Joint%d.obj" % i)
+        # die Kollisionsnetze sind lose Einzelflaechen: Flaechen abtasten, dann in Kugeln fassen
+        # (Hand und Flansch feiner, weil sie beim Greifen nah an die Teile kommen)
+        punkte = []
+        for verts, _n, faces in split_obj(quelle).values():
+            dreiecke = [(f[0][0] - 1, f[k][0] - 1, f[k + 1][0] - 1) for f in faces for k in range(1, len(f) - 1)]   # ab 1 gezaehlt
+            punkte += kollision.abtasten(verts, dreiecke, 0.005)
+        glieder[str(i)] = kollision.kugelraster(punkte, 0.025 if i <= 3 else 0.015)
+    with open(os.path.join(MESH_DIR, "huellen.json"), "w", encoding="utf-8") as f:
+        json.dump({"glieder": glieder, "greifer": HUELLEN_GREIFER}, f)
+    print("Huellkoerper: %s Kugeln je Glied, %d Greifer" % ("/".join(str(len(glieder[str(i)])) for i in range(1, 7)),
+                                                           len(HUELLEN_GREIFER)))
     proto = build_proto(robot_type, kin_type, k, limits, links, robot_dir, egp)
     out = os.path.join(PROTO_DIR, "IgusRebel6DOF.proto")
     with open(out, "w", encoding="utf-8") as f:

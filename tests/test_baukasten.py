@@ -498,6 +498,20 @@ class TestTeilErsetzen(unittest.TestCase):
         self.assertEqual(bk.teil_verweise(e, "schunk_egp25"), [])
 
 
+class TestKollisionWerte(unittest.TestCase):
+    def test_standard_und_pruefung(self):
+        self.assertEqual(bk.kollision_werte({}), {"an": True, "reaktion": "stopp", "abstand_mm": 2.0, "ablage_mm": 2.0})
+        e = bk.kollision_werte({"kollision": {"an": False, "reaktion": "melden", "abstand_mm": 5, "ablage_mm": 0.5}})
+        self.assertEqual(e, {"an": False, "reaktion": "melden", "abstand_mm": 5.0, "ablage_mm": 0.5})
+        for falsch in ({"reaktion": "laut"}, {"abstand_mm": 25}, {"ablage_mm": "2"}, {"abstand_mm": True}):
+            with self.assertRaises(bk.BaukastenFehler):
+                bk.kollision_werte({"kollision": falsch})
+        # Controller und Baukasten haben dieselben Standardwerte
+        sys.path.insert(0, os.path.join(ROOT, "controllers", "irc_bridge"))
+        import kollision
+        self.assertEqual(kollision.STANDARD, bk.KOLLISION_STANDARD)
+
+
 class TestWelt(unittest.TestCase):
     def test_welt_text(self):
         e = entwurf(teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)),

@@ -155,6 +155,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <button id="plus-sensor" title="Fläche, die meldet, ob ein Werkstück darauf liegt (oder welche Farbe es hat)">%%ICON_SENSOR%%Sensorfläche</button>
   <button id="w-tisch" title="Tisch und Lage des Roboters">%%ICON_TISCH%%Tisch</button>
   <button id="w-ea" title="Taster und Leuchtmelder für die Schüleransicht">%%ICON_TASTER%%Taster &amp; Leuchten</button>
+  <button id="w-kollision" title="Kollisionsprüfung für diese Roboterumgebung">%%ICON_KOLLISION%%Kollisionen</button>
   <span class="trenner"></span>
   <button id="k-gesamt" title="Ganzen Tisch zeigen">%%ICON_GESAMT%%Übersicht</button>
   <button id="k-teil" title="Kamera auf das gewählte Teil">%%ICON_FOKUS%%Teil zeigen</button>
@@ -188,6 +189,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <div class="baum-kopf" id="baum-kopf-umgebung">Roboterumgebung</div>
   <button class="baum-eintrag" id="baum-tisch" title="Tisch einstellen">%%ICON_TISCH%%Tisch<span class="kurz" id="tisch-kurz"></span></button>
   <button class="baum-eintrag" id="baum-ea" title="Taster und Leuchtmelder">%%ICON_TASTER%%Taster &amp; Leuchten<span class="kurz" id="ea-kurz"></span></button>
+  <button class="baum-eintrag" id="baum-kollision" title="Kollisionsprüfung">%%ICON_KOLLISION%%Kollisionen<span class="kurz" id="kollision-kurz"></span></button>
   <div class="baum-kopf">Teile <span id="teile-anzahl"></span></div>
   <div class="liste" id="teileliste"></div>
   <div class="hilfe">Neue Teile stehen erst neben dem Tisch; mit einer Verbindung kommen sie an ihren Platz.
@@ -318,6 +320,27 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
     <div class="baum-kopf" style="padding-left:0">Leuchtmelder</div>
     <div class="ea-liste" id="ea-leuchten"></div>
     <div><button id="ea-plus-leuchte">%%ICON_PLUS%%Leuchtmelder</button></div>
+  </div>
+  <div class="dialog-fuss"><button class="haupt" data-zu>Fertig</button></div>
+</div></div>
+
+<!-- Dialog: Kollisionspruefung -->
+<div id="kollision-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Kollisionen">
+  <div class="dialog-kopf"><h2>Kollisionen</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt" id="kollision-feld">
+    <label class="zeile" style="font-size:.95em;color:var(--text)"><input type="checkbox" id="k-an"> Kollisionen prüfen</label>
+    <div class="hilfe">Geprüft werden Greifer, Backen und das gegriffene Teil sowie der Roboterarm gegen Tisch, Aufbauten
+      und Werkstücke. Der Roboter wird dabei mit vereinfachten Hüllkörpern gerechnet (am Arm bis etwa 2 cm, an der Hand
+      gut 1 cm größer als echt), Greifer und Teile genauer. Die Meldung sieht nur der Schüler.</div>
+    <label class="feldspalte">Reaktion <select id="k-reaktion">
+      <option value="stopp">wie ein echter Crash: Programm in iRC stoppen</option>
+      <option value="melden">nur melden</option></select></label>
+    <div class="hilfe">Stoppen kommt mit der nächsten Ausbaustufe; bis dahin wird nur gemeldet.</div>
+    <div class="zahlen" style="grid-template-columns:1fr 1fr">
+      <label>Sicherheitsabstand (mm) <input id="k-abstand" type="number" min="0" max="20" step="0.5"></label>
+      <label>Ablagetoleranz (mm) <input id="k-ablage" type="number" min="0" max="20" step="0.5"></label></div>
+    <div class="hilfe">Sicherheitsabstand: so nah darf der Roboter an Tisch und Teile kommen. Ablagetoleranz: so tief
+      darf ein abgelegtes Teil in die Auflage drücken, bevor es als Kollision zählt.</div>
   </div>
   <div class="dialog-fuss"><button class="haupt" data-zu>Fertig</button></div>
 </div></div>
@@ -602,7 +625,8 @@ async function greiferAufbauen() {
   $('weltdatei').placeholder = 'z.B. robi3'; $('greifer-feld').hidden = true;
   $('modus-wechsel').lastChild.textContent = 'Baukasten'; $('modus-wechsel').href = '/lehrer/baukasten';
   $('zurueck').lastChild.textContent = 'Lehrerbereich'; $('zurueck').href = '/lehrer';
-  for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor', 'w-tisch', 'w-ea', 'w-plan', 'baum-tisch', 'baum-ea', 'baum-kopf-umgebung']) $(id).hidden = true;
+  for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor', 'w-tisch', 'w-ea', 'w-plan', 'baum-tisch', 'baum-ea', 'baum-kopf-umgebung',
+                    'w-kollision', 'baum-kollision']) $(id).hidden = true;
   $('backen-feld').hidden = false; $('e-art').disabled = true;
 }
 async function greiferZeigen() {   // Schunk-Modell der gewaehlten Groesse (aus der Teilebibliothek)
@@ -1287,6 +1311,25 @@ window.addEventListener('keydown', ev => {
 });
 $('w-tisch').onclick = $('baum-tisch').onclick = () => dialogAuf('tisch-dialog');
 $('w-ea').onclick = $('baum-ea').onclick = () => dialogAuf('ea-dialog');
+// Kollisionspruefung (wie kollision_werte in baukasten.py)
+const KOLLISION_STANDARD = {an: true, reaktion: 'stopp', abstand_mm: 2, ablage_mm: 2};
+function kollisionWerte() { return Object.assign({}, KOLLISION_STANDARD, entwurf.kollision || {}); }
+function kollisionZeigen() {
+  const k = kollisionWerte();
+  $('k-an').checked = k.an; $('k-reaktion').value = k.reaktion; $('k-abstand').value = k.abstand_mm; $('k-ablage').value = k.ablage_mm;
+  ['k-reaktion', 'k-abstand', 'k-ablage'].forEach(id => $(id).disabled = !k.an);
+  $('kollision-kurz').textContent = k.an ? (k.reaktion === 'stopp' ? 'Stopp' : 'melden') + ', ' + k.abstand_mm + ' mm' : 'aus';
+}
+function kollisionAusFormular() {
+  const zahl = (id, v) => { const n = Number($(id).value); return Number.isFinite(n) && $(id).value !== '' ? Math.min(20, Math.max(0, n)) : v; };
+  const alt = kollisionWerte();
+  entwurf.kollision = {an: $('k-an').checked, reaktion: $('k-reaktion').value, abstand_mm: zahl('k-abstand', alt.abstand_mm),
+                       ablage_mm: zahl('k-ablage', alt.ablage_mm)};
+  kollisionZeigen();
+}
+['k-an', 'k-reaktion', 'k-abstand', 'k-ablage'].forEach(id => $(id).addEventListener('change', kollisionAusFormular));
+$('w-kollision').onclick = $('baum-kollision').onclick = () => { kollisionZeigen(); dialogAuf('kollision-dialog'); };
+for (const id of ['kollision-dialog']) { $(id).addEventListener('change', merken); }
 $('e-zu').onclick = () => waehlen(null);
 
 // ---------- Ungespeicherte Aenderungen ----------
@@ -1571,7 +1614,7 @@ async function weltLadenInnen(name) {
     $('b-hub').value = entwurf.hub_mm ?? '';
     await greiferZeigen(); uebersicht(); backenInfo(); tcpZeigen();
   }
-  else { tischZeichnen(); uebersicht(); eaZeigen(); }
+  else { tischZeichnen(); uebersicht(); eaZeigen(); kollisionZeigen(); }
   for (const t of entwurf.teile) await objektBauen(t);
   formularZeigen(); await rechnen();
 }
