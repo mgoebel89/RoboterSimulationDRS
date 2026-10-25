@@ -1012,6 +1012,7 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
   border-bottom:0; border-top:6px solid rgba(0,99,156,.9); }
 .schild.aufbau { background:rgba(60,64,72,.85); } .schild.aufbau::after { border-top-color:rgba(60,64,72,.85); }
 .schild.sensor { background:rgba(177,200,0,.92); color:var(--schwarz); } .schild.sensor::after { border-top-color:rgba(177,200,0,.92); }
+.schild.versetzt::after { display:none; }   /* nach oben ausgewichen: zeigt nicht mehr genau auf den Punkt */
 .ea { position:absolute; bottom:52px; z-index:5; display:flex; flex-direction:column; gap:5px; max-width:44%%;
   background:rgba(26,26,26,.75); padding:8px; border-radius:var(--ecke) 0 0 0; color:#fff; font-size:.88em; }
 .ea.links { left:10px; bottom:100px; } .ea.rechts { right:10px; bottom:100px; }   /* unten links steht die Einteach-Hilfe */
@@ -1132,6 +1133,7 @@ view.addEventListener('mousedown', () => {
 // im Viewer (laufen beim Tragen mit), Aufbauten an einem festen Punkt ueber ihrer Oberseite. Jedes Bild wird mit
 // dem Viewpoint des Viewers projiziert: Kamera x = Blickrichtung, y = links, z = oben (wie in blick()). ---
 const SCHILDER = %(beschriftungen)s;
+const SCHILDER_REIHE = SCHILDER.map((s, i) => i).sort((a, b) => (SCHILDER[a].art === 'aufbau') - (SCHILDER[b].art === 'aufbau'));
 const schilderEbene = document.getElementById('schilder'), schildKnopf = document.querySelector('[data-schilder]');
 const schildDivs = SCHILDER.map(s => {
   const d = document.createElement('div'); d.className = 'schild ' + s.art; d.textContent = s.text; d.hidden = true;
@@ -1176,8 +1178,9 @@ function schilderZeichnen() {
   const aspekt = r.width / r.height, halb = Math.tan(vp.fieldOfView / 2);
   const tanY = aspekt < 1 ? halb : halb / aspekt, tanX = tanY * aspekt;
   const o = vp.orientation, m = drehung(o.x, o.y, o.z, o.w), k = vp.position;
-  SCHILDER.forEach((s, i) => {
-    const d = schildDivs[i];
+  const belegt = [];   // schon gesetzte Schilder (Rechtecke); Werkstuecke zuerst, sie liegen oft auf Aufbauten
+  SCHILDER_REIHE.forEach(i => {
+    const s = SCHILDER[i], d = schildDivs[i];
     let p = s.punkt;
     if (s.folgen) { const n = solidVon(s.name); p = n && [n.translation.x, n.translation.y, n.translation.z + s.hoehe_m]; }
     if (!p) { d.hidden = true; return; }
@@ -1187,8 +1190,19 @@ function schilderZeichnen() {
     const oben = v[0] * m[0][2] + v[1] * m[1][2] + v[2] * m[2][2];
     if (vor < 0.02) { d.hidden = true; return; }   // hinter der Kamera
     const x = r.left - e.left + r.width / 2 * (1 - links / (vor * tanX));
-    const y = r.top - e.top + r.height / 2 * (1 - oben / (vor * tanY)) - 7;
+    let y = r.top - e.top + r.height / 2 * (1 - oben / (vor * tanY)) - 7;
     d.hidden = x < 0 || y < 0 || x > e.width || y > e.height;
+    if (d.hidden) return;
+    // Breite/Hoehe einmal messen; ueberlappt das Schild ein gesetztes, weicht es darueber aus
+    if (!d.masse) d.masse = [d.offsetWidth, d.offsetHeight];
+    const [b, h] = d.masse, y0 = y;
+    for (let n = 0; n < 8; n++) {
+      const im = belegt.find(q => Math.abs(q.x - x) < (q.b + b) / 2 + 2 && y > q.y - q.h - 2 && y - h < q.y + 2);
+      if (!im) break;
+      y = im.y - im.h - 3;
+    }
+    belegt.push({x, y, b, h});
+    d.classList.toggle('versetzt', y !== y0);
     d.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(-50%%,-100%%)';
   });
 }
