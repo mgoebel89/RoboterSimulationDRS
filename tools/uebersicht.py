@@ -332,6 +332,7 @@ table.welten tr.zeile-welt { cursor:pointer; } table.welten tr.zeile-welt:hover 
 .dialog .vorschau { width:100%; aspect-ratio:4/3; max-height:260px; border-radius:var(--ecke) 0 0 0; background:var(--bg) center/contain no-repeat;
   border:1px solid var(--linie); display:flex; align-items:center; justify-content:center; color:var(--grau); }
 input[type=file] { display:none; }
+label.knopf-datei.aus { pointer-events:none; opacity:.5; }
 </style></head>
 <body><header>%%MARKE%% <span class="unter">Lehrerbereich</span>
 <nav><button data-tab="sim" class="an">Simulationen</button><button data-tab="welten">Welten</button>
@@ -413,6 +414,26 @@ input[type=file] { display:none; }
   <div class="hilfe" id="t-stand"></div>
   <div class="knopfreihe"><button class="haupt" id="t-hochladen">Einlesen</button><button id="t-zu">Schließen</button>
     <a id="t-baukasten" href="/lehrer/baukasten" hidden>Zum Baukasten</a></div>
+</div></div>
+
+<div id="teil-info" class="dialog" hidden><div class="feld gross">
+  <h2 id="ti-titel">Teil</h2><div class="welt-datei" id="ti-quelle"></div>
+  <div class="zeile">
+    <div><div class="vorschau" id="ti-bild"></div></div>
+    <div><div id="ti-daten"></div><div class="hilfe" id="ti-verwendet" style="margin-top:8px"></div></div>
+  </div>
+  <h2>Aktualisieren</h2>
+  <div class="hilfe">Neue STEP-Datei für dasselbe Teil, z.B. nach einer Änderung in Onshape. Die Verbindungspunkte
+    (Flächen, Bohrungen, Kanten, Ecken), an denen etwas hängt, werden im neuen Modell wiedergesucht; Welten und
+    Backensätze mit diesem Teil werden neu gerechnet. Das alte Teil kommt in den Papierkorb
+    (<code>teile/papierkorb</code> im Container).</div>
+  <div class="knopfreihe"><label class="knopf-datei" id="ti-datei-knopf">Neue STEP-Datei einlesen<input type="file" id="ti-datei"
+    accept=".step,.stp,.STEP,.STP"></label>
+    <button class="warnen" id="ti-trotzdem" hidden>Trotzdem ersetzen</button></div>
+  <div class="hilfe" id="ti-stand"></div>
+  <div class="knopfreihe" style="margin-top:10px"><button id="ti-zu">Schließen</button>
+    <button class="warnen" id="ti-loeschen" style="margin-left:auto">Teil löschen</button></div>
+  <div class="hilfe" id="ti-loeschen-hilfe" style="text-align:right"></div>
 </div></div>
 
 <div id="import-dialog" class="dialog" hidden><div class="feld"><h2>Welt importieren</h2>
@@ -731,14 +752,15 @@ function vorschauSetzen(el, t) {
   vorschau().then(m => m.vorschauAdresse(t)).then(url => { el.style.backgroundImage = 'url(' + url + ')'; el.textContent = ''; })
     .catch(() => { el.textContent = 'keine Vorschau'; });
 }
+let teilListe = [], teilOffen = null;
 async function teile() {
-  const liste = await (await fetch('/api/lehrer/teile', {cache: 'no-store'})).json();
+  const liste = teilListe = await (await fetch('/api/lehrer/teile', {cache: 'no-store'})).json();
   $('teile').innerHTML = liste.map(t => '<tr data-name="' + esc(t.name) + '"><td style="width:96px"><div class="mini" data-vorschau>'
     + (t.vorschau ? '' : '…') + '</div></td><td>' + esc(t.name)
     + '<div class="hilfe">' + esc(t.quelle) + '</div></td><td>' + (t.groesse_mm || []).map(v => v.toFixed(1)).join(' × ')
     + '</td><td>' + t.anzahl.flaechen + '</td><td>' + t.anzahl.bohrungen + '</td><td>' + t.anzahl.kanten + '</td><td>'
     + t.anzahl.ecken + '</td><td>' + esc(t.verwendet_in.join(', ')) + '</td><td class="knoepfe">'
-    + (t.verwendet_in.length ? '' : '<button class="t-loeschen warnen">Löschen</button>') + '</td></tr>').join('')
+    + '<button data-bearbeiten>Bearbeiten</button></td></tr>').join('')
     || '<tr><td colspan="9" class="hilfe">Noch keine Teile.</td></tr>';
   for (const t of liste) vorschauSetzen($('teile').querySelector('[data-name="' + CSS.escape(t.name) + '"] [data-vorschau]'), t);
 }
@@ -754,10 +776,15 @@ $('t-datei').onchange = () => {   // Name aus dem Dateinamen vorschlagen
 $('t-hochladen').onclick = async () => {
   const f = $('t-datei').files[0], name = $('t-name').value.trim().toLowerCase();
   if (!f || !name) { melden('Bitte Name und STEP-Datei angeben.', true); return; }
+  if (teilListe.some(t => t.name === name)) {
+    $('t-stand').textContent = 'Das Teil ' + name + ' gibt es schon. Zum Aktualisieren das Teil in der Liste öffnen und dort '
+      + '„Neue STEP-Datei einlesen“ wählen – oder hier einen anderen Namen nehmen.';
+    return;
+  }
   const b = $('t-hochladen'); b.disabled = true; b.textContent = 'lese ein ...';
   $('t-stand').textContent = 'Der Container rechnet Netz und Verbindungspunkte (einige Sekunden, mit Gewinden länger) ...';
   try {
-    const r = await fetch('/api/lehrer/teil_hochladen?name=' + encodeURIComponent(name), {method: 'POST', body: f,
+    const r = await fetch('/api/lehrer/teil_hochladen?name=' + encodeURIComponent(name) + '&datei=' + encodeURIComponent(f.name), {method: 'POST', body: f,
       headers: {'Content-Type': 'application/octet-stream', 'X-Lehrer': '1'}});
     const d = await r.json().catch(() => ({}));
     if (r.ok) {
@@ -768,11 +795,72 @@ $('t-hochladen').onclick = async () => {
     } else $('t-stand').textContent = d.fehler || 'Einlesen fehlgeschlagen.';
   } finally { b.disabled = false; b.textContent = 'Einlesen'; teile(); }
 };
-$('teile').onclick = async ev => {
-  const b = ev.target.closest('button.t-loeschen');
-  if (!b) return;
-  const name = b.closest('[data-name]').dataset.name;
-  if (confirm('Teil ' + name + ' aus der Bibliothek löschen?')) { await api('teil_loeschen', {name}); teile(); }
+$('teile').onclick = ev => {
+  const zeile = ev.target.closest('[data-name]');
+  const t = zeile && teilListe.find(t => t.name === zeile.dataset.name);
+  if (t) teilDialog(t);
+};
+function teilDialog(t, stand) {
+  teilOffen = t.name;
+  $('ti-titel').textContent = t.name;
+  $('ti-quelle').textContent = 'aus ' + (t.quelle || '?') + (t.mitgeliefert ? ' · mitgeliefert' : '');
+  $('ti-daten').innerHTML = '<b>' + (t.groesse_mm || []).map(v => v.toFixed(1)).join(' × ') + ' mm</b><div class="hilfe">'
+    + t.anzahl.flaechen + ' Flächen, ' + t.anzahl.bohrungen + ' Bohrungen, ' + t.anzahl.kanten + ' Kanten, '
+    + t.anzahl.ecken + ' Ecken</div>';
+  $('ti-verwendet').textContent = t.verwendet_in.length ? 'Verwendet in: ' + t.verwendet_in.join(', ') : 'Wird noch nirgends verwendet.';
+  $('ti-stand').innerHTML = stand || ''; $('ti-trotzdem').hidden = true; $('ti-datei').value = '';
+  $('ti-loeschen').disabled = t.verwendet_in.length > 0;
+  $('ti-loeschen-hilfe').textContent = t.verwendet_in.length ? 'Löschen geht erst, wenn das Teil nirgends mehr verwendet wird.'
+    : t.mitgeliefert ? 'Mitgeliefertes Teil: das nächste Update legt es wieder an.' : '';
+  const bild = $('ti-bild'); bild.style.backgroundImage = ''; bild.textContent = '…'; vorschauSetzen(bild, t);
+  $('teil-info').hidden = false;
+}
+function teilDialogZu() { $('teil-info').hidden = true; teilOffen = null; }
+$('ti-zu').onclick = teilDialogZu;
+$('teil-info').addEventListener('click', ev => { if (ev.target === $('teil-info')) teilDialogZu(); });
+const aufzaehlung = (titel, eintraege) => eintraege.length ? '<div><b>' + titel + '</b><ul>' + eintraege.map(e => '<li>' + esc(e) + '</li>').join('')
+  + '</ul></div>' : '';
+function ersetztText(d) {
+  return '<div>Ersetzt: ' + d.groesse_mm.map(v => Math.round(v)).join(' × ') + ' mm, ' + d.flaechen + ' Flächen, ' + d.bohrungen
+    + ' Bohrungen. Das alte Teil liegt in <code>teile/' + esc(d.papierkorb) + '</code>.</div>'
+    + aufzaehlung('Neu gerechnet', d.neu_gerechnet)
+    + aufzaehlung('Im Baukasten neu verbinden (Teil steht dort als „offen“)', d.neu_verbinden.map(o => o.wo + ': ' + o.punkte.join(', ')))
+    + aufzaehlung('Verbindungspunkt liegt im neuen Modell woanders (Lage im Baukasten prüfen)', d.verschoben.map(v => v.wo + ': ' + v.punkt + ' um ' + v.mm + ' mm'))
+    + aufzaehlung('Fehler', d.fehler)
+    + (d.laufende_plaetze.length ? '<div>Läuft gerade auf Platz ' + d.laufende_plaetze.map(esc).join(', ')
+       + ': dort „Neu starten“, um die Änderung zu sehen.</div>' : '');
+}
+async function teilErsetzen(erzwingen) {
+  const f = $('ti-datei').files[0], name = teilOffen;
+  if (!f || !name) return;
+  $('ti-trotzdem').hidden = true; $('ti-datei-knopf').classList.add('aus');
+  $('ti-stand').textContent = 'Der Container liest die neue Datei ein und sucht die Verbindungspunkte (einige Sekunden, mit Gewinden länger) ...';
+  try {
+    const r = await fetch('/api/lehrer/teil_hochladen?name=' + encodeURIComponent(name) + '&datei=' + encodeURIComponent(f.name)
+      + '&ersetzen=1' + (erzwingen ? '&erzwingen=1' : ''),
+      {method: 'POST', body: f, headers: {'Content-Type': 'application/octet-stream', 'X-Lehrer': '1'}});
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      await teile();
+      const t = teilListe.find(t => t.name === name);
+      if (t && teilOffen === name) teilDialog(t, ersetztText(d));
+      melden('Teil ' + name + ' ersetzt.');
+    } else if (d.offen) {
+      $('ti-stand').innerHTML = '<div>' + esc(d.fehler) + '</div>'
+        + aufzaehlung('Nicht wiedergefunden', d.offen.map(o => o.wo + ': ' + o.punkte.join(', ')))
+        + '<div>Noch ist nichts geändert. „Trotzdem ersetzen“ übernimmt das neue Modell; die genannten Teile stehen '
+        + 'dann im Baukasten als „offen“ und müssen dort neu verbunden werden.</div>';
+      $('ti-trotzdem').hidden = false;
+    } else $('ti-stand').textContent = d.fehler || 'Einlesen fehlgeschlagen.';
+  } finally { $('ti-datei-knopf').classList.remove('aus'); }
+}
+$('ti-datei').onchange = () => teilErsetzen(false);
+$('ti-trotzdem').onclick = () => teilErsetzen(true);
+$('ti-loeschen').onclick = async () => {
+  const name = teilOffen;
+  if (!name || !confirm('Teil ' + name + ' aus der Bibliothek löschen?\\nEs wandert in den Papierkorb (teile/papierkorb im Container).')) return;
+  const d = await api('teil_loeschen', {name});
+  teilDialogZu(); melden('Teil ' + name + ' gelöscht (teile/' + d.papierkorb + ').'); teile();
 };
 
 // --- Protokoll ---
@@ -1496,7 +1584,7 @@ def teile_liste():
         except OSError:
             vorschau = None   # erzeugt der Browser beim ersten Anzeigen (tools/teil_vorschau.js)
         liste.append({"name": name, "quelle": t.get("quelle"), "groesse_mm": t.get("groesse_mm"), "vorschau": vorschau,
-                      "volumen_mm3": t.get("volumen_mm3"),
+                      "volumen_mm3": t.get("volumen_mm3"), "mitgeliefert": name in mitgelieferte_teile(),
                       "anzahl": {k: len(t.get(k, [])) for k in ("flaechen", "bohrungen", "kanten", "ecken")},
                       "verwendet_in": [w for w, e in entwuerfe().items() if any(x.get("teil") == name for x in e["teile"])
                                        or (name == baukasten.BASISPLATTE and (e.get("tisch") or {}).get("art") == "profil")]
@@ -1507,6 +1595,26 @@ def teile_liste():
 
 TEIL_VORSCHAU = "vorschau.png"
 MAX_VORSCHAU = 2 * 1024 * 1024
+TEILE_PAPIERKORB = "papierkorb"   # teile/papierkorb/<name>-<zeit>/: geloeschte und ersetzte Teile
+
+
+def mitgelieferte_teile():
+    """Namen der Teile aus vorlagen/teile.json; das Update legt fehlende davon wieder an."""
+    try:
+        with open(os.path.join(PROJEKT_DIR, "vorlagen", "teile.json"), encoding="utf-8") as f:
+            return {t["name"] for t in json.load(f)["teile"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return set()
+
+
+def teil_in_papierkorb(name):
+    """teile/<name>/ nach teile/papierkorb/<name>-<zeit>/ verschieben. Rueckgabe: Ordner im Papierkorb."""
+    ziel = os.path.join(TEILE_DIR, TEILE_PAPIERKORB, "%s-%s" % (name, time.strftime("%Y%m%d-%H%M%S")))
+    while os.path.exists(ziel):
+        ziel += "_"
+    os.makedirs(os.path.dirname(ziel), exist_ok=True)
+    os.replace(os.path.join(TEILE_DIR, name), ziel)
+    return os.path.relpath(ziel, TEILE_DIR).replace(os.sep, "/")
 
 
 def speichere_teil_vorschau(name, inhalt):
@@ -1521,19 +1629,25 @@ def speichere_teil_vorschau(name, inhalt):
     os.replace(ziel + ".tmp", ziel)
 
 
-def teil_einlesen(name, inhalt):
-    """STEP aus dem Upload in die Teilebibliothek (eigener Prozess mit Speichergrenze, siehe teile.py)."""
-    if not TEIL_NAME.fullmatch(name or ""):
+def teil_einlesen(name, inhalt, teile_dir=None, neu=True, quelle=None):
+    """STEP aus dem Upload in die Teilebibliothek (eigener Prozess mit Speichergrenze, siehe teile.py).
+    neu: ein vorhandenes Teil nicht ueberschreiben (dafuer gibt es teil_ersetzen).
+    quelle: Dateiname beim Hochladen (sonst stuende der Name der Zwischendatei in teil.json)."""
+    teile_dir = teile_dir or TEILE_DIR
+    if not TEIL_NAME.fullmatch(name or "") or name == TEILE_PAPIERKORB:
         raise lehrer.LehrerFehler("Teilename: 1 bis 60 Zeichen, nur a-z, 0-9, - und _.")
     if not inhalt.lstrip()[:64].startswith(b"ISO-10303-21"):
         raise lehrer.LehrerFehler("Das ist keine STEP-Datei (.step/.stp).")
-    os.makedirs(TEILE_DIR, exist_ok=True)
-    step = os.path.join(TEILE_DIR, ".%s.upload.step" % name)
+    if neu and os.path.isdir(os.path.join(teile_dir, name)):
+        raise lehrer.LehrerFehler("Das Teil %s gibt es schon. Zum Aktualisieren das Teil in der Liste öffnen "
+                                  "und dort eine neue STEP-Datei einlesen." % name)
+    os.makedirs(teile_dir, exist_ok=True)
+    step = os.path.join(teile_dir, ".%s.upload.step" % name)
     with open(step, "wb") as f:
         f.write(inhalt)
     try:
         r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "teile.py"),
-                            "einlesen", step, name, "--teile", TEILE_DIR],
+                            "einlesen", step, name, "--teile", teile_dir],
                            capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:
         raise lehrer.LehrerFehler("Das Einlesen dauerte zu lange (mehr als 5 Minuten).")
@@ -1548,10 +1662,82 @@ def teil_einlesen(name, inhalt):
             meldung = "Das Teil ist zu gross oder zu fein (Speichergrenze). Ohne Gewinde und Kleinteile exportieren."
         raise lehrer.LehrerFehler("Einlesen fehlgeschlagen: %s" % meldung.replace("Fehler: ", ""))
     try:   # neues Netz: altes Vorschaubild passt nicht mehr
-        os.remove(os.path.join(TEILE_DIR, name, TEIL_VORSCHAU))
+        os.remove(os.path.join(teile_dir, name, TEIL_VORSCHAU))
     except OSError:
         pass
+    quelle = os.path.basename((quelle or "").replace("\\", "/"))[:120]
+    if quelle:
+        datei = os.path.join(teile_dir, name, "teil.json")
+        with open(datei, encoding="utf-8") as f:
+            teil = json.load(f)
+        lehrer.schreibe_json(datei, dict(teil, quelle=quelle))
     return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+class TeilKonflikt(lehrer.LehrerFehler):
+    """Neues Modell passt nicht: Verbindungspunkte fehlen darin (offen = [{wo, punkte}])."""
+
+    def __init__(self, meldung, offen):
+        super().__init__(meldung)
+        self.offen = offen
+
+
+def teil_ersetzen(name, inhalt, erzwingen, wer_name, quelle=None):
+    """Neue STEP-Datei fuer ein vorhandenes Teil. Die Verbindungspunkte der Welten und Backensaetze, die es
+    verwenden, werden im neuen Modell gesucht (baukasten.entwurf_umstellen). Fehlt einer, bleibt alles beim
+    Alten (TeilKonflikt), ausser bei erzwingen: dann ist der Punkt im Entwurf leer und das Teil im Baukasten
+    neu zu verbinden. Das alte Teil kommt in den Papierkorb, die Welten und Backensaetze werden neu gerechnet."""
+    import shutil
+    if not TEIL_NAME.fullmatch(name or "") or not os.path.isfile(os.path.join(TEILE_DIR, name, "teil.json")):
+        raise lehrer.LehrerFehler("Das Teil %s gibt es nicht." % name)
+    with open(os.path.join(TEILE_DIR, name, "teil.json"), encoding="utf-8") as f:
+        alt = json.load(f)
+    zwischen = os.path.join(TEILE_DIR, ".ersetzen-%s" % name)
+    shutil.rmtree(zwischen, ignore_errors=True)
+    try:
+        ergebnis = teil_einlesen(name, inhalt, teile_dir=zwischen, neu=False, quelle=quelle)
+        with open(os.path.join(zwischen, name, "teil.json"), encoding="utf-8") as f:
+            neu = json.load(f)
+        plan = []   # (art, name, entwurf, entwurf umgestellt, offen, verschoben)
+        for welt, e in sorted(entwuerfe().items()):
+            if any(t.get("teil") == name for t in e.get("teile", [])):
+                plan.append(("welt", welt, e) + baukasten.entwurf_umstellen(e, name, alt, neu))
+        for b in backensaetze_liste():
+            satz = None if b["fest"] else backensatz_lesen(b["name"])
+            e = (satz or {}).get("entwurf")
+            if e and (b["teil"] == name or baukasten.teil_verweise(e, name)):
+                plan.append(("backensatz", b["name"], e) + baukasten.entwurf_umstellen(e, name, alt, neu))
+        offen = [{"wo": ("Welt " if art == "welt" else "Backensatz ") + wo, "punkte": o}
+                 for art, wo, _e, _n, o, _v in plan if o]
+        if offen and not erzwingen:
+            raise TeilKonflikt("Im neuen Modell fehlen Verbindungspunkte, an denen andere Teile hängen.", offen)
+        papierkorb = teil_in_papierkorb(name)
+        os.replace(os.path.join(zwischen, name), os.path.join(TEILE_DIR, name))
+    finally:
+        shutil.rmtree(zwischen, ignore_errors=True)
+    bericht = dict(ergebnis, papierkorb=papierkorb, neu_gerechnet=[], neu_verbinden=offen, verschoben=[], fehler=[])
+    for art, wo, _e, e_neu, o, verschoben in plan:
+        titel = ("Welt " if art == "welt" else "Backensatz ") + wo
+        bericht["verschoben"] += [{"wo": titel, "punkt": text, "mm": mm} for text, mm in verschoben]
+        try:
+            if o:   # nur die umgestellten Punkte speichern; neu gerechnet wird nach dem Verbinden im Baukasten
+                if art == "welt":
+                    lehrer.schreibe_json(os.path.join(WELTEN_DIR, wo + ".baukasten.json"), e_neu)
+                else:
+                    satz = backensatz_lesen(wo)
+                    satz["entwurf"] = e_neu
+                    lehrer.schreibe_json(os.path.join(BACKEN_DIR, wo, "backensatz.json"), satz)
+            elif art == "welt":
+                baukasten_speichern(wo, e_neu, wer_name)
+                bericht["neu_gerechnet"].append(titel)
+            else:
+                backensatz_speichern(wo, e_neu, wer_name)
+                bericht["neu_gerechnet"].append(titel)
+        except (baukasten.BaukastenFehler, lehrer.LehrerFehler) as fehler:
+            bericht["fehler"].append("%s: %s" % (titel, fehler))
+    laeuft = {w["datei"][:-4]: w["laeuft"] for w in welten_fuer_lehrer() if w["laeuft"]}
+    bericht["laufende_plaetze"] = sorted({p for art, wo, *_rest in plan if art == "welt" for p in laeuft.get(wo, [])})
+    return bericht
 
 
 # --- Backensaetze (Phase 4): Backe am Schunk EGP 40/25 im Baukasten, daraus Greifer-Variante egp40_<name> ---
@@ -2242,9 +2428,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise lehrer.LehrerFehler("Das Teil %s gibt es nicht." % name)
             if t["verwendet_in"]:
                 raise lehrer.LehrerFehler("Das Teil steckt noch in: %s" % ", ".join(t["verwendet_in"]))
-            import shutil
-            shutil.rmtree(os.path.join(TEILE_DIR, name))
-            protokoll = "Teil %s geloescht" % name
+            zusatz = {"papierkorb": teil_in_papierkorb(name)}
+            protokoll = "Teil %s geloescht (teile/%s)" % (name, zusatz["papierkorb"])
         elif aktion == "baukasten_rechnen":
             zusatz = {"lagen": self._baukasten(baukasten_rechnen, daten.get("entwurf"))}
         elif aktion == "baukasten_speichern":
@@ -2332,8 +2517,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"ok": True, "datei": name})
                 return
             if teil:
-                name = urllib.parse.parse_qs(abfrage).get("name", [""])[0]
-                ergebnis = teil_einlesen(name, self.rfile.read(laenge))
+                werte = urllib.parse.parse_qs(abfrage)
+                name = werte.get("name", [""])[0]
+                if werte.get("ersetzen", [""])[0] == "1":
+                    try:
+                        bericht = teil_ersetzen(name, self.rfile.read(laenge), werte.get("erzwingen", [""])[0] == "1",
+                                                ich["name"], quelle=werte.get("datei", [""])[0])
+                    except TeilKonflikt as e:
+                        self._json(409, {"fehler": str(e), "offen": e.offen})
+                        return
+                    lehrer.protokolliere(ZUSTAND_DIR, ich["name"], "Teil %s ersetzt (%s mm, altes in teile/%s)%s" % (
+                        name, " x ".join("%g" % v for v in bericht["groesse_mm"]), bericht["papierkorb"],
+                        "; neu verbinden: " + ", ".join(o["wo"] for o in bericht["neu_verbinden"])
+                        if bericht["neu_verbinden"] else ""))
+                    self._json(200, dict(bericht, ok=True))
+                    return
+                ergebnis = teil_einlesen(name, self.rfile.read(laenge), quelle=werte.get("datei", [""])[0])
                 lehrer.protokolliere(ZUSTAND_DIR, ich["name"], "Teil %s eingelesen (%s mm)" % (
                     name, " x ".join("%g" % v for v in ergebnis["groesse_mm"])))
                 self._json(200, dict(ergebnis, ok=True))

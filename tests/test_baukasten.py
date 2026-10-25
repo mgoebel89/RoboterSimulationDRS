@@ -434,6 +434,70 @@ def abstand_strecke(p, a, b):
     return math.dist(p, [a[i] + ab[i] * t for i in range(3)])
 
 
+def umnummeriert(m, plus=100):
+    """Dieselben Merkmale mit neuen Nummern, wie nach erneutem Einlesen in gmsh."""
+    n = json.loads(json.dumps(m))
+    for liste in ("flaechen", "bohrungen", "kanten", "ecken"):
+        for e in n[liste]:
+            e["id"] += plus
+    for k in n["kanten"]:
+        k["flaechen"] = [f + plus for f in k["flaechen"]]
+    for e in n["ecken"]:
+        for s in e["flaechen"]:
+            s["flaeche"] += plus
+    return n
+
+
+class TestTeilErsetzen(unittest.TestCase):
+    def entwurf(self):
+        return entwurf(teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)),
+                       teil("s", "stift", {"art": "bohrung", "id": 41, "ende": 0}, "v",
+                            {"art": "bohrung", "id": 31, "ende": 1}, art="werkstueck"),
+                       teil("w", "wuerfel", {"art": "kante", "id": 11}, "v", {"art": "ecke", "id": 21}))
+
+    def test_neue_nummern_gleiche_lage(self):
+        alt = TEILE["vorrichtung"]
+        neu = umnummeriert(alt)
+        e = self.entwurf()
+        e2, offen, verschoben = bk.entwurf_umstellen(e, "vorrichtung", alt, neu)
+        self.assertEqual((offen, verschoben), ([], []))
+        v = {t["id"]: t["verbindung"] for t in e2["teile"]}
+        self.assertEqual(v["v"]["punkt"], {"art": "flaeche", "id": 101})
+        self.assertEqual(v["s"]["an_punkt"], {"art": "bohrung", "id": 131, "ende": 1})
+        self.assertEqual(v["w"]["an_punkt"], {"art": "ecke", "id": 121, "flaeche": 101})
+        self.assertEqual(v["s"]["punkt"], e["teile"][1]["verbindung"]["punkt"])   # anderes Teil: unveraendert
+        self.assertEqual(e["teile"][0]["verbindung"]["punkt"], UNTEN)            # Original bleibt
+        vorher = bk.loese(e, TEILE.__getitem__)
+        nachher = bk.loese(e2, dict(TEILE, vorrichtung=neu).__getitem__)
+        for ident in vorher:
+            self.assertEqual([round(x, 6) for x in vorher[ident].o], [round(x, 6) for x in nachher[ident].o], ident)
+
+    def test_geaendertes_teil(self):
+        # groesser: Unterseite in derselben Ebene (Mitte wandert), Bohrung an anderer Stelle
+        alt, neu = TEILE["vorrichtung"], umnummeriert(wuerfel(60, bohrung=8))
+        e2, offen, verschoben = bk.entwurf_umstellen(self.entwurf(), "vorrichtung", alt, neu)
+        self.assertEqual(offen, ["s an v Bohrung 31"])
+        self.assertEqual(verschoben, [("v Fläche 1", 14.14)])   # Ecke 21 im Ursprung bleibt, wo sie war
+        v = {t["id"]: t["verbindung"] for t in e2["teile"]}
+        self.assertIsNone(v["s"]["an_punkt"])
+        self.assertEqual(v["w"]["an_punkt"], {"art": "ecke", "id": 121, "flaeche": 101})   # Ecke im Ursprung bleibt
+        # gedreht (Unterseite zeigt nach oben): nichts passt
+        gekippt = umnummeriert(alt)
+        for f in gekippt["flaechen"]:
+            f["normale"] = [-x for x in f["normale"]]
+        self.assertEqual(bk.punkt_wiederfinden(alt, gekippt, UNTEN), (None, None))
+        # die andere Oeffnung derselben Bohrung zaehlt nicht
+        p, d = bk.punkt_wiederfinden(alt, umnummeriert(alt), {"art": "bohrung", "id": 31})
+        self.assertEqual((p, d), ({"art": "bohrung", "id": 131, "ende": 0}, 0.0))
+
+    def test_verweise_im_backensatz(self):
+        e = {"art": "backensatz", "basis": "egp40", "teile": [
+            teil("backe", "robi2_backe", {"art": "bohrung", "id": 7}, "greifer", {"art": "bohrung", "id": 620})]}
+        self.assertEqual([f for _t, f in bk.teil_verweise(e, "schunk_egp40")], ["an_punkt"])
+        self.assertEqual([f for _t, f in bk.teil_verweise(e, "robi2_backe")], ["punkt"])
+        self.assertEqual(bk.teil_verweise(e, "schunk_egp25"), [])
+
+
 class TestWelt(unittest.TestCase):
     def test_welt_text(self):
         e = entwurf(teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)),

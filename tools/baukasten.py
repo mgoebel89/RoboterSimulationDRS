@@ -842,6 +842,136 @@ def zusammenfassung(entwurf, lagen):
             for t in entwurf["teile"]}
 
 
+# --- Teil ersetzen: Verbindungspunkte im neu eingelesenen Modell wiederfinden ---
+# gmsh vergibt die Nummern der Flaechen, Bohrungen, Kanten und Ecken bei jedem Einlesen neu. Gesucht wird
+# deshalb ueber die Geometrie: dieselbe Ebene, Achse oder Gerade bzw. derselbe Punkt (bis 0,05 mm) und
+# ein Koordinatensystem mit denselben Achsen; bei mehreren Treffern der naechste.
+
+NAEHE_MM = 0.05
+ART_NAMEN = {"flaeche": "Fläche", "bohrung": "Bohrung", "kante": "Kante", "ecke": "Ecke"}
+
+
+def _abstand(a, b):
+    return math.sqrt(_dot(_sub(a, b), _sub(a, b)))
+
+
+def _parallel(a, b):
+    return abs(_dot(_norm(a), _norm(b))) > 0.9999
+
+
+def _von_gerade(p, a, richtung):
+    """Abstand des Punkts p von der Geraden durch a in Richtung richtung."""
+    d = _sub(p, a)
+    r = _norm(richtung)
+    return _abstand(d, _mul(r, _dot(d, r)))
+
+
+def _gleiche_ebene(f, g):
+    return (_dot(_norm(f["normale"]), _norm(g["normale"])) > 0.9999
+            and abs(_dot(_norm(f["normale"]), _sub(g["mitte"], f["mitte"]))) < NAEHE_MM)
+
+
+def _kandidaten(alt, neu, punkt):
+    art = punkt.get("art")
+    if art == "flaeche":
+        f = _finde(alt["flaechen"], punkt.get("id"), "Flaeche")
+        for g in neu.get("flaechen", []):
+            if _gleiche_ebene(f, g):
+                yield {"art": "flaeche", "id": g["id"]}
+    elif art == "bohrung":
+        b = _finde(alt["bohrungen"], punkt.get("id"), "Bohrung")
+        achse = _sub(b["enden"][1], b["enden"][0])
+        for c in neu.get("bohrungen", []):
+            if (c.get("innen") == b.get("innen") and abs(float(c["durchmesser"]) - float(b["durchmesser"])) < 0.02
+                    and _parallel(_sub(c["enden"][1], c["enden"][0]), achse)
+                    and _von_gerade(c["enden"][0], b["enden"][0], achse) < NAEHE_MM):
+                for ende in (0, 1):
+                    yield {"art": "bohrung", "id": c["id"], "ende": ende}
+    elif art in ("kante", "ecke"):
+        liste = "kanten" if art == "kante" else "ecken"
+        k = _finde(alt[liste], punkt.get("id"), ART_NAMEN[art])
+        if art == "kante":
+            f_id = punkt.get("flaeche", k["flaechen"][0])
+        else:
+            f_id = punkt.get("flaeche", k["flaechen"][0]["flaeche"])
+        f = _finde(alt["flaechen"], f_id, "Flaeche")
+        for c in neu.get(liste, []):
+            if art == "kante":
+                richtung = _sub(k["b"], k["a"])
+                if not (_parallel(_sub(c["b"], c["a"]), richtung) and _von_gerade(c["a"], k["a"], richtung) < NAEHE_MM):
+                    continue
+                flaechen = c["flaechen"]
+            else:
+                if _abstand(c["punkt"], k["punkt"]) >= NAEHE_MM:
+                    continue
+                flaechen = [s["flaeche"] for s in c["flaechen"]]
+            for g_id in flaechen:
+                g = next((g for g in neu.get("flaechen", []) if str(g["id"]) == str(g_id)), None)
+                if g is not None and _gleiche_ebene(f, g):
+                    yield {"art": art, "id": c["id"], "flaeche": g_id}
+
+
+def punkt_wiederfinden(alt, neu, punkt):
+    """Verbindungspunkt aus dem alten Modell eines Teils im neuen suchen.
+    Rueckgabe (neuer Punkt, Verschiebung in mm) oder (None, None)."""
+    try:
+        vorher = punkt_lage(alt, punkt)
+    except (BaukastenFehler, KeyError, TypeError, ValueError):
+        return None, None
+    bestes = (None, None)
+    for p in _kandidaten(alt, neu, punkt):
+        try:
+            nachher = punkt_lage(neu, p)
+        except BaukastenFehler:
+            continue
+        if any(sum(vorher.r[z][s] * nachher.r[z][s] for z in range(3)) < 0.9999 for s in range(3)):
+            continue   # anders ausgerichtet (z.B. die andere Oeffnung einer Bohrung)
+        d = _abstand(vorher.o, nachher.o)
+        if bestes[1] is None or d < bestes[1]:
+            bestes = (p, d)
+    return bestes
+
+
+def teil_verweise(entwurf, name):
+    """Verbindungspunkte eines Entwurfs, die auf dem Teil `name` liegen: [(teil im Entwurf, "punkt"|"an_punkt")]."""
+    teile = {t.get("id"): t for t in entwurf.get("teile", [])}
+    greifer = None
+    if entwurf.get("art") == "backensatz":
+        greifer = GREIFER_TEILE.get(entwurf.get("basis") or "egp25")
+    ergebnis = []
+    for t in entwurf.get("teile", []):
+        v = t.get("verbindung") or {}
+        if t.get("art") != "sensor" and t.get("teil") == name and v.get("punkt"):
+            ergebnis.append((t, "punkt"))
+        ziel = teile.get(v.get("an"))
+        if v.get("an_punkt") and ((ziel is not None and ziel.get("art") != "sensor" and ziel.get("teil") == name)
+                                  or (v.get("an") == "greifer" and greifer == name)):
+            ergebnis.append((t, "an_punkt"))
+    return ergebnis
+
+
+def entwurf_umstellen(entwurf, name, alt, neu):
+    """Kopie des Entwurfs mit den Verbindungspunkten am Teil `name` im neuen Modell `neu`.
+    Rueckgabe (entwurf, offen, verschoben): offen = nicht wiedergefundene Punkte (im Entwurf geleert,
+    der Baukasten zeigt das Teil dann als "offen"), verschoben = [(Text, mm)] fuer Punkte, die sich bewegt haben."""
+    e = json.loads(json.dumps(entwurf))
+    offen, verschoben = [], []
+    for t, feld in teil_verweise(e, name):
+        v = t["verbindung"]
+        punkt = v[feld]
+        text = "%s %s %s" % (t.get("id") if feld == "punkt" else "%s an %s" % (t.get("id"), v.get("an")),
+                             ART_NAMEN.get(punkt.get("art"), punkt.get("art")), punkt.get("id"))
+        neuer, d = punkt_wiederfinden(alt, neu, punkt)
+        if neuer is None:
+            v[feld] = None
+            offen.append(text)
+        else:
+            v[feld] = neuer
+            if d > NAEHE_MM:
+                verschoben.append((text, round(d, 2)))
+    return e, offen, verschoben
+
+
 def teile_lader(teile_dir):
     """merkmale_von(name) mit Zwischenspeicher, liest teile/<name>/teil.json."""
     cache = {}

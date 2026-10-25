@@ -449,6 +449,82 @@ class TestLehrerSeiten(Grundlage):
         self.assertEqual(self.anfrage("POST", "/api/lehrer/teil_loeschen", {"name": "wuerfel"})[0], 200)
         self.assertIn("Baukasten-Welt lager gespeichert", [e["was"] for e in self.anfrage("GET", "/api/lehrer/protokoll")[1]])
 
+    def test_teil_ersetzen_und_loeschen(self):
+        import subprocess
+        import types
+        from test_baukasten import wuerfel, umnummeriert, STIFT
+        teile_dir = uebersicht.TEILE_DIR
+        for name, m in (("vorrichtung", wuerfel(40, bohrung=8)), ("stift", STIFT), ("klotz", wuerfel())):
+            os.makedirs(os.path.join(teile_dir, name))
+            with open(os.path.join(teile_dir, name, "teil.json"), "w", encoding="utf-8") as f:
+                json.dump(dict(m, quelle=name + ".step", groesse_mm=[40, 40, 40]), f)
+        naechstes = {}
+
+        def einlesen(befehl, **_kw):   # statt tools/teile.py (gmsh gibt es nur im Container)
+            name, ziel = befehl[4], befehl[6]
+            os.makedirs(os.path.join(ziel, name))
+            with open(os.path.join(ziel, name, "teil.json"), "w", encoding="utf-8") as f:
+                json.dump(dict(naechstes["teil"], name=name, quelle="neu.step", groesse_mm=[60, 60, 60]), f)
+            m = naechstes["teil"]
+            return types.SimpleNamespace(returncode=0, stderr="", stdout=json.dumps(
+                {"name": name, "groesse_mm": [60, 60, 60], "flaechen": len(m["flaechen"]), "bohrungen": len(m["bohrungen"])}))
+        alt = uebersicht.subprocess
+        uebersicht.subprocess = types.SimpleNamespace(run=einlesen, TimeoutExpired=subprocess.TimeoutExpired)
+        try:
+            self.konto("mueller", "lehrkraft")
+            self.anmelden("mueller")
+            entwurf = {"titel": "Lager", "teile": [
+                {"id": "v", "teil": "vorrichtung", "art": "aufbau", "verbindung": {
+                    "punkt": {"art": "flaeche", "id": 1}, "an": "tisch", "an_punkt": {"art": "flaeche", "id": "oben"}}},
+                {"id": "s", "teil": "stift", "art": "werkstueck", "verbindung": {
+                    "punkt": {"art": "bohrung", "id": 41, "ende": 0}, "an": "v", "an_punkt": {"art": "bohrung", "id": 31, "ende": 1}}}]}
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/baukasten_speichern", {"welt": "lager", "entwurf": entwurf})[0], 200)
+
+            def hochladen(abfrage):
+                return self.anfrage("POST", "/api/lehrer/teil_hochladen?name=vorrichtung&datei=C%3A%5Cx%5Cvorrichtung_v2.step" + abfrage,
+                                    roh=b"ISO-10303-21;\n", typ="application/octet-stream")
+
+            def gespeichert():
+                with open(os.path.join(self.welten, "lager.baukasten.json"), encoding="utf-8") as f:
+                    return {t["id"]: t["verbindung"] for t in json.load(f)["teile"]}
+            # "Neues Teil" mit vorhandenem Namen ueberschreibt nicht
+            naechstes["teil"] = umnummeriert(wuerfel(40, bohrung=8))
+            status, d = hochladen("")
+            self.assertEqual(status, 409)
+            self.assertIn("gibt es schon", d["fehler"])
+            # neues Modell, nur andere Nummern: Punkte umgestellt, Welt neu gerechnet, altes Teil im Papierkorb
+            status, d = hochladen("&ersetzen=1")
+            self.assertEqual(status, 200, d)
+            self.assertEqual((d["neu_gerechnet"], d["neu_verbinden"], d["verschoben"], d["fehler"]), (["Welt lager"], [], [], []))
+            self.assertTrue(d["papierkorb"].startswith("papierkorb/vorrichtung-"))
+            self.assertTrue(os.path.isfile(os.path.join(teile_dir, d["papierkorb"], "teil.json")))
+            self.assertEqual((gespeichert()["v"]["punkt"]["id"], gespeichert()["s"]["an_punkt"]["id"]), (101, 131))
+            self.assertEqual(self.vorschauen[-1], "lager.wbt")
+            self.assertEqual(self.anfrage("GET", "/api/lehrer/teil?name=vorrichtung")[1]["quelle"], "vorrichtung_v2.step")
+            self.assertEqual(sorted(t["name"] for t in self.anfrage("GET", "/api/lehrer/teile")[1]), ["klotz", "stift", "vorrichtung"])
+            # groesser und Bohrung woanders: ohne erzwingen bleibt alles, wie es war
+            naechstes["teil"] = umnummeriert(wuerfel(60, bohrung=8), plus=200)
+            status, d = hochladen("&ersetzen=1")
+            self.assertEqual((status, d["offen"]), (409, [{"wo": "Welt lager", "punkte": ["s an v Bohrung 131"]}]))
+            self.assertEqual(gespeichert()["s"]["an_punkt"]["id"], 131)
+            status, d = hochladen("&ersetzen=1&erzwingen=1")
+            self.assertEqual(status, 200, d)
+            self.assertEqual(d["neu_verbinden"], [{"wo": "Welt lager", "punkte": ["s an v Bohrung 131"]}])
+            self.assertEqual(d["verschoben"], [{"wo": "Welt lager", "punkt": "v Fläche 101", "mm": 14.14}])
+            self.assertEqual(d["neu_gerechnet"], [])   # erst nach dem Verbinden im Baukasten
+            self.assertIsNone(gespeichert()["s"]["an_punkt"])
+            self.assertEqual(gespeichert()["v"]["punkt"], {"art": "flaeche", "id": 201})
+            # Loeschen: nur unbenutzte, in den Papierkorb
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/teil_loeschen", {"name": "vorrichtung"})[0], 409)
+            status, d = self.anfrage("POST", "/api/lehrer/teil_loeschen", {"name": "klotz"})
+            self.assertEqual(status, 200)
+            self.assertTrue(os.path.isfile(os.path.join(teile_dir, d["papierkorb"], "teil.json")))
+            self.assertFalse(os.path.exists(os.path.join(teile_dir, "klotz")))
+            was = [e["was"] for e in self.anfrage("GET", "/api/lehrer/protokoll")[1]]
+            self.assertTrue(any(w.startswith("Teil vorrichtung ersetzt") and "neu verbinden: Welt lager" in w for w in was))
+        finally:
+            uebersicht.subprocess = alt
+
     def test_baukasten_seite_nur_fuer_lehrkraefte(self):
         status, _ = self.anfrage("GET", "/lehrer/baukasten")
         self.assertEqual(status, 302)   # ohne Anmeldung zur Anmeldeseite

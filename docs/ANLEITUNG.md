@@ -189,6 +189,17 @@ Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehre
   erzeugt daraus Netz und Verbindungspunkte (Flächen, Bohrungen, Kanten, Ecken) für den Baukasten, danach zeigt der
   Dialog die Vorschau. Gewinde und Normteile machen das Einlesen langsam, besser ohne exportieren. Die Vorschaubilder
   rendert der Browser einmal aus dem Netz und legt sie im Container ab (`teile/<name>/vorschau.png`).
+  **Bearbeiten** öffnet ein Teil:
+  - **Neue STEP-Datei einlesen** aktualisiert es, z.B. nach einer Änderung in Onshape. Die Verbindungspunkte, an denen
+    etwas hängt, sucht der Container im neuen Modell wieder (gleiche Ebene, Achse, Kante oder Ecke); Welten und
+    Backensätze mit dem Teil werden neu gerechnet. Fehlt ein Punkt im neuen Modell, ändert sich erst einmal nichts und
+    der Dialog nennt die betroffenen Verbindungen. **Trotzdem ersetzen** übernimmt das neue Modell, die genannten Teile
+    stehen dann im Baukasten als „offen“ und müssen neu verbunden werden. Laufende Simulationen zeigen das neue Teil nach
+    „Neu starten“.
+  - **Teil löschen** geht nur, solange das Teil in keiner Welt und keinem Backensatz steckt.
+
+  Gelöschte und ersetzte Teile landen in `teile/papierkorb/<name>-<zeit>/` (zum Zurückholen den Ordner wieder nach
+  `teile/<name>` verschieben). Mitgelieferte Teile legt das nächste Update wieder an, wenn sie fehlen.
 
 ![Teilebibliothek](bilder/lehrer_teile.jpg)
 
