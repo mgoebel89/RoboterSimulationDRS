@@ -9,7 +9,7 @@ Inhalt
 5. [Schüler-PCs vorbereiten](#5-schüler-pcs-vorbereiten)
 6. [Im Unterricht: Schülerseite](#6-im-unterricht-schülerseite)
 7. [Lehrerbereich](#7-lehrerbereich)
-8. [Weltbaukasten](#8-weltbaukasten)
+8. [Baukasten](#8-baukasten)
 9. [Taster, Leuchtmelder und Sensoren](#9-taster-leuchtmelder-und-sensoren)
 10. [Update](#10-update)
 11. [Befehle im Container](#11-befehle-im-container)
@@ -24,7 +24,7 @@ Inhalt
   des Schüler-PCs (CRI, Port 3921) und **hört nur mit**: Der Roboter in Webots fährt genauso wie in iRC,
   greift echte Werkstücke und legt sie ab. iRC behält die Kontrolle.
 - Alle öffnen im **Browser** die Startseite `http://<container>` (Port 80; der frühere Port 8080 leitet dorthin um).
-  Schüler starten dort ihre Welt, Lehrkräfte melden sich über „Anmeldung Lehrkraft“ an. Der PC wird an seiner IP
+  Schüler starten dort ihre Roboterumgebung, Lehrkräfte melden sich über „Anmeldung Lehrkraft“ an. Der PC wird an seiner IP
   erkannt, jeder Schüler sieht nur seine eigene Simulation.
 - **Taster und Sensoren** setzen über die App-Schnittstelle von iRC (Port 5000) echte digitale Eingänge.
 
@@ -78,7 +78,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/mgoebel89/RoboterSimulat
 rebel-sim-admin <name>
 ```
 
-Danach erreichbar: **`http://<container>`** – Startseite mit allen freigegebenen Welten (Schüler) und dem
+Danach erreichbar: **`http://<container>`** – Startseite mit allen freigegebenen Roboterumgebungen (Schüler) und dem
 Knopf „Anmeldung Lehrkraft“ (oder direkt `http://<container>/lehrer`).
 
 ## 4. Robotermodell aus iRC erzeugen
@@ -128,7 +128,7 @@ Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Mode
 ## 6. Im Unterricht: Schülerseite
 
 1. **Zuerst iRC starten**, dann im Browser `http://<container>` öffnen.
-2. Welt wählen und **„Simulation starten“**. Oben steht, wie viele Simulationen noch frei sind.
+2. Roboterumgebung wählen und **„Simulation starten“**. Oben steht, wie viele Simulationen noch frei sind.
 
 ![Weltwahl der Schüler](bilder/schueler_weltwahl.jpg)
 
@@ -142,7 +142,7 @@ Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Mode
   wird schmaler, nicht verdeckt. Beim Start ist sie zu; × oder erneuter Klick schließt sie.
 - **Teile zurück** legt alle Werkstücke sofort wieder auf ihre Startlage, ohne Neustart.
 - **Neu starten** startet Webots neu (nur nötig, wenn etwas hängt; dauert einige Sekunden).
-- **Welt wechseln**, **Beenden**.
+- **Umgebung wechseln**, **Beenden**.
 
 **Greifer Schunk EGP 40** (und EGP 25): DOut32 EIN (DOut31 AUS) schließt, DOut31 EIN (DOut32 AUS) öffnet.
 Ohne eigene Backen stehen die Backenträger des EGP 40 offen 28 mm und geschlossen 16 mm auseinander, Hub je Backe
@@ -163,30 +163,32 @@ Die Simulation endet automatisch nach 15 Minuten ohne iRC und zu den eingestellt
 ## 7. Lehrerbereich
 
 Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehrer`), Anmeldung mit dem Lehrerkonto.
+Links steht die Seitenleiste mit allen Bereichen, oben auf jeder Seite die passenden Knöpfe. Eine **Roboterumgebung**
+(früher „Welt“) ist ein Tisch mit Teilen, Greifer und Aufgabe, so wie ihn die Schüler starten.
 
 - **Simulationen:** alle laufenden Simulationen mit Ampel (iRC verbunden?), **Ansehen** (3D-Ansicht des Platzes mit
   Teile zurück, Neu starten, Beenden), **Teile zurück**, **Neu starten**, **Beenden**, Alle beenden. Den Roboter selbst
   bewegt immer iRC am Schüler-PC; eine Steuerung aus dem Browser gibt es bewusst nicht (sie würde iRC aussperren).
-- **Welten:** Liste mit Suche. Der Knopf „freigegeben/gesperrt“ schaltet direkt um; ein Klick auf die Zeile öffnet
-  die Welt: Titel, Aufgabentext, **Greifer**, Freigabe, Vorschaubild, Arbeitsblatt (PDF) und **Welt löschen**.
-  Gelöschte Welten kommen in den Papierkorb `worlds/papierkorb/` (zum Zurückholen die Dateien wieder nach `worlds/`
-  kopieren). Eine Welt, die gerade läuft, lässt sich nicht löschen.
-- **Zu tief abgelegte Werkstücke** (je Welt im Dialog): „auf die Auflage legen“ (realistisch, Standard) oder
+- **Roboterumgebungen:** Liste mit Suche. Der Knopf „freigegeben/gesperrt“ schaltet direkt um; ein Klick auf die Zeile
+  öffnet den Dialog: Titel, Aufgabentext, **Greifer**, Freigabe, Vorschaubild, Arbeitsblatt (PDF) und **Löschen**.
+  „+ Neue Roboterumgebung“ öffnet den Baukasten. Gelöschte kommen in den Papierkorb `worlds/papierkorb/` (zum
+  Zurückholen die Dateien wieder nach `worlds/` kopieren). Was gerade läuft, lässt sich nicht löschen.
+- **Zu tief abgelegte Werkstücke** (je Roboterumgebung im Dialog): „auf die Auflage legen“ (realistisch, Standard) oder
   „liegen lassen, wo der Greifer sie loslässt“ (nachsichtig). Werkstücke auf Aufbauten (z.B. im Magazin) liegen in
   beiden Fällen ruhig, auch schon ab dem Start; die Physik lässt sie nicht mehr durch den Taschenboden sinken.
 - **Aufgabentext in Markdown:** `# Überschrift`, `**fett**`, `*kursiv*`, `- Aufzählung`, `1. Schritt`, `> Hinweis`,
   `` `DOut31` ``, `[Link](https://…)`, Tabellen mit `| A | B |` und darunter `|---|---|`. „Vorschau“ im Dialog zeigt
   den Text so, wie ihn die Schüler sehen. Alte Texte ohne Markdown bleiben unverändert lesbar.
-- **Welten exportieren und importieren** (z.B. zuhause bauen, in der Schule einspielen): Im Welt-Dialog
-  **Exportieren (ZIP)** lädt ein Paket mit der Welt, Vorschaubild, Arbeitsblatt, allen verwendeten Teilen der
-  Teilebibliothek (mit STEP) und einem eigenen Backensatz. In der anderen Instanz unter Welten **Welt importieren**.
+- **Exportieren und importieren** (z.B. zuhause bauen, in der Schule einspielen): Im Dialog einer Roboterumgebung
+  **Exportieren (ZIP)** lädt ein Paket mit Vorschaubild, Arbeitsblatt, allen verwendeten Teilen der
+  Teilebibliothek (mit STEP) und einem eigenen Backensatz. In der anderen Instanz unter Roboterumgebungen **Importieren**.
   - Gleichnamige und gleiche Teile werden weiterverwendet; unterscheiden sie sich, kommt das neue als `name-2` dazu.
-  - Gibt es die Welt schon: unter neuem Namen importieren oder die vorhandene ersetzen (sie kommt in den Papierkorb).
+  - Gibt es sie schon: unter neuem Namen importieren oder die vorhandene ersetzen (sie kommt in den Papierkorb).
   - Bringt das Paket einen neuen Backensatz mit, wird das Robotermodell neu erzeugt; das Werkzeugpaket für iRC gibt
     es danach unter Backensätze.
-  - Importierte Welten sind zuerst für Schüler gesperrt.
+  - Importierte Roboterumgebungen sind zuerst für Schüler gesperrt.
 
-![Welten im Lehrerbereich](bilder/lehrer_welten.jpg)
+![Roboterumgebungen im Lehrerbereich](bilder/lehrer_welten.jpg)
 
 - **Teile:** Liste mit Vorschaubildern. „+ Neues Teil“ öffnet einen Dialog: Name, STEP-Datei, Einlesen; der Container
   erzeugt daraus Netz und Verbindungspunkte (Flächen, Bohrungen, Kanten, Ecken) für den Baukasten, danach zeigt der
@@ -194,12 +196,12 @@ Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehre
   rendert der Browser einmal aus dem Netz und legt sie im Container ab (`teile/<name>/vorschau.png`).
   **Bearbeiten** öffnet ein Teil:
   - **Neue STEP-Datei einlesen** aktualisiert es, z.B. nach einer Änderung in Onshape. Die Verbindungspunkte, an denen
-    etwas hängt, sucht der Container im neuen Modell wieder (gleiche Ebene, Achse, Kante oder Ecke); Welten und
+    etwas hängt, sucht der Container im neuen Modell wieder (gleiche Ebene, Achse, Kante oder Ecke); Roboterumgebungen und
     Backensätze mit dem Teil werden neu gerechnet. Fehlt ein Punkt im neuen Modell, ändert sich erst einmal nichts und
     der Dialog nennt die betroffenen Verbindungen. **Trotzdem ersetzen** übernimmt das neue Modell, die genannten Teile
     stehen dann im Baukasten als „offen“ und müssen neu verbunden werden. Laufende Simulationen zeigen das neue Teil nach
     „Neu starten“.
-  - **Teil löschen** geht nur, solange das Teil in keiner Welt und keinem Backensatz steckt.
+  - **Teil löschen** geht nur, solange das Teil in keiner Roboterumgebung und keinem Backensatz steckt.
 
   Gelöschte und ersetzte Teile landen in `teile/papierkorb/<name>-<zeit>/` (zum Zurückholen den Ordner wieder nach
   `teile/<name>` verschieben). Mitgelieferte Teile legt das nächste Update wieder an, wenn sie fehlen.
@@ -214,13 +216,20 @@ Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehre
 
 ![Einstellungen](bilder/lehrer_einstellungen.jpg)
 
-## 8. Weltbaukasten
+## 8. Baukasten
 
-Im Lehrerbereich auf **Baukasten**: Welten aus Teilen der Teilebibliothek zusammenstellen, ohne Webots zu öffnen.
+Im Lehrerbereich unter **Roboterumgebungen** auf „+ Neue Roboterumgebung“ oder bei einer vorhandenen auf
+**Baukasten**: Roboterumgebungen aus Teilen der Teilebibliothek zusammenstellen, ohne Webots zu öffnen. Aufgebaut wie
+gängige CAD-Programme (z.B. Onshape): oben die **Werkzeugleiste**, links der **Teilebaum**, in der Mitte das 3D-Bild,
+rechts schwebend die **Eigenschaften** des gewählten Teils. Eingefügt und eingestellt wird immer in einem Dialog.
+**← Roboterumgebungen** führt zurück in den Lehrerbereich; ungespeicherte Änderungen meldet der Browser vorher.
 
 ![Baukasten mit Profiltisch](bilder/baukasten_profiltisch.jpg)
 
-**Tisch und Roboter**
+**Neu:** Titel, Dateiname (wird aus dem Titel vorgeschlagen) und Tisch wählen. Bis zum ersten Speichern steht oben
+„nicht gespeichert“; ein Klick darauf ändert den Namen.
+
+**Tisch** (Werkzeugleiste oder Teilebaum)
 - **eben, Maße frei:** Länge, Breite, Höhe (z.B. −100 bei einem 100-mm-Sockel), Lage des Roboters.
 - **Profiltisch 800 × 800** (Bosch Rexroth, Nut 10, Basisplatte): gemessen wird wie am echten Tisch von der
   Anschlagkante der Basisplatte zur hinteren und linken Tischkante. Nach hinten nur im Nutraster (40 mm),
@@ -228,26 +237,36 @@ Im Lehrerbereich auf **Baukasten**: Welten aus Teilen der Teilebibliothek zusamm
 - „Links“ und „vorne“ gelten aus Sicht des Roboters (vorne = Blickrichtung bei 0°).
 
 **Teile platzieren** (wie Mate Connectors in Onshape)
-1. **+ Teil hinzufügen** öffnet die Teilebibliothek als Kacheln mit Vorschau und Suche; ein Klick fügt das Teil ein.
-   Es steht zuerst neben dem Tisch.
+1. **Teil** öffnet die Teilebibliothek als Kacheln mit Vorschau und Suche; ein Klick fügt das Teil ein.
+   Es steht zuerst neben dem Tisch. **Sensorfläche** fragt im Dialog nach Art, Beschriftung, DIn und Größe.
 2. **Punkt am Teil** anklicken (Fläche, Bohrung, Kante oder Ecke), dann das **Gegenstück** (Tisch, Nut,
    Roboterfuß oder ein anderes Teil). Die beiden Punkte werden aufeinandergelegt.
 3. Mit **X/Y/Z** verschieben (Pfeile rot/grün am Gegenstück), drehen, ggf. umdrehen.
 4. **Name** (so heißt das Teil in der Simulation, in der Einteach-Hilfe und auf dem Schild im 3D-Bild; Enter oder
    Klick daneben übernimmt ihn), **Aufbau** (fest) oder **Werkstück** (greifbar, Farbe, Masse).
-5. **Speichern**: Die Welt wird erzeugt, Webots rendert ein Vorschaubild. Danach unter „Welten“ freigeben.
+5. **Speichern**: Die Roboterumgebung wird erzeugt, Webots rendert ein Vorschaubild. Danach im Lehrerbereich freigeben.
+
+**Rechtsklick** auf ein Teil (im Baum oder im 3D-Bild): Umbenennen, Teil zeigen, Punkt oder Gegenstück neu wählen,
+Verbindung lösen, Entfernen. **Esc** bricht das Anklicken ab, schließt Dialoge und hebt die Auswahl auf.
 
 ![Verbindung eines Teils](bilder/baukasten_verbindung.jpg)
 
 Hängt ein Teil an einem anderen, wandert es mit, wenn sich das andere ändert.
 
+**Aufbauplan** (Werkzeugleiste): Draufsicht des Tischs zum Aufbauen am echten Tisch. Hinten ist oben; „links“ gilt aus
+Sicht des Roboters und liegt deshalb im Bild rechts. Zu sehen sind die Nuten 1–20, der Roboterfuß mit Blickrichtung,
+die Anschlagkante der Basisplatte (orange) und jedes Teil als Umriss mit Nummer. Aufbauten und Sensoren haben
+Maßpfeile zur hinteren und linken Tischkante, Werkstücke erst beim Zeigen auf ihre Zeile. Die Tabelle daneben nennt je
+Teil den Abstand von hinten und von links (bis zur nächsten Außenkante), Breite × Tiefe und die Nuten, über denen es
+liegt. **Drucken** gibt den Plan auf A4 quer aus.
+
 **Backensätze** (Lehrerbereich → Backensätze): eigene Greiferbacken aus der Teilebibliothek an den Schunk-Greifer setzen.
-1. **Greifer** wählen: Schunk EGP 40 (Standard) oder EGP 25. Der Greifer steht offen im Werkzeugsystem von iRC.
+1. **Greifer** wählen: Schunk EGP 40 (Standard) oder EGP 25. Der Greifer steht geschlossen im Werkzeugsystem von iRC.
 2. Backe hinzufügen, Punkt an der Backe und Gegenstück am Backenträger anklicken (EGP 40: zwei M3-Gewinde in
    Greifrichtung). Eine Backe genügt, die zweite ist dieselbe, um die Werkzeugachse gedreht.
 3. **TCP** einstellen: Backenspitze oder Mitte der Backe, jeweils mit Versatz entlang der Werkzeugachse, oder ein
    fester Abstand ab Flansch. Das gelbe Kreuz zeigt ihn im Bild. Optional den **Hub je Backe** eintragen (leer = Datenblatt).
-4. **Speichern**: Das Robotermodell wird neu erzeugt, der Greifer `egp40_<name>` steht in den Welten zur Wahl.
+4. **Speichern**: Das Robotermodell wird neu erzeugt, der Greifer `egp40_<name>` steht in den Roboterumgebungen zur Wahl.
    Das **Werkzeugpaket für iRC** (ZIP mit XML, Modellen und `installieren.cmd`) bringt denselben TCP nach iRC.
 
 ## 9. Taster, Leuchtmelder und Sensoren
