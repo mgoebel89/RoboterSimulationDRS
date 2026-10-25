@@ -8,8 +8,9 @@ html, body { height:100%; }
 body { display:flex; flex-direction:column; overflow:hidden; }
 header { padding:8px 16px; min-height:56px; }
 header .dokument { display:flex; gap:8px; align-items:center; margin-left:6px; }
-header { flex-wrap:nowrap; }
-header .dokument { min-width:0; flex:1; }
+header { flex-wrap:wrap; }
+header .dokument { min-width:340px; flex:1; }
+@media (max-width: 1400px) { header .marke:has(img) > span { display:none; } }
 header .dokument select { max-width:220px; font-weight:600; }
 header .dokument input { width:min(260px, 22vw); min-width:120px; }
 @media (max-width: 1150px) { header .unter, header .rechts .btn span.lang { display:none; } }
@@ -1491,13 +1492,14 @@ function planZeigen() {
     // Masse fuer Aufbauten und Sensoren immer, fuer Werkstuecke beim Zeigen auf die Zeile
     svg += '<g class="mass"' + (t.art === 'werkstueck' ? ' visibility="hidden"' : '') + '>'
       + masslinie(X(mitte[1]), 0, X(mitte[1]), Y(f.x0), mm(hinten)) + masslinie(B, Y(mitte[0]), X(f.y1), Y(mitte[0]), mm(links)) + '</g></g>';
+    // welche Quernuten unter dem Teil liegen (fuer die Nutensteine); die Bezugskante im Baukasten kann mit Versatz woanders sein
     let nut = '';
     const v = t.verbindung || {};
-    if (profil && v.an === 'tisch' && v.an_punkt && v.an_punkt.art === 'kante' && /^nut-/.test(v.an_punkt.id))
-      nut = 'befestigt an ' + {'nut-links': 'linker Randnut', 'nut-rechts': 'rechter Randnut'}[v.an_punkt.id] || 'Nut ' + v.an_punkt.id.slice(4);
     if (profil) {
       const unter = Array.from({length: PROFIL.nuten}, (_, k) => k).filter(k => nutX(k) > f.x0 && nutX(k) < f.x1).map(k => k + 1);
-      if (unter.length) nut += (nut ? ', ' : '') + 'über Nut ' + (unter.length > 1 ? unter[0] + '–' + unter[unter.length - 1] : unter[0]);
+      if (unter.length) nut = 'über Nut ' + (unter.length > 1 ? unter[0] + '–' + unter[unter.length - 1] : unter[0]);
+      if (f.y1 > ly - PROFIL.rahmen) nut += (nut ? ', ' : '') + 'linke Randnut';
+      if (f.y0 < ry + PROFIL.rahmen) nut += (nut ? ', ' : '') + 'rechte Randnut';
     }
     const auf = v.an && v.an !== 'tisch' && v.an !== 'roboterfuss' ? 'auf ' + v.an : '';
     zeilen.push('<tr data-nr="' + nr + '"><td><b>' + nr + '</b></td><td><b>' + esc(t.id) + '</b><div class="hilfe">'
