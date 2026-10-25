@@ -716,7 +716,8 @@ def auflage_hoehe(netze, mitte, halb, z_max):
 
 # --- Kollisionen (Stufe K1): Roboter, Greifer und gegriffenes Teil gegen Tisch, Aufbauten und Werkstuecke ---
 
-HUELLEN_DATEI = os.path.join(HERE, "..", "..", "protos", "meshes", "huellen.json")
+MESH_DIR = os.path.join(HERE, "..", "..", "protos", "meshes")
+HUELLEN_DATEI = os.path.join(MESH_DIR, "huellen.json")
 
 
 def welt_kollision(welt_pfad):
@@ -732,12 +733,16 @@ class KollisionsWaechter:
     """Prueft etwa 10-mal je Sekunde. Huellen der Glieder aus huellen.json (Generator), Greifer als Quader in der
     aktuellen Backenstellung, das gegriffene Teil als sein Huellquader; Umgebung als Punktwolken (kollision.py)."""
 
-    GLIED_NAMEN = {1: "Glied 1 (Drehteller)", 2: "Glied 2 (Oberarm)", 3: "Glied 3 (Ellbogen)", 4: "Glied 4 (Unterarm)",
-                   5: "Glied 5 (Handgelenk)", 6: "Glied 6 (Flansch)"}
+    GLIED_NAMEN = {0: "Fuß", 1: "Glied 1 (Drehteller)", 2: "Glied 2 (Oberarm)", 3: "Glied 3 (Ellbogen)",
+                   4: "Glied 4 (Unterarm)", 5: "Glied 5 (Handgelenk)", 6: "Glied 6 (Flansch)"}
 
     def __init__(self, robot, me, greifer, einst, huellen=None, log=print):
         self.robot, self.greifer, self.einst = robot, greifer, einst
         self.glieder = []   # (Name, Node, Kugeln lokal, Huellkugel lokal (Mitte, Radius))
+        self.flaechen = []  # Selbstkollision: (Nummer, Node, Punktwolke der Oberflaeche) fuer Fuss und Glieder 1-4
+        self.selbst_ausnahmen, self.selbst_rand = set(), {}
+        self.teil_treffer = []           # Werkstueck gegen Werkstueck (nur Meldung)
+        self.zuvor_bewegt = set()
         self.greifer_huelle = {}
         self.finger = {}
         self.wolken = {}     # Node-Id -> Punktwolke im Teilsystem
@@ -769,9 +774,44 @@ class KollisionsWaechter:
             node = me.getFromProtoDef("FINGER_%s" % seite.upper())
             if node is not None:
                 self.finger[seite] = node
-        log("Kollisionen: an, Sicherheitsabstand %.1f mm, Ablagetoleranz %.1f mm, Reaktion %s"
+        self._selbst_vorbereiten(me, log)
+        log("Kollisionen: an, Sicherheitsabstand %.1f mm, Ablagetoleranz %.1f mm, Reaktion %s, Selbstkollision %s"
             % (einst["abstand_mm"], einst["ablage_mm"],
-               "Programm anhalten" if einst["reaktion"] == "stopp" else "nur melden"))
+               "Programm anhalten" if einst["reaktion"] == "stopp" else "nur melden",
+               "an" if self.flaechen else "aus (Netze fehlen)"))
+
+    def _selbst_vorbereiten(self, me, log):
+        """Oberflaechen von Fuss und Gliedern 1-4 aus den Netzen des Modells (Kollisionsnetz, beim Fuss das sichtbare)."""
+        t0 = time.perf_counter()
+        for n in kollision.SELBST_FLAECHEN:
+            node = me if n == 0 else me.getFromProtoDef("GLIED%d" % n)
+            dateien = ([os.path.join(MESH_DIR, "rebel_j%d_coll.obj" % n)] if n else
+                       sorted(os.path.join(MESH_DIR, d) for d in os.listdir(MESH_DIR) if d.startswith("rebel_j0_")
+                              and d.endswith(".obj")) if os.path.isdir(MESH_DIR) else [])
+            punkte = []
+            for d in dateien:
+                netz = lies_netz(d, 1.0, [0.0, 0.0, 0.0]) if os.path.exists(d) else None
+                if netz and netz[0]:
+                    punkte += kollision.abtasten(netz[0], netz[1], 0.005)
+            if node is None or not punkte:
+                log("Kollisionen: Oberflaeche von %s fehlt, Selbstkollision ohne sie" % self.GLIED_NAMEN[n])
+                continue
+            self.flaechen.append((n, node, kollision.Punktwolke(punkte, duenn=0.004)))
+        # Paare, die nicht geprueft werden (Nachbarn, Paare, die sich nie nahe kommen), und Toleranzen
+        for k in range(1, 7):
+            for n, _node, _w in self.flaechen:
+                if kollision.selbst_erlaubt(k, n):
+                    self.selbst_rand[(self.GLIED_NAMEN[k], "roboter%d" % n)] = -kollision.SELBST_TIEFE
+                else:
+                    self.selbst_ausnahmen.add((self.GLIED_NAMEN[k], "roboter%d" % n))
+        for name in ("Greifer", "Backe links", "Backe rechts"):   # an Ober-/Unterarm kommen sie nie (nachgerechnet)
+            for n, _node, _w in self.flaechen:
+                if n in (0, 1):
+                    self.selbst_rand[(name, "roboter%d" % n)] = 0.0
+                else:
+                    self.selbst_ausnahmen.add((name, "roboter%d" % n))
+        if self.flaechen:
+            log("Kollisionen: Oberflaechen fuer die Selbstkollision geladen (%.0f ms)" % ((time.perf_counter() - t0) * 1000))
 
     @property
     def an(self):
@@ -835,7 +875,7 @@ class KollisionsWaechter:
                 liste.append(kollision.Quader(name, lage, [0.0, 0.0, 0.0], [v / 2 for v in t.getField("size").getSFVec3f()]))
         for name, node, kugeln, (m, r) in reversed(self.glieder):   # vom Flansch zum Fuss
             lage = (node.getPosition(), node.getOrientation())
-            if not nahe(kollision._welt(lage, m), r):
+            if not nahe(kollision._welt(lage, m), r, name):
                 continue
             liste += [kollision.Kugel(name, kollision._welt(lage, k[:3]), k[3]) for k in kugeln]
         return liste
@@ -856,11 +896,19 @@ class KollisionsWaechter:
                                                     self._wolke_werkstueck(node), (node.getPosition(), node.getOrientation()), node.getId()))
         rand = self.einst["abstand_mm"] / 1000.0
         t0 = time.perf_counter()   # ohne das einmalige Abtasten der Netze
+        # Selbstkollision: Oberflaechen von Fuss und Gliedern 1-4 wie Umgebungsteile, nur fuer erlaubte Paare
+        selbst = [kollision.Umgebungsteil(self.GLIED_NAMEN[n], "roboter", w, (node.getPosition(), node.getOrientation()),
+                                          "roboter%d" % n) for n, node, w in self.flaechen]
+        glied_nr = {name: n for n, name in self.GLIED_NAMEN.items()}
+        fremd = list(umgebung)   # ohne die Roboterflaechen (die kommen unten dazu)
 
-        def nahe(m, r):
+        def nahe(m, r, name):
             if tisch_z is not None and m[2] - r < tisch_z + rand:
                 return True
-            return any(math.dist(m, u.lage[0]) < r + u.wolke.radius + rand for u in umgebung)
+            if any(math.dist(m, u.lage[0]) < r + u.wolke.radius + rand for u in fremd):
+                return True
+            return any(kollision.selbst_erlaubt(glied_nr[name], int(u.kennung[7:])) and
+                       math.dist(m, u.lage[0]) < r + u.wolke.radius for u in selbst)
         # Ausnahmen: Fuss/Drehteller stehen auf Basisplatte und Tisch; die Backen beruehren das gegriffene und
         # das eben losgelassene Teil
         ausnahmen = set()
@@ -882,6 +930,12 @@ class KollisionsWaechter:
                 if abs(lokal[0]) <= self.greifer.masse["spalt"] and math.sqrt(sum(c * c for c in lokal)) < max(e) + 0.03:
                     eng.add(node.getId())
         rand_paare = {(name, kennung): -0.0005 for kennung in eng for name in ("Greifer", "Backe links", "Backe rechts")}
+        rand_paare.update(self.selbst_rand)
+        ausnahmen |= self.selbst_ausnahmen
+        if self.greifer.teil is not None:   # das gegriffene Teil gegen den Arm: Beruehren zaehlt
+            for u in selbst:
+                rand_paare[("%s (gegriffen)" % self.greifer.teil_name, u.kennung)] = 0.0
+        umgebung += selbst
         prof = getattr(self, "_profil", None)
         if prof is None and os.environ.get("KOLLISION_PROFIL"):   # Fehlersuche: Rechenzeit je Funktion ins Log
             import cProfile
@@ -902,6 +956,31 @@ class KollisionsWaechter:
                 print("Kollisionen, Profil nach %d Pruefungen (%d Koerper zuletzt):\n%s" % (prof[1], len(koerper), text.getvalue()))
         self.dauer_ms = 0.8 * self.dauer_ms + 0.2 * (time.perf_counter() - t0) * 1000
         return self.treffer
+
+    def pruefe_werkstuecke(self, teile):
+        """Werkstueck gegen Werkstueck (nur Meldung): ein fallendes oder geschobenes Teil (oder eines, das es bei der
+        letzten Pruefung noch war) beruehrt ein anderes. Ruhende Teile, die sich beruehren, zaehlen nicht; das
+        gegriffene Teil prueft schon pruefen()."""
+        self.teil_treffer = []
+        if not self.an:
+            return []
+        gegriffen = self.greifer.teil.getId() if self.greifer.teil is not None else None
+        jetzt_bewegt = {n.getId() for n in teile if n.getId() != gegriffen and kollision.bewegt(n.getVelocity())}
+        pruefen, self.zuvor_bewegt = jetzt_bewegt | self.zuvor_bewegt, jetzt_bewegt
+        for node in teile:
+            if node.getId() not in pruefen or node.getId() == gegriffen:
+                continue
+            lage = (node.getPosition(), node.getOrientation())
+            form = self._form(node)
+            name = node.getField("name").getSFString()
+            koerper = (kollision.Formkoerper(name, lage, form[0], form[1]) if form is not None else
+                       kollision.Quader(name, lage, [0.0, 0.0, 0.0], [v / 2 for v in node.getField("size").getSFVec3f()]))
+            andere = [kollision.Umgebungsteil(n.getField("name").getSFString(), "werkstueck", self._wolke_werkstueck(n),
+                                              (n.getPosition(), n.getOrientation()), n.getId())
+                      for n in teile if n.getId() not in (node.getId(), gegriffen)]
+            for t in kollision.pruefe([koerper], andere, None, 0.001, 0.0, hoechstens=1):
+                self.teil_treffer.append(dict(t, art="werkstueck"))
+        return self.teil_treffer
 
 
 def merke_startlagen(teile, startlagen):
@@ -1117,12 +1196,16 @@ def main():
                 stopper.anhalten()
             elif crash_zustand.zustand == "pruefe" and stopper is None:
                 crash_zustand.ergebnis("fehler", jetzt, text="keine Verbindung zu iRC vorgesehen")
-            if treffer:
-                neu = (treffer[0]["a"], treffer[0]["b"])
+            # Werkstueck gegen Werkstueck (fallend, geschoben): nur Meldung, haelt nichts an
+            gemeldet = waechter.pruefe_werkstuecke(teile)
+            gemeldet = treffer or gemeldet
+            if gemeldet:
+                neu = (gemeldet[0]["a"], gemeldet[0]["b"])
                 if kollision_letzt is None or (kollision_letzt["a"], kollision_letzt["b"]) != neu:
-                    p_mm = in_mm(treffer[0]["punkt"])
-                    print("KOLLISION: %s mit %s bei x=%.0f y=%.0f z=%.0f mm" % (neu[0], neu[1], p_mm[0], p_mm[1], p_mm[2]))
-                kollision_letzt = dict(treffer[0], zeit=jetzt)
+                    p_mm = in_mm(gemeldet[0]["punkt"])
+                    print("KOLLISION%s: %s mit %s bei x=%.0f y=%.0f z=%.0f mm" % (
+                        " (Werkstueck, nur Meldung)" if not treffer else "", neu[0], neu[1], p_mm[0], p_mm[1], p_mm[2]))
+                kollision_letzt = dict(gemeldet[0], zeit=jetzt)
             elif kollision_letzt is not None and jetzt - kollision_letzt["zeit"] > 3.0:
                 kollision_letzt = None
         if jetzt - hilfe_zeit >= 0.25:   # 4x pro Sekunde reicht (Netzschnitt bei CAD-Werkstuecken)
@@ -1152,7 +1235,8 @@ def main():
                     "a": kollision_letzt["a"], "b": kollision_letzt["b"],
                     "punkt": [round(v, 4) for v in kollision_letzt["punkt"]],
                     "punkt_mm": [round(v, 1) for v in in_mm(kollision_letzt["punkt"])],
-                    "aktiv": bool(waechter.treffer)},
+                    "aktiv": bool(waechter.treffer or waechter.teil_treffer),
+                    "art": kollision_letzt.get("art", "roboter")},
                 "crash": crash_zustand.status(in_mm),
                 "kollision_ms": round(waechter.dauer_ms, 2) if waechter.an else None,
                 "taster": list(taster.gedrueckt),

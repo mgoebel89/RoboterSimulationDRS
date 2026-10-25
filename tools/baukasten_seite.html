@@ -331,7 +331,9 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
     <label class="zeile" style="font-size:.95em;color:var(--text)"><input type="checkbox" id="k-an"> Kollisionen prüfen</label>
     <div class="hilfe">Geprüft werden Greifer, Backen und das gegriffene Teil sowie der Roboterarm gegen Tisch, Aufbauten
       und Werkstücke. Der Roboter wird dabei mit vereinfachten Hüllkörpern gerechnet (am Arm bis etwa 2 cm, an der Hand
-      gut 1 cm größer als echt), Greifer und Teile genauer. Die Meldung sieht nur der Schüler.</div>
+      gut 1 cm größer als echt), Greifer und Teile genauer. Dazu Selbstkollision (Arm über Fuß oder Drehteller
+      gefaltet, Greifer oder gegriffenes Teil gegen den Arm) und Werkstück gegen Werkstück (ein Teil fällt auf ein
+      anderes oder wird dagegen geschoben – nur Hinweis, ohne Anhalten). Die Meldung sieht nur der Schüler.</div>
     <label class="feldspalte">Reaktion <select id="k-reaktion">
       <option value="stopp">wie ein echter Crash: Programm in iRC stoppen</option>
       <option value="melden">nur melden</option></select></label>

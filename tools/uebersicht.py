@@ -1392,6 +1392,9 @@ async function kollisionHolen() {   // Stand aus der Statusdatei des Platzes
   } else if (zustand === 'freifahren') {
     text = 'Quittiert: Roboter jetzt von Hand frei fahren'; art = 'freifahren';
     zusatz = 'Berührung mit ' + cr.b + ' zählt nicht, bis der Roboter frei ist.' + (kz && kz.aktiv ? ' Noch: ' + ortText(kz) : '');
+  } else if (kz && kz.art === 'werkstueck') {   // Teil faellt auf ein anderes oder wird dagegen geschoben
+    text = 'Werkstück stößt an: ' + ortText(kz); art = kz.aktiv ? '' : 'vorbei';
+    zusatz = 'Nur Hinweis, das Programm läuft weiter. Zu hoch losgelassen oder angestoßen?';
   } else if (kz) {
     text = 'Kollision: ' + ortText(kz); art = kz.aktiv ? '' : 'vorbei';
     if (zustand === 'pruefe') zusatz = 'Programm wird angehalten ...';

@@ -169,6 +169,91 @@ class TestPruefung(unittest.TestCase):
         self.assertEqual(k.einstellungen({"reaktion": "explodieren", "abstand_mm": "x"})["reaktion"], "stopp")
 
 
+class TestK3(unittest.TestCase):
+    def test_paare_der_selbstkollision(self):
+        self.assertTrue(k.selbst_erlaubt(3, 0))       # Ellbogen gegen Fuss
+        self.assertTrue(k.selbst_erlaubt(6, 1))
+        self.assertFalse(k.selbst_erlaubt(2, 1))      # Nachbarn
+        self.assertFalse(k.selbst_erlaubt(1, 0))
+        self.assertFalse(k.selbst_erlaubt(5, 3))      # kommen sich innerhalb der Achsgrenzen nie nahe
+        self.assertTrue(k.selbst_erlaubt(None, 4))    # Greifer/gegriffenes Teil gegen den Unterarm
+        self.assertFalse(k.selbst_erlaubt(None, 5))
+
+    def test_bewegt(self):
+        self.assertFalse(k.bewegt([0.0, 0.0, 0.0, 0, 0, 0]))
+        self.assertFalse(k.bewegt([0.005, 0.0, -0.2, 0, 0, 0]))   # zittert bzw. faellt wenige mm (Ablegen)
+        self.assertTrue(k.bewegt([0.0, 0.0, -0.6, 0, 0, 0]))      # aus gut 1 cm gefallen
+        self.assertTrue(k.bewegt([0.05, 0.02, 0.0, 0, 0, 0]))     # geschoben
+
+    def test_fallendes_teil_trifft_anderes(self):
+        unten = teil("unten", 0.02, (0.3, 0.0, 0.01), art="werkstueck")
+        oben = lambda z: k.Quader("oben", ([0.3, 0.0, z], EINHEIT), [0, 0, 0], [0.01, 0.01, 0.01])   # noqa: E731
+        self.assertEqual(k.pruefe([oben(0.0305)], [unten], None, 0.001, 0.0)[0]["b"], "unten")   # liegt auf
+        self.assertEqual(k.pruefe([oben(0.035)], [unten], None, 0.001, 0.0), [])                 # noch in der Luft
+
+
+MESHES = os.path.join(ROOT, "protos", "meshes")
+
+
+@unittest.skipUnless(os.path.exists(os.path.join(MESHES, "rebel_j1_coll.obj")), "Modell noch nicht erzeugt")
+class TestSelbstkollisionModell(unittest.TestCase):
+    """Wie der Controller: Kugeln der Glieder gegen die Oberflaeche von Fuss und Gliedern 1-4 (echte Netze)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import json
+        with open(os.path.join(MESHES, "huellen.json"), encoding="utf-8") as f:
+            cls.kugeln = {int(n): v for n, v in json.load(f)["glieder"].items()}
+        cls.wolken = {}
+        for n in k.SELBST_FLAECHEN:
+            dateien = (["rebel_j%d_coll.obj" % n] if n else
+                       sorted(d for d in os.listdir(MESHES) if d.startswith("rebel_j0_") and d.endswith(".obj")))
+            punkte = []
+            for d in dateien:
+                v, f = [], []
+                with open(os.path.join(MESHES, d), encoding="utf-8") as datei:
+                    for z in datei:
+                        if z.startswith("v "):
+                            v.append([float(x) for x in z.split()[1:4]])
+                        elif z.startswith("f "):
+                            e = [int(c.split("/")[0]) - 1 for c in z.split()[1:]]
+                            f += [(e[0], e[j], e[j + 1]) for j in range(1, len(e) - 1)]
+                punkte += k.abtasten(v, f, 0.005)
+            cls.wolken[n] = k.Punktwolke(punkte, duenn=0.004)
+
+    @staticmethod
+    def lagen(q_grad):
+        """Lage der Glieder wie im Proto (Versatz zum Vorgaenger, dann Drehung um z,y,y,z,y,z)."""
+        versatz = [0.1, 0.1522, 0.24152, 0.1222, 0.1778, 0.129]
+        r, p = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], [0.0, 0.0, 0.0]
+        erg = {0: (list(p), [x for zeile in r for x in zeile])}
+        for i, (achse, w) in enumerate(zip("zyyzyz", q_grad)):
+            p = [p[j] + r[j][2] * versatz[i] for j in range(3)]
+            c, s = math.cos(math.radians(w)), math.sin(math.radians(w))
+            d = [[c, -s, 0], [s, c, 0], [0, 0, 1]] if achse == "z" else [[c, 0, s], [0, 1, 0], [-s, 0, c]]
+            r = [[sum(r[a][m] * d[m][b] for m in range(3)) for b in range(3)] for a in range(3)]
+            erg[i + 1] = (list(p), [x for zeile in r for x in zeile])
+        return erg
+
+    def treffer(self, q):
+        lagen = self.lagen(q)
+        koerper = [k.Kugel("Glied %d" % n, k._welt(lagen[n], kk[:3]), kk[3]) for n in range(1, 7) for kk in self.kugeln[n]]
+        umgebung = [k.Umgebungsteil("Glied %d" % n, "roboter", self.wolken[n], lagen[n], "roboter%d" % n) for n in self.wolken]
+        ausnahmen = {("Glied %d" % g, "roboter%d" % n) for g in range(1, 7) for n in self.wolken if not k.selbst_erlaubt(g, n)}
+        rand_paare = {("Glied %d" % g, "roboter%d" % n): -k.SELBST_TIEFE for g in range(1, 7) for n in self.wolken}
+        return k.pruefe(koerper, umgebung, None, 0.002, 0.002, ausnahmen=ausnahmen, rand_paare=rand_paare)
+
+    def test_arbeitsstellungen_ohne_fehlalarm(self):
+        for q in ([0, 0, 0, 0, 0, 0], [0, -20, 110, 0, 90, 0], [0, 60, 80, 0, 40, 0], [90, 30, 100, 0, 50, 0],
+                  [0, -80, 140, 0, 95, 0], [0, 0, 140, 0, 95, 0]):
+            self.assertEqual(self.treffer(q), [], q)
+
+    def test_arm_ueber_den_fuss_gefaltet(self):
+        t = self.treffer([0, 140, 140, 0, 0, 0])
+        self.assertTrue(t)
+        self.assertIn(t[0]["b"], ("Glied 0", "Glied 1"))
+
+
 @unittest.skipUnless(os.path.exists(os.path.join(ROOT, "protos", "meshes", "huellen.json")), "Modell noch nicht erzeugt")
 class TestHuellenDatei(unittest.TestCase):
     def test_glieder_und_greifer(self):

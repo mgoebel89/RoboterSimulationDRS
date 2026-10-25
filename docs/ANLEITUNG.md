@@ -262,8 +262,15 @@ liegt. **Drucken** gibt den Plan auf A4 quer aus.
 
 **Kollisionen** (Werkzeugleiste oder Teilebaum): Die Simulation prüft etwa 10-mal je Sekunde, ob Greifer, Backen, das
 gegriffene Teil oder der Roboterarm Tisch, Aufbauten oder Werkstücke berühren. Der Arm wird dabei mit vereinfachten
-Hüllkörpern gerechnet (bis etwa 2 cm, an der Hand gut 1 cm größer als echt), Greifer und Teile genau. Je
-Roboterumgebung einstellbar:
+Hüllkörpern gerechnet (bis etwa 2 cm, an der Hand gut 1 cm größer als echt), Greifer und Teile genau. Außerdem:
+- **Selbstkollision:** der Arm faltet sich über Fuß oder Drehteller, oder Greifer bzw. gegriffenes Teil stoßen gegen den
+  Arm. Wegen der Hüllkörper zählt das erst ab etwa 1 cm Eindringen (Greifer und Teil: schon bei Berührung). Andere
+  Glieder kommen sich innerhalb der Achsgrenzen des ReBeL nie nahe und werden nicht geprüft.
+- **Werkstück gegen Werkstück:** ein Teil fällt auf ein anderes (aus mehr als etwa 1 cm Höhe losgelassen) oder wird
+  dagegen geschoben. Das ist nur ein Hinweis („Werkstück stößt an“), das Programm läuft weiter. Ruhende Teile, die sich
+  berühren (z.B. im Magazin), zählen nie; das gegriffene Teil prüft schon die normale Kollisionsprüfung.
+
+Je Roboterumgebung einstellbar:
 - **Kollisionen prüfen** ein/aus (Standard: ein)
 - **Reaktion:** wie ein echter Crash (Programm in iRC anhalten, Standard) oder nur melden. Angehalten wird über die
   App WebotsSim (wie bei den Tastern, siehe Abschnitt 9); ist sie am Schüler-PC nicht freigeschaltet, steht in der

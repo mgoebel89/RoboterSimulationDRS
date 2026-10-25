@@ -409,6 +409,34 @@ def pruefe(koerper, umgebung, tisch_z, rand, ablage, ausnahmen=frozenset(), tisc
     return treffer
 
 
+# ---------------------------------------------------------------- Stufe K3: Selbstkollision, Werkstueck gegen Werkstueck
+
+# Innerhalb der Achsgrenzen des ReBeL kommen sich die Glieder 2 bis 6 untereinander und Greifer/Ober-/Unterarm nie
+# nahe (nachgerechnet 25.10.2026). Echte Selbstkollisionen gibt es nur, wenn der Arm ueber Fuss oder Drehteller
+# abknickt, und mit Greifer bzw. gegriffenem Teil gegen den Arm. Geprueft werden die Kugeln eines Glieds gegen die
+# echte Oberflaeche des anderen; die Kugeln sind bis gut 1 cm groesser als das Glied, daher erst ab SELBST_TIEFE.
+SELBST_FLAECHEN = (0, 1, 2, 3, 4)   # Glieder, deren Oberflaeche geprueft wird (0 = Fuss)
+SELBST_TIEFE = 0.010
+
+
+def selbst_erlaubt(glied, flaeche):
+    """Pruefen wir Glied `glied` (1..6, None = Greifer/Backen/gegriffenes Teil) gegen die Oberflaeche von
+    Glied `flaeche`? Nachbarn und Paare, die sich nie nahe kommen, entfallen."""
+    if glied is None:
+        return flaeche in SELBST_FLAECHEN
+    return flaeche in (0, 1) and glied >= flaeche + 2
+
+
+FALLEN_MS = 0.45    # schneller nach unten = aus mehr als etwa 1 cm Hoehe gefallen
+SCHIEBEN_MS = 0.03  # schneller waagerecht = wird geschoben (ruhende Teile zittern deutlich langsamer)
+
+
+def bewegt(geschwindigkeit):
+    """Faellt oder rutscht ein Werkstueck? geschwindigkeit: [vx, vy, vz, ...] in m/s (Webots getVelocity)."""
+    vx, vy, vz = geschwindigkeit[:3]
+    return vz < -FALLEN_MS or math.hypot(vx, vy) > SCHIEBEN_MS
+
+
 def einstellungen(daten):
     """Kollisions-Einstellungen einer Welt (worlds/<welt>.json, "kollision"), geprueft und mit Standardwerten."""
     e = dict(STANDARD)
