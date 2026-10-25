@@ -15,6 +15,10 @@ kann mit `--bericht datei.json` einen Bericht ablegen; die Berichte bitte aufheb
 - Schreiben in der Simulation: Eingang (DIn) und globales Signal (GSig) an/aus, Programmvariable setzen
   (wird auch ohne geladenes Programm angelegt), Programm laden, starten und stoppen.
 - Globale Signale werden nur mit `target_state` gesetzt (nur `state` wirkt nicht) – im Skript berücksichtigt.
+- Zählweise am Laptop bestätigt: Signal n der Schnittstelle erscheint in iRC als globales Signal n+1
+  (wie bei Ein- und Ausgängen). Die iRC-Signale 1–8 sind also die Schnittstellen-Nummern 0–7.
+- OPC UA an der eigenen AXCF 2152 (192.168.2.51) vom Container aus: anonym, `ROB_IN`/`ROB_OUT` gefunden,
+  Lesen ca. 4 ms, Testmuster in PLCnext Engineer sichtbar.
 - In der Simulation meldet iRC bei den Lizenzen `test_duration_remaining_seconds` (rund 30 Minuten) – am echten
   ReBeL und an den Schüler-PCs nachsehen.
 - OPC UA gegen einen Testserver, der sich wie PLCnext verhält: ohne und mit Verschlüsselung (Basic256Sha256),
