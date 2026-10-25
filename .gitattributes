@@ -17,3 +17,4 @@ install/rebel-sim-* text eol=lf
 *.zip binary
 *.jpg binary
 *.png binary
+*.pb binary

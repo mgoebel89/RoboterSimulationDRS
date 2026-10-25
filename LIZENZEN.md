@@ -30,4 +30,7 @@ Daraus abgeleitete Netze entstehen nur im Container (`teile/`) und werden nicht 
 - **three.js 0.160** (MIT) für den Baukasten im Browser, von cdn.jsdelivr.net.
 - **App-Schnittstelle von iRC:** Die Nachricht `IOStateRequest` in `controllers/irc_bridge/ea.py` folgt
   `robotcontrolapp.proto` aus [CommonplaceRobotics/RobotControlApps](https://github.com/CommonplaceRobotics/RobotControlApps) (MIT).
+  `tools/irc_api/` enthält diese Datei unverändert samt daraus erzeugter Beschreibung `robotcontrolapp.pb`
+  (Lizenz: `tools/irc_api/LIZENZ_COMMONPLACE_MIT.txt`).
+- **asyncua** (LGPL 3) für den OPC-UA-Probetest, nur in der eigenen Umgebung `/opt/rebel-sim-probe` im Container.
 - **gmsh** (GPL, als Ubuntu-Paket `python3-gmsh`) liest STEP-Dateien im Container ein.
