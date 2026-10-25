@@ -1,5 +1,5 @@
 {
   "titel": "Stift umsetzen",
-  "aufgabe": "Setze den blauen Stift von der gelben Marke (X 350, Y 0 mm) auf die grüne Marke (X 175, Y 303 mm).\n\nGreifer: Schunk EGP 40. In iRC das Werkzeug Schunk_EGP40_RebelMountingPlate wählen.\nDOut32 EIN (DOut31 AUS) schließt, DOut31 EIN (DOut32 AUS) öffnet.\n\nTipp: Erst über den Stift fahren, dann senkrecht absenken. Die Backen öffnen 16 mm weit.",
+  "aufgabe": "Setze den blauen Stift von der gelben Marke (X 350, Y 0 mm) auf die grüne Marke (X 175, Y 303 mm).\n\nGreifer: Schunk EGP 40. In iRC das Werkzeug Schunk_EGP40_RebelMountingPlate wählen.\nDOut32 EIN (DOut31 AUS) schließt, DOut31 EIN (DOut32 AUS) öffnet.\n\nTipp: Erst über den Stift fahren, dann senkrecht absenken. Der Stift ist 20 mm breit, die Backen öffnen auf 28 mm und schließen bis 16 mm.",
   "sichtbar": false
 }

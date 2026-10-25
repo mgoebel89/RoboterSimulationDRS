@@ -145,8 +145,9 @@ Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Mode
 - **Welt wechseln**, **Beenden**.
 
 **Greifer Schunk EGP 40** (und EGP 25): DOut32 EIN (DOut31 AUS) schließt, DOut31 EIN (DOut32 AUS) öffnet.
-Der EGP 40 öffnet ohne eigene Backen 16 mm weit, Hub je Backe 6 mm (Datenblatt; EGP 25: 11 mm, 3 mm).
-Gegriffen wird, was zwischen die offenen Backen passt und auf Backenhöhe liegt; das Teil rutscht in die Mitte.
+Ohne eigene Backen stehen die Backenträger des EGP 40 offen 28 mm und geschlossen 16 mm auseinander, Hub je Backe
+6 mm (Datenblatt; EGP 25: 17 mm / 11 mm, 3 mm). Gegriffen wird, was zwischen die offenen Backen passt, breiter als
+der Spalt bei geschlossenem Greifer ist und auf Backenhöhe liegt; das Teil rutscht in die Mitte.
 
 **Einteachen:** iRC und Browser nebeneinander legen.
 - Unten links zeigt die **Einteach-Hilfe**, wie weit der TCP noch von der Greifstellung des nächsten Werkstücks

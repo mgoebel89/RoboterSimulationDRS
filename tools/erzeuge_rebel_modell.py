@@ -240,7 +240,9 @@ EGP_VARIANTEN = [
     ("egp25", "Schunk_EGP25_RebelMountingPlate.xml"),
     ("egp25_finger", "Schunk_EGP25_RebelMountingPlate_Finger.xml"),
 ]
-# Hub je Backe laut Schunk-Datenblatt (m). Das iRC-Modell schliesst weiter, bis sich die Traeger beruehren.
+# Hub je Backe laut Schunk-Datenblatt (m). Die iRC-Datei "..._Offen.obj" (und das Schunk-CAD) zeigt den Greifer
+# in Wahrheit GESCHLOSSEN: Traeger innen 11 mm (EGP 25) bzw. 16 mm (EGP 40) auseinander, laut Datenblatt das
+# Mindestmass. Offen liegen sie um den Hub weiter aussen (17 bzw. 28 mm).
 HUB_DATENBLATT = {"egp25": 0.003, "egp40": 0.006}
 
 
@@ -259,11 +261,25 @@ def _merge(parts):
     return mv, mn, mf
 
 
+def verschoben(teil, dx):
+    """Teil (Punkte, Normalen, Flaechen) entlang x verschieben, dx in der Einheit des Teils."""
+    v, n, f = teil
+    return [(x + dx, y, z) for x, y, z in v], n, f
+
+
+def hub_offen(key, satz=None):
+    """Weg je Backe (m) von der CAD-Stellung (zu) bis offen: Datenblatt oder "hub_mm" des Backensatzes."""
+    if satz is not None and satz.get("hub_mm"):
+        return float(satz["hub_mm"]) / 1000.0
+    return HUB_DATENBLATT.get(key[:5], 0.003)
+
+
 def lade_egp(irc, xml_name, scale=0.001):
-    """iRC-Werkzeugdatei und Modell im offenen Zustand: (XML, Grundkoerper, linke, rechte Backe)."""
+    """iRC-Werkzeugdatei und Modell in CAD-Stellung (= geschlossen, siehe HUB_DATENBLATT):
+    (XML, Grundkoerper, linke, rechte Backe)."""
     tools = os.path.join(irc, "Data", "Tools")
     root = ET.parse(os.path.join(tools, xml_name)).getroot()
-    obj = root.find("CAD").get("FileStandard")   # offener Zustand
+    obj = root.find("CAD").get("FileStandard")   # heisst bei iRC "Offen", Traeger stehen aber am Anschlag innen
     teile = split_components(os.path.join(tools, obj), scale)
     if len(teile) < 3:
         sys.exit("%s: Backen lassen sich nicht vom Grundkoerper trennen" % obj)
@@ -369,36 +385,35 @@ def convert_egp(irc, key, xml_name, satz=None):
     """Schunk EGP aus der iRC-Werkzeugdatei: Grundkoerper fest am Flansch,
     die zwei Backentraeger als Bauteile, die sich zur Mitte schieben; mit
     Backensatz zusaetzlich die eigenen Backen auf den Traegern.
-    Rueckgabe: Proto-Text des Greifers und Kenndaten fuer den Controller."""
+    Die Traeger (und Backen) werden um den Hub nach aussen gesetzt (= offen), Schliessen faehrt sie in
+    die CAD-Stellung zurueck. Rueckgabe: Proto-Text des Greifers und Kenndaten fuer den Controller."""
     root, grund, links, rechts = lade_egp(irc, xml_name)
     kanal = root.find("INTERFACE")
+    hub = hub_offen(key, satz)
+    links, rechts = verschoben(links, -hub), verschoben(rechts, hub)
     dateien = {}
     for name, teil in (("grund", grund), ("links", links), ("rechts", rechts)):
         fname = "%s_%s.obj" % (key if satz is None else satz["basis"], name)
         write_obj(os.path.join(MESH_DIR, fname), *teil)
         dateien[name] = fname
     traeger_v = links[0] + rechts[0]
-    spalt_traeger = min(abs(p[0]) for p in traeger_v)   # halbe Innenweite der offenen Traeger
-    # geschlossen liegen die Traeger im iRC-Modell aneinander; echt ist der Hub kleiner (Datenblatt)
-    hub = min(spalt_traeger - 0.0001, HUB_DATENBLATT.get(key[:5], 1.0))
     if satz is None:
         tcp = float(root.find("OFFSET").get("OffsetZ")) / 1000.0
         greif_v = traeger_v
         titel = "%s aus iRC (%s)" % (egp_titel(key), xml_name)
     else:
         b_links, b_rechts = backe_platzieren(satz)
+        b_links, b_rechts = verschoben(b_links, -hub), verschoben(b_rechts, hub)
         for name, teil in (("backe_links", b_links), ("backe_rechts", b_rechts)):
             fname = "%s_%s.obj" % (key, name)
             write_obj(os.path.join(MESH_DIR, fname), *teil)
             dateien[name] = fname
         greif_v = b_links[0] + b_rechts[0]
         tcp = tcp_von_backen(satz, greif_v)
-        if satz.get("hub_mm"):
-            hub = float(satz["hub_mm"]) / 1000.0
-        hub = min(hub, min(abs(p[0]) for p in greif_v) - 0.0001)   # Backen beruehren sich zuerst
         titel = "%s mit %s%s" % (egp_titel(key), satz["titel"],
                                  " (Lage provisorisch)" if satz.get("provisorisch") else "")
     spalt = min(abs(p[0]) for p in greif_v)             # halbe Innenweite bei offenem Greifer
+    hub = min(hub, spalt - 0.0001)                      # Backen beruehren sich zuerst
     daten = {
         "typ": key,
         "tcp": tcp,
@@ -437,6 +452,7 @@ def werkzeugpaket(irc, key, xml_name, satz, daten):
     Ordnerinhalt nach <iRC>/Data/Tools kopieren und in iRC das Werkzeug waehlen."""
     root, grund, links, rechts = lade_egp(irc, xml_name, scale=1.0)
     b_links, b_rechts = backe_platzieren(satz, scale=1.0)
+    offen_mm = hub_offen(satz["basis"], satz) * 1000
     hub_mm = daten["hub"] * 1000
     ordner = os.path.join(WERKZEUG_DIR, key)
     os.makedirs(ordner, exist_ok=True)
@@ -444,12 +460,8 @@ def werkzeugpaket(irc, key, xml_name, satz, daten):
         os.remove(os.path.join(ordner, alt))
     groesse = satz["basis"][3:5]
     basis = "Schunk_EGP%s_%s" % (groesse, satz["name"].capitalize())
-
-    def verschoben(teil, dx):
-        v, n, f = teil
-        return [(x + dx, y, z) for x, y, z in v], n, f
-
-    for zustand, dx in (("Offen", 0.0), ("Geschlossen", hub_mm)):
+    # CAD-Stellung = geschlossen, offen um den Hub nach aussen (wie in convert_egp)
+    for zustand, dx in (("Offen", -offen_mm), ("Geschlossen", hub_mm - offen_mm)):
         teile = [grund, verschoben(links, dx), verschoben(b_links, dx),
                  verschoben(rechts, -dx), verschoben(b_rechts, -dx)]
         write_obj(os.path.join(ordner, "%s_%s.obj" % (basis, zustand)), *_merge(teile))

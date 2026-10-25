@@ -249,7 +249,7 @@ class TestGreifer(unittest.TestCase):
         # wieder gegriffen: nicht mehr festgehalten
         self.tcp.setze(kin.ik_nach_unten(0.35, 0.0, 0.0232, kin.TCP_EGP25))
         self.greifer.zu = False
-        self.greifer.masse["spalt"] = 0.03
+        self.greifer.masse.update(spalt=0.03, hub=0.02)   # Backen fuer den 40-mm-Klotz: offen 60, zu 20 mm
         self.greifer.schalte(True, [target])
         self.assertIs(self.greifer.teil, target)
         self.assertEqual(self.greifer.abgelegt, {})
@@ -357,6 +357,28 @@ class TestGreifer(unittest.TestCase):
         h = self.greifer.einteach_hilfe([wuerfel], basis)
         self.assertIn("zu gross fuer diesen Greifer", h["text"])
         self.assertNotIn("drehen", h["text"])
+
+    def test_egp40_klemmt_erst_ab_16_mm(self):
+        # Kenndaten wie im Modell: offen 28 mm, Hub 6 mm je Backe -> geschlossen 16 mm (Datenblatt)
+        daten = ("typ=egp40 tcp=0.10300 spalt=0.01400 hub=0.00600 backe_y=0.00800 "
+                 "backe_z0=-0.00665 backe_z1=0.00565")
+        g = irc_bridge.Greifer(_Robot(daten=daten), dict(irc_bridge.DEFAULT_CONFIG), self.tcp)
+        basis = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+        self.tcp.setze(kin.ik_nach_unten(0.35, 0.0, 0.0139, kin.TCP_EGP25))
+        h = g.einteach_hilfe([self.stift], basis)
+        self.assertFalse(h["greifbar"])
+        self.assertIn("8.0 mm breit, Backen schliessen nur bis 16.0 mm", h["text"])
+        self.assertIn("zu klein fuer diesen Greifer", h["text"])
+        g.schalte(True, [self.stift])
+        self.assertIsNone(g.teil, "8-mm-Stift faellt durch die geschlossenen Backen")
+        g.schalte(False, [])
+        leiste = _Teil("leiste", (0.35, 0.0, 0.01), (0.008, 0.02, 0.02))   # quer zu den Backen 20 mm
+        self.assertIn("um 90 Grad drehen", g.einteach_hilfe([leiste], basis)["text"])
+        klotz = _Teil("klotz", (0.35, 0.0, 0.01), (0.02, 0.02, 0.02))
+        self.assertTrue(g.einteach_hilfe([klotz], basis)["greifbar"])
+        g.schalte(True, [klotz])
+        self.assertIs(g.teil, klotz)
+        self.assertAlmostEqual(g.fingers[0].pos, 0.0038, places=4)   # Backe liegt an: 14 - 10 - 0,2 mm
 
     def test_robi2_backen_greifen_an_der_spitze(self):
         # Kenndaten, wie sie der Generator aus cad/backen/robi2 berechnet
@@ -761,6 +783,16 @@ class TestModell(unittest.TestCase):
         self.assertAlmostEqual(g["spalt"], irc_bridge.Greifer.BACKEN["spalt"])
         self.assertIn("translation 0 0 0.08500", text)
 
+    @unittest.skipUnless(os.path.exists(PROTO), "Modell noch nicht erzeugt")
+    def test_backenabstand_nach_datenblatt(self):
+        # Schunk-Datenblatt, Abstand der Backentraeger: EGP 25 11..17 mm, EGP 40 16..28 mm
+        with open(self.PROTO, encoding="utf-8") as f:
+            text = f.read()
+        for typ, offen, zu in (("egp25", 17.0, 11.0), ("egp40", 28.0, 16.0)):
+            g = irc_bridge.lies_greiferdaten(re.search(r"'%s': '([^']+)'" % typ, text).group(1))
+            self.assertAlmostEqual(2000 * g["spalt"], offen, places=3, msg=typ)
+            self.assertAlmostEqual(2000 * (g["spalt"] - g["hub"]), zu, places=3, msg=typ)
+
     def test_backensatz_lage(self):
         import erzeuge_rebel_modell as gen
         satz = next(s for s in gen.lade_backensaetze() if s["name"] == "robi2")
@@ -784,7 +816,7 @@ class TestModell(unittest.TestCase):
         self.assertIn('"egp25_robi2"', text)
         g = irc_bridge.lies_greiferdaten(re.search(r"'egp25_robi2': '([^']+)'", text).group(1))
         self.assertAlmostEqual(g["tcp"], kin.TCP_EGP25_ROBI2)
-        self.assertAlmostEqual(g["spalt"], 0.0055)
+        self.assertAlmostEqual(g["spalt"], 0.0085)   # offen 17 mm wie der EGP 25 (Datenblatt 11..17 mm)
         self.assertIn("egp25_robi2_backe_links.obj", text)
 
     def test_welt_klammern(self):

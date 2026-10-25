@@ -485,7 +485,7 @@ def ea_sensoren(entwurf):
 
 
 # --- Backensaetze (Phase 4): eigene Backe am Backentraeger eines Schunk EGP ---
-# Der Greifer aus der Teilebibliothek (Schunk-CAD, Traeger offen wie im iRC-Modell) steht im Werkzeugsystem
+# Der Greifer aus der Teilebibliothek (Schunk-CAD, Traeger geschlossen wie im iRC-Modell) steht im Werkzeugsystem
 # von iRC: Ursprung Flansch, z vom Flansch weg, Backen bewegen sich entlang x. Schunk-x bleibt x,
 # Schunk-y wird z (+8 mm Adapterplatte), Schunk-z wird -y. Bei EGP 25 und EGP 40 gleich.
 GREIFER_TEILE = {"egp40": "schunk_egp40", "egp25": "schunk_egp25"}

@@ -101,6 +101,6 @@ DEF REBEL IgusRebel6DOF {
 DEF STIFT Werkstueck {
   translation 0.35 0 0.01
   name "stift"
-  size 0.008 0.008 0.02
+  size 0.014 0.014 0.02
   farbe 0.1 0.4 0.9
 }

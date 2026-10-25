@@ -244,7 +244,7 @@ class Greifer:
     je nachdem welche Geraete das Modell hat."""
 
     # Masse des EGP 25 ohne Finger, falls das Modell keine Kenndaten mitbringt
-    BACKEN = {"spalt": 0.0055, "hub": 0.0054, "backe_y": 0.005, "backe_z0": -0.0043, "backe_z1": 0.0039}
+    BACKEN = {"spalt": 0.0085, "hub": 0.003, "backe_y": 0.005, "backe_z0": -0.0043, "backe_z1": 0.0039}
 
     def __init__(self, robot, cfg, tcp_node):
         self.robot = robot
@@ -375,13 +375,18 @@ class Greifer:
     def _passt(self, node, lokal, r_rel, e):
         if self.fingers:
             # der Querschnitt auf Hoehe der Backen passt zwischen die offenen Backen
+            # und ist breiter als der Spalt bei geschlossenem Greifer (sonst klemmt nichts)
             q = self._querschnitt(node, lokal, r_rel, e)
             spalt = self.masse["spalt"] + 0.0002
-            return q is not None and q[0] >= -spalt and q[1] <= spalt
+            return q is not None and q[0] >= -spalt and q[1] <= spalt and (q[1] - q[0]) / 2 >= self._spalt_zu() - 0.0002
         if self.typ == "vakuum":
             abstand = lokal[2] - e[2]
             return -0.005 < abstand < 0.015 and abs(lokal[0]) < e[0] and abs(lokal[1]) < e[1]
         return False
+
+    def _spalt_zu(self):
+        """Halbe Innenweite bei geschlossenem Greifer (m)."""
+        return self.masse["spalt"] - self.masse["hub"]
 
     def _soll_tiefe(self, e):
         """Wo der Teilemittelpunkt beim Greifen auf der Werkzeugachse liegen soll (ab TCP)."""
@@ -438,6 +443,17 @@ class Greifer:
                 hilfe["text"] += " - Greifer drehen (A6), bis die Backen parallel zum Teil stehen"
             else:
                 hilfe["text"] += " - zu gross fuer diesen Greifer (andere Backen oder Sauger)"
+        elif breite is not None and breite < 2 * self._spalt_zu() - 0.0004 and (q is not None or self._netz(node) is None):
+            zu = 2000 * self._spalt_zu()
+            hilfe["text"] = "%s: %s %.1f mm breit, Backen schliessen nur bis %.1f mm" % (
+                name, "an den Backen" if q is not None and self._netz(node) is not None else "", 1000 * breite, zu)
+            hilfe["text"] = hilfe["text"].replace("  ", " ")
+            if self._netz(node) is not None:
+                hilfe["text"] += " - an breiterer Stelle greifen oder Greifer drehen (A6)"
+            elif self._spalt_zu() <= e[1] <= self.masse["spalt"]:
+                hilfe["text"] += " - Greifer um 90 Grad drehen (A6)"
+            else:
+                hilfe["text"] += " - zu klein fuer diesen Greifer (andere Backen)"
         elif max(abs(v) for v in delta) < 1.0:
             hilfe["text"] = "%s: Greifstellung erreicht" % name
         else:

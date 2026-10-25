@@ -355,7 +355,7 @@ class TestSensorflaechen(unittest.TestCase):
 SCHUNK = {"box": [-13.5, 0, -9, 13.5, 80.9, 9], "flaechen": [], "kanten": [], "ecken": [], "bohrungen": [
     {"id": 454, "innen": True, "durchmesser": 3.24, "enden": [[-9.5, 76.9, 0], [-5.5, 76.9, 0]]},
     {"id": 331, "innen": True, "durchmesser": 3.24, "enden": [[9.5, 76.9, 0], [5.5, 76.9, 0]]}]}
-# Schunk EGP 40 wie in teile/schunk_egp40: je Traeger zwei M3 in Greifrichtung (Traeger x 8..14 offen)
+# Schunk EGP 40 wie in teile/schunk_egp40: je Traeger zwei M3 in Greifrichtung (Traeger x 8..14 geschlossen)
 SCHUNK40 = {"box": [-20, 0, -13, 20.8, 100.65, 13], "flaechen": [], "kanten": [], "ecken": [], "bohrungen": [
     {"id": 620, "innen": True, "durchmesser": 2.5, "enden": [[-8.0, 97.65, -5.0], [-14.0, 97.65, -5.0]]},
     {"id": 511, "innen": True, "durchmesser": 2.5, "enden": [[8.0, 97.65, 5.0], [14.0, 97.65, 5.0]]}]}
