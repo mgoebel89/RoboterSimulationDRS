@@ -20,6 +20,18 @@ def wuerfel_netz(kante, mitte=(0.0, 0.0, 0.0)):
     return punkte, [d for a, b, c, e in flaechen for d in ((a, b, c), (a, c, e))]
 
 
+def zylinder_netz(r, h, n=48):
+    """Geschlossener Zylinder um die z-Achse, Mitte im Ursprung (wie ein CAD-Werkstueck)."""
+    punkte = [[r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n), z] for z in (-h / 2, h / 2) for i in range(n)]
+    punkte += [[0.0, 0.0, -h / 2], [0.0, 0.0, h / 2]]
+    unten, oben = 2 * n, 2 * n + 1
+    dreiecke = []
+    for i in range(n):
+        j = (i + 1) % n
+        dreiecke += [(i, j, n + j), (i, n + j, n + i), (unten, j, i), (oben, n + i, n + j)]
+    return punkte, dreiecke
+
+
 def teil(name, kante, pos, art="aufbau"):
     """Umgebungsteil: Wuerfel der Kantenlaenge kante (m) mit Mitte im Teilsystem, an Weltlage pos."""
     return k.Umgebungsteil(name, art, k.Punktwolke(k.abtasten(*wuerfel_netz(kante))), (list(pos), EINHEIT), name)
@@ -111,6 +123,38 @@ class TestPruefung(unittest.TestCase):
         self.assertEqual(k.pruefe([stift(0.1135)], [magazin], 0.0, 0.002, 0.002), [])      # 1,5 mm tief: innerhalb 2 mm
         self.assertEqual(k.pruefe([stift(0.111)], [magazin], 0.0, 0.002, 0.002)[0]["b"], "magazin")   # 4 mm zu tief
         self.assertEqual(k.pruefe([stift(0.1135)], [magazin], 0.0, 0.002, 0.001)[0]["b"], "magazin")  # Toleranz 1 mm
+
+    def test_rundes_teil_in_passender_tasche(self):
+        """Scheibe Ø40 x 10 mm in einer Tasche Ø41: der Huellquader ragt mit den Ecken in die Wand, die echte
+        Form nicht (Fehlalarm beim Greifen aus dem Magazin, 25.10.2026)."""
+        scheibe = zylinder_netz(0.02, 0.01)
+        form = k.Saeulen(*scheibe)
+        self.assertTrue(form.innen([0.0, 0.0, 0.0]))
+        self.assertTrue(form.innen([0.019, 0.0, 0.0]))
+        self.assertFalse(form.innen([0.0148, 0.0148, 0.0]))         # Ecke des Quaders: nicht in der Scheibe
+        self.assertFalse(form.innen([0.0, 0.0, 0.0049], 0.002))     # zu nah an der Oberseite
+        self.assertTrue(form.innen([0.0, 0.0, 0.002], 0.002))
+        # Tasche: Wand (Zylindermantel r = 20,5 mm) und Boden bei z = 0, als Punktwolke
+        wand = [(0.0205 * math.cos(w / 120 * 2 * math.pi), 0.0205 * math.sin(w / 120 * 2 * math.pi), z / 1000)
+                for w in range(120) for z in range(0, 11)]
+        boden = [(x / 1000, y / 1000, 0.0) for x in range(-20, 21) for y in range(-20, 21) if x * x + y * y <= 400]
+        tasche = k.Umgebungsteil("magazin", "aufbau", k.Punktwolke(wand + boden), ([0.35, -0.03, 0.0], EINHEIT), "magazin")
+        lage = ([0.35, -0.03, 0.0051], EINHEIT)                      # liegt 0,1 mm ueber dem Boden
+        quader = k.Quader("Werkstueck_1 (gegriffen)", lage, [0.0, 0.0, 0.0], [0.02, 0.02, 0.005])
+        self.assertEqual(k.pruefe([quader], [tasche], 0.0, 0.002, 0.002)[0]["b"], "magazin")   # alter Fehlalarm
+        echt = k.Formkoerper("Werkstueck_1 (gegriffen)", lage, form, k.eckpunkte(scheibe[0]))
+        self.assertEqual(k.pruefe([echt], [tasche], 0.0, 0.002, 0.002), [])
+        # quer verschoben: 3 mm in die Wand -> Kollision; 3 mm in den Boden gedrueckt -> Kollision
+        quer = k.Formkoerper("Werkstueck_1 (gegriffen)", ([0.3535, -0.03, 0.0051], EINHEIT), form, k.eckpunkte(scheibe[0]))
+        self.assertEqual(k.pruefe([quer], [tasche], 0.0, 0.002, 0.002)[0]["b"], "magazin")
+        tief = k.Formkoerper("Werkstueck_1 (gegriffen)", ([0.35, -0.03, 0.002], EINHEIT), form, k.eckpunkte(scheibe[0]))
+        self.assertEqual({t["b"] for t in k.pruefe([tief], [tasche], None, 0.002, 0.002)}, {"magazin"})
+        # Tisch: tiefster Netzpunkt zaehlt, auch gedreht (Scheibe hochkant: Rand 20 mm unter der Mitte)
+        hochkant = [1, 0, 0, 0, 0, -1, 0, 1, 0]
+        self.assertEqual(k.pruefe([k.Formkoerper("s (gegriffen)", ([0.5, 0.0, 0.0205], hochkant), form,
+                                                 k.eckpunkte(scheibe[0]))], [], 0.0, 0.002, 0.002), [])
+        self.assertEqual(k.pruefe([k.Formkoerper("s (gegriffen)", ([0.5, 0.0, 0.017], hochkant), form,
+                                                 k.eckpunkte(scheibe[0]))], [], 0.0, 0.002, 0.002)[0]["b"], "Tisch")
 
     def test_ausnahmen_und_werkstuecke(self):
         stift = teil("stift", 0.02, (0.3, 0.0, 0.01), art="werkstueck")

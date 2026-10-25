@@ -741,6 +741,7 @@ class KollisionsWaechter:
         self.greifer_huelle = {}
         self.finger = {}
         self.wolken = {}     # Node-Id -> Punktwolke im Teilsystem
+        self.formen = {}     # Node-Id -> (Saeulen, Eckpunkte) fuer gegriffene CAD-Teile, None = Huellquader
         self.zuletzt_los = (None, 0.0)   # eben losgelassenes Teil: die Backen beruehren es noch kurz
         self.treffer = []
         self.dauer_ms = 0.0
@@ -800,6 +801,19 @@ class KollisionsWaechter:
             self.wolken[node.getId()] = kollision.Punktwolke(punkte)
         return self.wolken[node.getId()]
 
+    def _form(self, node):
+        """Rauminhalt eines CAD-Werkstuecks (einmal je Teil gerechnet, dauert bei grossen Netzen einen Moment)."""
+        if node.getId() not in self.formen:
+            netz = self.greifer._netz(node)
+            if netz is not None and netz[0] and netz[1]:
+                t0 = time.perf_counter()
+                self.formen[node.getId()] = (kollision.Saeulen(netz[0], netz[1]), kollision.eckpunkte(netz[0]))
+                print("Kollisionen: Form von %s berechnet (%d Dreiecke, %.0f ms)" % (
+                    node.getField("name").getSFString(), len(netz[1]), (time.perf_counter() - t0) * 1000))
+            else:
+                self.formen[node.getId()] = None
+        return self.formen[node.getId()]
+
     def koerper(self, nahe):
         """Huellkoerper in Weltlage; Glieder nur, wenn ihre Huellkugel `nahe` (Funktion Mitte, Radius) ist.
         Greifer, Backen und gegriffenes Teil zuerst: dort kracht es meist, und nach wenigen Treffern ist Schluss."""
@@ -813,8 +827,12 @@ class KollisionsWaechter:
                 liste.append(kollision.Quader("Backe %s" % seite, (node.getPosition(), node.getOrientation()), h["mitte"], h["halb"]))
         t = self.greifer.teil
         if t is not None:
-            liste.append(kollision.Quader("%s (gegriffen)" % self.greifer.teil_name, (t.getPosition(), t.getOrientation()),
-                                          [0.0, 0.0, 0.0], [v / 2 for v in t.getField("size").getSFVec3f()]))
+            name, lage = "%s (gegriffen)" % self.greifer.teil_name, (t.getPosition(), t.getOrientation())
+            form = self._form(t)
+            if form is not None:   # echte Form: ein Quader um ein rundes Teil ragt in passende Taschen
+                liste.append(kollision.Formkoerper(name, lage, form[0], form[1]))
+            else:
+                liste.append(kollision.Quader(name, lage, [0.0, 0.0, 0.0], [v / 2 for v in t.getField("size").getSFVec3f()]))
         for name, node, kugeln, (m, r) in reversed(self.glieder):   # vom Flansch zum Fuss
             lage = (node.getPosition(), node.getOrientation())
             if not nahe(kollision._welt(lage, m), r):

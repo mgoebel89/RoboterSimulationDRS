@@ -248,6 +248,98 @@ class Quader:
         return [min(q[i] for q in ecken) for i in range(3)], [max(q[i] for q in ecken) for i in range(3)], enthaelt
 
 
+class Saeulen:
+    """Rauminhalt eines geschlossenen Netzes (Teilsystem) als senkrechte Saeulen: je Rasterpunkt (x, y) die
+    z-Bereiche, die innen liegen (Strahl in z-Richtung, Schnittpunkte paarweise). Einmal je Teil gerechnet; danach
+    ist "liegt dieser Punkt mindestens `tiefe` tief im Teil?" eine Nachschau statt einer Rechnung mit Dreiecken."""
+
+    def __init__(self, punkte, dreiecke, schritt=0.0005, hoechstens=200):
+        self.lo = [min(p[i] for p in punkte) for i in range(3)]
+        self.hi = [max(p[i] for p in punkte) for i in range(3)]
+        groesse = max(self.hi[0] - self.lo[0], self.hi[1] - self.lo[1])
+        self.s = max(schritt, groesse / hoechstens)
+        self.nx = int(math.ceil((self.hi[0] - self.lo[0]) / self.s)) + 1
+        self.ny = int(math.ceil((self.hi[1] - self.lo[1]) / self.s)) + 1
+        # Strahlen knapp neben dem Raster, damit sie nie genau eine Kante zweier Dreiecke treffen
+        self.dx, self.dy = 1.37e-7, 2.91e-7
+        schnitte = {}
+        for ia, ib, ic in dreiecke:
+            a, b, c = punkte[ia], punkte[ib], punkte[ic]
+            det = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+            if abs(det) < 1e-18:   # senkrecht stehend: trifft kein senkrechter Strahl
+                continue
+            i0 = max(0, int(math.ceil((min(a[0], b[0], c[0]) - self.lo[0] - self.dx) / self.s)))
+            i1 = min(self.nx - 1, int(math.floor((max(a[0], b[0], c[0]) - self.lo[0] - self.dx) / self.s)))
+            j0 = max(0, int(math.ceil((min(a[1], b[1], c[1]) - self.lo[1] - self.dy) / self.s)))
+            j1 = min(self.ny - 1, int(math.floor((max(a[1], b[1], c[1]) - self.lo[1] - self.dy) / self.s)))
+            for i in range(i0, i1 + 1):
+                x = self.lo[0] + i * self.s + self.dx
+                for j in range(j0, j1 + 1):
+                    y = self.lo[1] + j * self.s + self.dy
+                    u = ((x - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (y - a[1])) / det
+                    v = ((b[0] - a[0]) * (y - a[1]) - (x - a[0]) * (b[1] - a[1])) / det
+                    if u < 0 or v < 0 or u + v > 1:
+                        continue
+                    schnitte.setdefault((i, j), []).append(a[2] + u * (b[2] - a[2]) + v * (c[2] - a[2]))
+        self.saeulen = {}
+        for ij, zs in schnitte.items():
+            zs.sort()
+            self.saeulen[ij] = [(zs[k], zs[k + 1]) for k in range(0, len(zs) - 1, 2)]   # ungerade: Netz offen, Rest weg
+
+    def _in_saeule(self, x, y, z, tiefe):
+        i = int(round((x - self.lo[0] - self.dx) / self.s))
+        j = int(round((y - self.lo[1] - self.dy) / self.s))
+        return any(z0 + tiefe <= z <= z1 - tiefe for z0, z1 in self.saeulen.get((i, j), ()))
+
+    def innen(self, q, tiefe=0.0):
+        """Liegt q (Teilsystem) mindestens `tiefe` tief im Teil? Seitlich genaehert: auch die Saeulen um `tiefe`
+        daneben muessen q enthalten."""
+        if not self._in_saeule(q[0], q[1], q[2], tiefe):
+            return False
+        if tiefe <= 0:
+            return True
+        return all(self._in_saeule(q[0] + ex, q[1] + ey, q[2], 0.0)
+                   for ex, ey in ((tiefe, 0.0), (-tiefe, 0.0), (0.0, tiefe), (0.0, -tiefe)))
+
+
+class Formkoerper:
+    """Gegriffenes Teil mit seiner echten Form (Saeulen); ein Quader um ein rundes Teil ragte mit den Ecken in
+    passende Magazintaschen. rand < 0 heisst: erst ab so viel Eindringen ist es eine Kollision."""
+
+    def __init__(self, name, lage, form, ecken):
+        self.name, self.pos, self.rot, self.form = name, lage[0], lage[1], form
+        mitte = [(form.lo[i] + form.hi[i]) / 2 for i in range(3)]
+        self.mitte_welt = _welt(lage, mitte)
+        self.halb = [(form.hi[i] - form.lo[i]) / 2 for i in range(3)]
+        self.ecken_lokal = ecken   # einige Eckpunkte des Netzes fuer die Tischpruefung
+
+    def kasten(self, rand):
+        e = [_welt((self.mitte_welt, self.rot), [sx * self.halb[0], sy * self.halb[1], sz * self.halb[2]])
+             for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+        return ([min(q[i] for q in e) - rand for i in range(3)], [max(q[i] for q in e) + rand for i in range(3)])
+
+    def tiefster(self):
+        return min(_welt((self.pos, self.rot), p)[2] for p in self.ecken_lokal)
+
+    def im_system(self, pos, rot, rand):
+        lo, hi = self.kasten(max(rand, 0.0))
+        e = [_mtv(rot, _sub([(lo, hi)[sx][0], (lo, hi)[sy][1], (lo, hi)[sz][2]], pos))
+             for sx in (0, 1) for sy in (0, 1) for sz in (0, 1)]
+        tiefe = -rand
+        form, eigene_pos, eigene_rot = self.form, self.pos, self.rot
+
+        def enthaelt(p):
+            return form.innen(_mtv(eigene_rot, _sub(_welt((pos, rot), p), eigene_pos)), tiefe)
+        return [min(q[i] for q in e) for i in range(3)], [max(q[i] for q in e) for i in range(3)], enthaelt
+
+
+def eckpunkte(punkte, hoechstens=400):
+    """Hoechstens so viele Netzpunkte, gleichmaessig ausgewaehlt, dazu die aeussersten je Achse (Tischpruefung)."""
+    schritt = max(1, len(punkte) // hoechstens)
+    aussen = [f(punkte, key=lambda p, i=i: p[i]) for i in range(3) for f in (min, max)]
+    return list(punkte[::schritt]) + aussen
+
+
 # ---------------------------------------------------------------- Pruefung
 
 class Umgebungsteil:
