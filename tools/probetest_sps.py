@@ -98,15 +98,22 @@ async def _opcua(args, b):
     liste = [{"sicherheit": e.SecurityPolicyUri.rsplit("#", 1)[-1], "modus": e.SecurityMode.name,
               "anmeldung": sorted({t.TokenType.name for t in e.UserIdentityTokens})} for e in endpunkte]
     b.ok("Server erreichbar", url, liste)
-    ohne = [e for e in liste if e["sicherheit"] == "None" and "UserName" in e["anmeldung"]]
-    # 2. Anmelden: ohne Verschluesselung, falls erlaubt, sonst Basic256Sha256 mit eigenem Zertifikat
-    passwort = args.passwort or os.environ.get("SPS_PASSWORT") or getpass.getpass("Passwort fuer %s auf %s: " % (args.benutzer, args.sps))
+    # 2. Anmelden: mit Benutzer/Passwort, wenn der Server das anbietet, sonst anonym; ohne Verschluesselung, falls
+    #    erlaubt, sonst Basic256Sha256 mit eigenem Zertifikat
+    anonym = args.anonym or not any("UserName" in e["anmeldung"] for e in liste)
+    art = "Anonymous" if anonym else "UserName"
+    if anonym and not args.anonym:
+        b.warnung("Anmeldung", "der Server bietet nur anonyme Anmeldung an (kein Benutzer/Passwort). Fuer den Unterricht "
+                               "reicht das im Labornetz; sonst in PLCnext Engineer die Benutzer-Anmeldung fuer OPC UA einschalten.")
+    ohne = [e for e in liste if e["sicherheit"] == "None" and art in e["anmeldung"]]
     modus = args.sicherheit if args.sicherheit != "auto" else ("none" if ohne else "signencrypt")
     client = Client(url, timeout=args.zeit)
     client.application_uri = "urn:rebel-sim:sps-kopplung"
     client.name = "ReBeL-Simulation SPS-Kopplung (Probetest)"
-    client.set_user(args.benutzer)
-    client.set_password(passwort)
+    if not anonym:
+        passwort = args.passwort or os.environ.get("SPS_PASSWORT") or getpass.getpass("Passwort fuer %s auf %s: " % (args.benutzer, args.sps))
+        client.set_user(args.benutzer)
+        client.set_password(passwort)
     if modus != "none":
         from asyncua.crypto.security_policies import SecurityPolicyBasic256Sha256
         from asyncua.crypto.cert_gen import setup_self_signed_certificate
@@ -133,7 +140,7 @@ async def _opcua(args, b):
             text += ". Benutzername oder Passwort stimmen nicht, oder das Konto darf kein OPC UA."
         b.fehler("Anmelden (%s)" % modus, text)
         return
-    b.ok("Anmelden", "als %s, Sicherheit %s" % (args.benutzer, modus))
+    b.ok("Anmelden", "%s, Sicherheit %s" % ("anonym" if anonym else "als " + args.benutzer, modus))
     try:
         # 3. Namensraum der globalen Variablen und die ROB_*-Variablen finden
         namen = await client.get_namespace_array()
@@ -431,6 +438,7 @@ def main(argv=None):
     o.add_argument("--port", type=int, default=4840)
     o.add_argument("--benutzer", default="admin")
     o.add_argument("--passwort", help="sonst Umgebungsvariable SPS_PASSWORT oder Abfrage")
+    o.add_argument("--anonym", action="store_true", help="ohne Benutzer anmelden (sonst automatisch, wenn der Server nur das kann)")
     o.add_argument("--sicherheit", choices=["auto", "none", "sign", "signencrypt"], default="auto")
     o.add_argument("--programm-instanz", help="falls die Variablen in einer Programminstanz liegen, z.B. MainInstance")
     o.add_argument("--zertifikate", default=os.environ.get("ZERTIFIKATE", "/var/lib/rebel-sim/opcua"))
