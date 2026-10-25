@@ -145,7 +145,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
       <option value="egp25">EGP 25</option><option value="egp25_finger">EGP 25 mit Fingern</option>
       <option value="vakuum">Sauger</option><option value="kein">kein Greifer</option></select></label>
     <button id="speichern" class="haupt">%%ICON_SPEICHERN%%Speichern</button>
-    <a class="btn" id="modus-wechsel" href="/lehrer/baukasten?modus=backen">%%ICON_BACKEN%%Backensätze</a>
+    <a class="btn" id="modus-wechsel" href="/lehrer/baukasten?modus=backen" title="Eigene Greifer mit Backen aus der Teilebibliothek">%%ICON_BACKEN%%Greifer bauen</a>
     <a class="btn" id="zurueck" href="/lehrer#welten">%%ICON_ZURUECK%%Roboterumgebungen</a></span>
 </header>
 <div class="werkzeuge" role="toolbar" aria-label="Werkzeuge">
@@ -166,8 +166,8 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
 <div class="flaeche">
 <aside class="baum" aria-label="Aufbau">
   <div class="feld" id="backen-feld" hidden style="display:flex;flex-direction:column;gap:9px;padding:6px 8px 12px">
-    <div class="baum-kopf" style="padding-left:2px">Backensatz</div>
-    <label class="feldspalte">Greifer <select id="b-basis"><option value="egp40">Schunk EGP 40</option>
+    <div class="baum-kopf" style="padding-left:2px">Eigener Greifer</div>
+    <label class="feldspalte">Schunk-Greifer <select id="b-basis"><option value="egp40">Schunk EGP 40</option>
       <option value="egp25">Schunk EGP 25</option></select></label>
     <div class="hilfe">Eigene Backe aus der Teilebibliothek an den Backenträger setzen, z.B. eine Bohrung der Backe auf
       ein Gewinde des Trägers (EGP 40: zwei M3 in Greifrichtung, EGP 25: ein M4). Der Greifer steht geschlossen im
@@ -184,7 +184,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
     <div id="b-tcp-wert" class="hilfe"></div>
     <div id="backen-daten" class="hilfe"></div>
     <div class="zeile"><a id="backen-paket" class="btn" hidden>Werkzeugpaket für iRC (ZIP)</a>
-      <button id="backen-loeschen" class="warnen" hidden>Backensatz löschen</button></div>
+      <button id="backen-loeschen" class="warnen" hidden>Greifer löschen</button></div>
   </div>
   <div class="baum-kopf" id="baum-kopf-umgebung">Roboterumgebung</div>
   <button class="baum-eintrag" id="baum-tisch" title="Tisch einstellen">%%ICON_TISCH%%Tisch<span class="kurz" id="tisch-kurz"></span></button>
@@ -623,10 +623,10 @@ async function greiferAufbauen() {
   flansch.rotation.x = Math.PI / 2; flansch.position.z = -1; szene.add(flansch, tcpMarke);
   szene.add(greiferObjekt);
   // Kopfzeile und Seitenleiste umstellen
-  $('modus-titel').textContent = 'Backensatz'; $('welt-text').textContent = 'Backensatz'; $('neu-text').textContent = 'Neuer Backensatz';
+  $('modus-titel').textContent = 'Greifer'; $('welt-text').textContent = 'Greifer'; $('neu-text').textContent = 'Neuer Greifer';
   $('weltdatei').placeholder = 'z.B. robi3'; $('greifer-feld').hidden = true;
   $('modus-wechsel').lastChild.textContent = 'Baukasten'; $('modus-wechsel').href = '/lehrer/baukasten';
-  $('zurueck').lastChild.textContent = 'Lehrerbereich'; $('zurueck').href = '/lehrer';
+  $('zurueck').lastChild.textContent = 'Alle Greifer'; $('zurueck').href = '/lehrer#greifer';
   for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor', 'w-tisch', 'w-ea', 'w-plan', 'baum-tisch', 'baum-ea', 'baum-kopf-umgebung',
                     'w-kollision', 'baum-kollision']) $(id).hidden = true;
   $('backen-feld').hidden = false; $('e-art').disabled = true;
@@ -1088,7 +1088,7 @@ $('b-basis').onchange = async () => {
   if (entwurf.teile.length) status('Greifer gewechselt: das Gegenstück am Backenträger bitte neu anklicken.');
 };
 async function hinzufuegen(name) {
-  if (BACKEN && entwurf.teile.length) { status('Ein Backensatz hat genau eine Backe; die zweite ist dieselbe, gedreht.', true); return; }
+  if (BACKEN && entwurf.teile.length) { status('Ein eigener Greifer hat genau eine Backe; die zweite ist dieselbe, gedreht.', true); return; }
   let n = 1, basis = /^[A-Za-z]/.test(name) ? name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 30) : 't_' + name.slice(0, 28);
   while (teil(basis + (n > 1 ? '_' + n : ''))) n++;
   const t = {id: basis + (n > 1 ? '_' + n : ''), teil: name, art: 'aufbau', verbindung: null};
@@ -1265,7 +1265,7 @@ async function backenSpeichern() {
   finally { $('speichern').disabled = false; backenInfo(); }
 }
 $('backen-loeschen').onclick = async () => {
-  if (!confirm('Backensatz ' + weltName + ' löschen? Das Robotermodell wird ohne ihn neu erzeugt.')) return;
+  if (!confirm('Greifer ' + weltName + ' löschen? Das Robotermodell wird ohne ihn neu erzeugt.')) return;
   try { await api('backensatz_loeschen', {name: weltName}); status('Gelöscht.'); await weltenListe(null); await weltLaden(null); }
   catch (e) { status(e.message, true); }
 };
@@ -1348,7 +1348,7 @@ let neuModus = 'neu';   // 'neu' legt an, 'name' aendert nur Dateiname und Titel
 const NAME_MUSTER = BACKEN ? /^[a-z][a-z0-9_]{0,19}$/ : /^[a-z0-9_-]{1,50}$/;
 function neuDialog(modus) {
   neuModus = modus;
-  $('nd-titel').textContent = modus === 'name' ? 'Name festlegen' : BACKEN ? 'Neuer Backensatz' : 'Neue Roboterumgebung';
+  $('nd-titel').textContent = modus === 'name' ? 'Name festlegen' : BACKEN ? 'Neuer Greifer' : 'Neue Roboterumgebung';
   $('nd-ok').textContent = modus === 'name' ? 'Übernehmen' : 'Anlegen';
   $('nd-tisch-zeile').hidden = BACKEN || modus === 'name';
   $('nd-hilfe').textContent = BACKEN ? 'Buchstabe zuerst, dann a-z, 0-9 und _, bis 20 Zeichen. Daraus wird der Greifer „egp40_<name>“.'
@@ -1588,7 +1588,7 @@ async function weltenListe(gewaehlt) {
   if (BACKEN) {
     backensaetze = await holen('/api/lehrer/backensaetze');
     const eigene = backensaetze.filter(b => !b.fest);
-    $('welt').innerHTML = '<option value="">(neuer Backensatz)</option>' + eigene.map(b => '<option value="' + b.name + '"'
+    $('welt').innerHTML = '<option value="">(neuer Greifer)</option>' + eigene.map(b => '<option value="' + b.name + '"'
       + (b.name === gewaehlt ? ' selected' : '') + '>' + esc(b.titel) + ' (' + b.name + ')</option>').join('');
     return;
   }

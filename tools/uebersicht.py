@@ -380,6 +380,10 @@ td.knoepfe { white-space:nowrap; text-align:right; }
 td.knoepfe > * { margin-left:4px; }
 .gesperrt { color:var(--rot); font-weight:700; }
 main#liste { padding:16px 28px 32px; }
+main.greifer-liste { padding:8px 28px 16px; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+h2.gruppe { margin:14px 28px 0; font-size:1.05em; color:var(--blau); }
+.greifer-wert { display:flex; justify-content:space-between; gap:12px; border-top:1px solid var(--linie); padding-top:5px;
+  font-size:.92em; } .greifer-wert span:first-child { color:var(--leise); } .greifer-wert span:last-child { text-align:right; }
 /* Liste der Roboterumgebungen und Teile: ganze Zeile anklickbar */
 table.welten tr.zeile-welt, #teile tr[data-name] { cursor:pointer; }
 table.welten tr.zeile-welt:hover td, #teile tr[data-name]:hover td { background:#f7fafc; }
@@ -421,7 +425,7 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
   .rahmen { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
   nav { flex-direction:row; border-right:0; border-bottom:1px solid var(--linie); padding:6px; overflow-x:auto; }
   nav button, nav a.nav-link { width:auto; } nav .nav-titel { display:none; }
-  .seitenkopf, .spalte, main#liste { padding-left:16px; padding-right:16px; }
+  .seitenkopf, .spalte, main#liste, main.greifer-liste { padding-left:16px; padding-right:16px; } h2.gruppe { margin-left:16px; }
 }
 </style></head>
 <body><header>%%MARKE%% <span class="unter">Lehrerbereich</span>
@@ -433,7 +437,7 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
 <button data-tab="sim" class="an">%%ICON_SIM%%Simulationen</button>
 <button data-tab="welten">%%ICON_UMGEBUNG%%Roboterumgebungen</button>
 <button data-tab="teile">%%ICON_TEILE%%Teile</button>
-<a class="nav-link" href="/lehrer/baukasten?modus=backen">%%ICON_BACKEN%%Backensätze</a>
+<button data-tab="greifer">%%ICON_BACKEN%%Greifer</button>
 <div class="nav-titel">Verwaltung</div>
 <button data-tab="protokoll">%%ICON_PROTOKOLL%%Protokoll</button>
 <button data-tab="einst" class="nur-admin">%%ICON_EINST%%Einstellungen</button>
@@ -501,7 +505,7 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
   </div>
   <div class="fuss"><button class="haupt" id="wd-speichern">Speichern</button>
     <button id="wd-abbrechen">Schließen</button>
-    <a class="btn" id="wd-export" title="Mit allen Teilen und dem Backensatz als ZIP, z.B. für die Instanz in der Schule">Exportieren (ZIP)</a>
+    <a class="btn" id="wd-export" title="Mit allen Teilen und dem eigenen Greifer als ZIP, z.B. für die Instanz in der Schule">Exportieren (ZIP)</a>
     <button class="warnen" id="wd-loeschen" style="margin-left:auto">Löschen</button></div>
 </div></div>
 
@@ -527,7 +531,7 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
   <h2>Aktualisieren</h2>
   <div class="hilfe">Neue STEP-Datei für dasselbe Teil, z.B. nach einer Änderung in Onshape. Die Verbindungspunkte
     (Flächen, Bohrungen, Kanten, Ecken), an denen etwas hängt, werden im neuen Modell wiedergesucht; Roboterumgebungen
-    und Backensätze mit diesem Teil werden neu gerechnet. Das alte Teil kommt in den Papierkorb
+    und eigene Greifer mit diesem Teil werden neu gerechnet. Das alte Teil kommt in den Papierkorb
     (<code>teile/papierkorb</code> im Container).</div>
   <div class="knopfreihe"><label class="knopf-datei" id="ti-datei-knopf">Neue STEP-Datei einlesen<input type="file" id="ti-datei"
     accept=".step,.stp,.STEP,.STP"></label>
@@ -554,6 +558,22 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
     <div class="feld">
       <table><thead><tr><th></th><th>Name</th><th>Größe (mm)</th><th>Flächen</th><th>Bohrungen</th><th>Kanten</th><th>Ecken</th>
         <th>verwendet in</th><th></th></tr></thead><tbody id="teile"></tbody></table></div>
+  </div>
+</section>
+
+<section id="tab-greifer" hidden>
+  <div class="seitenkopf"><div><h1>Greifer</h1>
+      <div class="unterzeile">Schunk-Greifer aus iRC und eigene Greifer mit Backen aus der Teilebibliothek. Welcher Greifer am
+        Roboter sitzt, legt jede Roboterumgebung fest.</div></div>
+    <div class="aktionen"><a class="btn haupt" href="/lehrer/baukasten?modus=backen">+ Neuer Greifer</a></div></div>
+  <div id="greifer"></div>
+  <div class="spalte breit">
+    <div class="feld">
+      <div class="hilfe"><b>Werkzeug nach iRC bringen:</b> „Werkzeug für iRC“ lädt ein ZIP mit der Werkzeugdatei (TCP,
+        Greifer-Ausgänge DOut31/DOut32) und den 3D-Modellen. Am Schüler-PC entpacken, <code>installieren.cmd</code>
+        doppelklicken (kopiert nach <code>%APPDATA%\\RobotControl\\V15\\Data\\Tools</code>), iRC neu starten und das Werkzeug
+        wählen. Der TCP in iRC stimmt dann mit der Simulation überein. Die Schunk-Greifer ohne eigene Backen bringt iRC
+        schon mit.</div></div>
   </div>
 </section>
 
@@ -662,12 +682,59 @@ $('abmelden').onclick = async () => {
 };
 
 // --- Reiter ---
-const LADEN = {teile: () => teile(), welten: () => welten(), protokoll: () => protokoll(), einst: () => einstellungen(), benutzer: () => benutzer()};
+const LADEN = {teile: () => teile(), welten: () => welten(), greifer: () => greiferUebersicht(), protokoll: () => protokoll(),
+               einst: () => einstellungen(), benutzer: () => benutzer()};
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('an', x === b));
-  ['sim', 'welten', 'teile', 'protokoll', 'einst', 'benutzer'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
+  ['sim', 'welten', 'teile', 'greifer', 'protokoll', 'einst', 'benutzer'].forEach(t => $('tab-' + t).hidden = t !== b.dataset.tab);
   if (LADEN[b.dataset.tab]) LADEN[b.dataset.tab]();
 });
+
+// --- Greifer: Schunk aus iRC, eigene (Baukasten) und mitgelieferte; Werkzeugpaket, Bearbeiten, Loeschen ---
+let greiferDaten = [];
+const mm = v => v == null ? '–' : (Math.round(v * 10) / 10).toLocaleString('de-DE') + ' mm';
+function greiferKarte(g) {
+  const backe = g.teil ? ' „' + esc(g.teil) + '“' : '';
+  const art = {irc: 'Schunk-Greifer, in iRC enthalten', eigen: esc(g.basis) + ' mit eigener Backe' + backe,
+               mitgeliefert: esc(g.basis) + ' mit Backe' + backe + ' (mitgeliefert)'}[g.art];
+  const knoepfe = g.art === 'irc' ? ''
+    : (g.werkzeugpaket ? '<a class="btn haupt" href="/api/lehrer/werkzeugpaket?name=' + encodeURIComponent(g.name)
+       + '" title="ZIP mit Werkzeugdatei (TCP, Ausgänge), 3D-Modellen und installieren.cmd">Werkzeug für iRC</a>' : '')
+      + (g.art === 'eigen' ? '<a class="btn" href="/lehrer/baukasten?modus=backen&backen=' + encodeURIComponent(g.name) + '">Bearbeiten</a>'
+         + '<button class="warnen" data-greifer-loeschen="' + esc(g.name) + '"' + (g.verwendet_in.length
+           ? ' disabled title="Wird noch verwendet: erst in den Roboterumgebungen einen anderen Greifer wählen"' : '')
+         + '>Löschen</button>' : '');
+  // die Schunk-Dateien von igus heissen innen alle "EGP-25": dort zaehlt der Dateiname
+  const irc = g.art === 'irc' ? (g.irc_datei ? esc(g.irc_datei.replace(/[.]xml$/, '')) : '–')
+    : g.irc_name ? esc(g.irc_name) : 'noch kein Werkzeugpaket';
+  const zeile = (was, wert) => '<div class="greifer-wert"><span>' + was + '</span><span>' + wert + '</span></div>';
+  return '<div class="platz"><div class="kopf" style="font-size:1.08em">' + esc(g.titel) + '</div>'
+    + '<div class="leise">' + art + ' · <code>' + esc(g.greifer) + '</code>'
+    + (g.im_modell ? '' : ' · <span style="color:var(--pink)">fehlt im Robotermodell</span>') + '</div>'
+    + zeile('TCP ab Flansch', mm(g.tcp_mm))
+    + (g.offen_mm == null ? '' : zeile('Backen offen / zu', mm(g.offen_mm) + ' / ' + mm(g.zu_mm)))
+    + zeile('Werkzeug in iRC', irc)
+    + zeile('verwendet in', esc(g.verwendet_in.join(', ')) || '–')
+    + (knoepfe ? '<div class="knopfreihe">' + knoepfe + '</div>' : '') + '</div>';
+}
+async function greiferUebersicht() {
+  const liste = greiferDaten = await (await fetch('/api/lehrer/greifer_uebersicht', {cache: 'no-store'})).json();
+  const gruppe = (titel, l, leer) => '<h2 class="gruppe">' + titel + '</h2><main class="greifer-liste">'
+    + (l.map(greiferKarte).join('') || '<div class="hilfe">' + leer + '</div>') + '</main>';
+  $('greifer').innerHTML = gruppe('Eigene Greifer', liste.filter(g => g.art !== 'irc'),
+                                  'Noch keine. Mit „+ Neuer Greifer“ eine Backe aus der Teilebibliothek an den Schunk-Greifer setzen.')
+    + gruppe('Schunk-Greifer aus iRC', liste.filter(g => g.art === 'irc'), 'Kein Robotermodell erzeugt.');
+}
+$('greifer').onclick = async ev => {
+  const b = ev.target.closest('[data-greifer-loeschen]');
+  if (!b) return;
+  const name = b.dataset.greiferLoeschen, g = greiferDaten.find(g => g.name === name);
+  if (!confirm('Greifer „' + (g ? g.titel : name) + '“ löschen? Das Robotermodell wird ohne ihn neu erzeugt.')) return;
+  b.disabled = true; b.textContent = 'lösche ...';
+  try { await api('backensatz_loeschen', {name}); melden('Greifer ' + name + ' gelöscht.'); }
+  catch (e) { /* Meldung kommt aus api() */ }
+  greiferUebersicht();
+};
 
 // --- Simulationen ---
 function karte(p) {
@@ -827,7 +894,7 @@ async function importSenden(name, ersetzen) {
   const teile = d.teile_neu.length ? ', neue Teile: ' + d.teile_neu.join(', ') : '';
   const umbenannt = Object.entries(d.teile_umbenannt).map(([a, n]) => a + ' → ' + n).join(', ');
   melden('Importiert: „' + d.titel + '“ (' + d.welt + ')' + teile + (umbenannt ? ' (abweichend, daher umbenannt: ' + umbenannt + ')' : '')
-         + (d.backensatz_neu ? ', Backensatz ' + d.backensatz : '') + '. Für Schüler noch gesperrt.'
+         + (d.backensatz_neu ? ', Greifer ' + d.backensatz : '') + '. Für Schüler noch gesperrt.'
          + (d.hinweise.length ? ' Achtung: ' + d.hinweise.join(' ') : ''), d.hinweise.length > 0);
   await welten();
   $('w-suche').value = ''; weltenZeigen();
@@ -1909,8 +1976,8 @@ def teile_liste():
                       "anzahl": {k: len(t.get(k, [])) for k in ("flaechen", "bohrungen", "kanten", "ecken")},
                       "verwendet_in": [w for w, e in entwuerfe().items() if any(x.get("teil") == name for x in e["teile"])
                                        or (name == baukasten.BASISPLATTE and (e.get("tisch") or {}).get("art") == "profil")]
-                      + ["Backensatz " + b["name"] for b in backensaetze_liste() if b["teil"] == name]
-                      + (["Backensatz-Editor (Greifer)"] if name in baukasten.GREIFER_TEILE.values() else [])})
+                      + ["Greifer " + b["name"] for b in backensaetze_liste() if b["teil"] == name]
+                      + (["Greifer-Editor (Schunk-Modell)"] if name in baukasten.GREIFER_TEILE.values() else [])})
     return liste
 
 
@@ -2028,7 +2095,7 @@ def teil_ersetzen(name, inhalt, erzwingen, wer_name, quelle=None):
             e = (satz or {}).get("entwurf")
             if e and (b["teil"] == name or baukasten.teil_verweise(e, name)):
                 plan.append(("backensatz", b["name"], e) + baukasten.entwurf_umstellen(e, name, alt, neu))
-        offen = [{"wo": ("Roboterumgebung " if art == "welt" else "Backensatz ") + wo, "punkte": o}
+        offen = [{"wo": ("Roboterumgebung " if art == "welt" else "Greifer ") + wo, "punkte": o}
                  for art, wo, _e, _n, o, _v in plan if o]
         if offen and not erzwingen:
             raise TeilKonflikt("Im neuen Modell fehlen Verbindungspunkte, an denen andere Teile hängen.", offen)
@@ -2038,7 +2105,7 @@ def teil_ersetzen(name, inhalt, erzwingen, wer_name, quelle=None):
         shutil.rmtree(zwischen, ignore_errors=True)
     bericht = dict(ergebnis, papierkorb=papierkorb, neu_gerechnet=[], neu_verbinden=offen, verschoben=[], fehler=[])
     for art, wo, _e, e_neu, o, verschoben in plan:
-        titel = ("Roboterumgebung " if art == "welt" else "Backensatz ") + wo
+        titel = ("Roboterumgebung " if art == "welt" else "Greifer ") + wo
         bericht["verschoben"] += [{"wo": titel, "punkt": text, "mm": mm} for text, mm in verschoben]
         try:
             if o:   # nur die umgestellten Punkte speichern; neu gerechnet wird nach dem Verbinden im Baukasten
@@ -2072,8 +2139,8 @@ IRC_DATEN = os.environ.get("IRC_DATEN", "/var/lib/rebel-sim/irc")
 MODELL_SPERRE = threading.Lock()
 
 
-def backensaetze_liste():
-    """Alle Backensaetze: mitgelieferte (fest) und im Baukasten gebaute, mit Verwendung in Welten."""
+def greifer_in_welten():
+    """{greifer: [welt, ...]}: welche Roboterumgebung welchen Greifer verwendet."""
     welten = {}
     for w in verwalter.lese_welten(WELTEN_DIR):
         try:
@@ -2083,6 +2150,12 @@ def backensaetze_liste():
                 welten.setdefault(m.group(1), []).append(w["datei"][:-4])
         except OSError:
             pass
+    return welten
+
+
+def backensaetze_liste():
+    """Alle Backensaetze: mitgelieferte (fest) und im Baukasten gebaute, mit Verwendung in Welten."""
+    welten = greifer_in_welten()
     liste = []
     for ordner, fest in ((FESTE_BACKEN_DIR, True), (BACKEN_DIR, False)):
         try:
@@ -2123,6 +2196,55 @@ def greifer_liste():
     except OSError:
         m = None
     return re.findall(r'"([^"]+)"', m.group(1)) if m else ["egp40", "egp40_finger", "egp25", "egp25_finger", "vakuum", "kein"]
+
+
+# Werkzeugdateien, die iRC fuer die Schunk-Greifer mitbringt (wie WERKZEUGE in tools/erzeuge_rebel_modell.py)
+IRC_WERKZEUGE = {"egp40": "Schunk_EGP40_RebelMountingPlate.xml", "egp40_finger": "Schunk_EGP40_RebelMountingPlate_Finger.xml",
+                 "egp25": "Schunk_EGP25_RebelMountingPlate.xml", "egp25_finger": "Schunk_EGP25_RebelMountingPlate_Finger.xml"}
+
+
+def werkzeug_xml(pfad):
+    """(Name in iRC, TCP ab Flansch in mm) aus einer iRC-Werkzeugdatei, fehlende Angaben None."""
+    try:
+        with open(pfad, encoding="utf-8", errors="replace") as f:
+            text = f.read(20000)
+    except OSError:
+        return None, None
+    name = re.search(r'<INFO[^>]*\bNAME="([^"]*)"', text)
+    tcp = re.search(r'<OFFSET[^>]*\bOffsetZ="([-\d.]+)"', text)
+    return (name.group(1) if name else None), (float(tcp.group(1)) if tcp else None)
+
+
+def greifer_uebersicht():
+    """Alle Greifer fuer den Reiter "Greifer": Schunk-Greifer aus iRC und Backensaetze (eigene und mitgelieferte),
+    mit TCP, Backenweite, Werkzeug in iRC und Verwendung in den Roboterumgebungen."""
+    welten = greifer_in_welten()
+    saetze = {b["greifer"]: b for b in backensaetze_liste()}
+    modell = greifer_liste()
+    liste = []
+    for g in modell + [g for g in saetze if g not in modell]:
+        if g == "kein":
+            continue
+        b = saetze.get(g)
+        e = {"greifer": g, "verwendet_in": welten.get(g, []), "im_modell": g in modell}
+        if b is None:
+            datei = IRC_WERKZEUGE.get(g)
+            irc_name, tcp = werkzeug_xml(os.path.join(IRC_DATEN, "Data", "Tools", datei)) if datei else (None, None)
+            e.update(art="irc", titel=GREIFER_TEXTE.get(g, g), irc_datei=datei, irc_name=irc_name, tcp_mm=tcp)
+        else:
+            k = b["kenndaten"] or {}
+            ordner = os.path.join(WERKZEUG_DIR, g)
+            xml = next((os.path.join(ordner, d) for d in sorted(os.listdir(ordner)) if d.endswith(".xml")), None) \
+                if os.path.isdir(ordner) else None
+            irc_name, tcp = werkzeug_xml(xml) if xml else (None, None)
+            offen, hub = k.get("offen_mm"), k.get("hub_mm")
+            e.update(art="mitgeliefert" if b["fest"] else "eigen", name=b["name"], titel=b["titel"], teil=b["teil"],
+                     basis=GREIFER_TEXTE.get(b["basis"], b["basis"]), irc_datei=os.path.basename(xml) if xml else None,
+                     irc_name=irc_name, tcp_mm=k.get("tcp_mm", tcp), offen_mm=offen,
+                     zu_mm=round(offen - 2 * hub, 1) if offen is not None and hub is not None else None,
+                     werkzeugpaket=b["werkzeugpaket"])
+        liste.append(e)
+    return liste
 
 
 GREIFER_TEXTE = {"egp40": "Schunk EGP 40", "egp40_finger": "Schunk EGP 40 mit iRC-Fingern", "egp25": "Schunk EGP 25",
@@ -2203,7 +2325,7 @@ def backensatz_speichern(name, entwurf, wer_name):
     if not isinstance(entwurf, dict):
         raise baukasten.BaukastenFehler("Kein Entwurf.")
     if any(b["fest"] and b["name"] == name for b in backensaetze_liste()):
-        raise baukasten.BaukastenFehler("Den Namen %s hat schon ein mitgelieferter Backensatz." % name)
+        raise baukasten.BaukastenFehler("Den Namen %s hat schon ein mitgelieferter Greifer." % name)
     entwurf = dict(entwurf, art="backensatz")
     lade = baukasten.teile_lader(TEILE_DIR)
     lagen = baukasten.loese(entwurf, lade)
@@ -2215,7 +2337,7 @@ def backensatz_speichern(name, entwurf, wer_name):
         b = next((b for b in backensaetze_liste() if b["greifer"] == alt_schluessel and not b["fest"]), None)
         if b and b["verwendet_in"]:
             raise baukasten.BaukastenFehler("Der Greifer %s steckt noch in: %s. Dort erst einen anderen Greifer wählen "
-                                            "oder den Backensatz unter neuem Namen speichern." % (alt_schluessel, ", ".join(b["verwendet_in"])))
+                                            "oder den Greifer unter neuem Namen speichern." % (alt_schluessel, ", ".join(b["verwendet_in"])))
     satz.update(entwurf=entwurf, besitzer=alt.get("besitzer") or "lehrer:%s" % wer_name)
     os.makedirs(os.path.join(BACKEN_DIR, name), exist_ok=True)
     datei = os.path.join(BACKEN_DIR, name, "backensatz.json")
@@ -2236,7 +2358,7 @@ def backensatz_speichern(name, entwurf, wer_name):
 def backensatz_loeschen(name):
     b = next((b for b in backensaetze_liste() if b["name"] == name and not b["fest"]), None)
     if b is None:
-        raise baukasten.BaukastenFehler("Den Backensatz %s gibt es nicht (mitgelieferte lassen sich nicht loeschen)." % name)
+        raise baukasten.BaukastenFehler("Den Greifer %s gibt es nicht (mitgelieferte lassen sich nicht löschen)." % name)
     if b["verwendet_in"]:
         raise baukasten.BaukastenFehler("Der Greifer %s steckt noch in: %s" % (b["greifer"], ", ".join(b["verwendet_in"])))
     import shutil
@@ -2515,11 +2637,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200 if e else 404, e or {"fehler": "Kein Baukasten-Entwurf %s." % welt})
             elif pfad == "/api/lehrer/entwuerfe":
                 self._json(200, sorted(entwuerfe()))
+            elif pfad == "/api/lehrer/greifer_uebersicht":
+                self._json(200, greifer_uebersicht())
             elif pfad == "/api/lehrer/backensaetze":
                 self._json(200, backensaetze_liste())
             elif pfad == "/api/lehrer/backensatz":
                 b = backensatz_lesen(urllib.parse.parse_qs(abfrage).get("name", [""])[0])
-                self._json(200 if b else 404, b or {"fehler": "Backensatz nicht gefunden."})
+                self._json(200 if b else 404, b or {"fehler": "Greifer nicht gefunden."})
             elif pfad == "/api/lehrer/greifer":
                 self._json(200, greifer_liste())
             elif pfad == "/api/lehrer/welt_export":
@@ -2533,7 +2657,7 @@ class Handler(BaseHTTPRequestHandler):
             elif pfad == "/api/lehrer/werkzeugpaket":
                 paket = werkzeugpaket_zip(urllib.parse.parse_qs(abfrage).get("name", [""])[0])
                 if paket is None:
-                    self._json(404, {"fehler": "Kein Werkzeugpaket (erst den Backensatz speichern)."})
+                    self._json(404, {"fehler": "Kein Werkzeugpaket (erst den Greifer speichern)."})
                 else:
                     self._antwort(200, paket[1], "application/zip",
                                   kopf=[("Content-Disposition", 'attachment; filename="%s"' % paket[0])])
@@ -2767,11 +2891,11 @@ class Handler(BaseHTTPRequestHandler):
         elif aktion == "backensatz_speichern":
             name = str(daten.get("name", ""))
             zusatz = self._baukasten(backensatz_speichern, name, daten.get("entwurf"), ich["name"])
-            protokoll = "Backensatz %s gespeichert, Greifer %s" % (name, zusatz["greifer"])
+            protokoll = "Eigener Greifer %s gespeichert (%s)" % (name, zusatz["greifer"])
         elif aktion == "backensatz_loeschen":
             name = str(daten.get("name", ""))
             self._baukasten(backensatz_loeschen, name)
-            protokoll = "Backensatz %s geloescht" % name
+            protokoll = "Eigener Greifer %s geloescht" % name
         else:
             raise lehrer.LehrerFehler("Unbekannte Aktion.")
         if protokoll:
@@ -2829,7 +2953,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 lehrer.protokolliere(ZUSTAND_DIR, ich["name"], "Welt %s importiert (Teile neu: %s%s)" % (
                     bericht["welt"], ", ".join(bericht["teile_neu"]) or "keine",
-                    ", Backensatz %s" % bericht["backensatz"] if bericht["backensatz_neu"] else ""))
+                    ", Greifer %s" % bericht["backensatz"] if bericht["backensatz_neu"] else ""))
                 self._json(200, dict(bericht, ok=True))
                 return
             if art == "teil_vorschau":

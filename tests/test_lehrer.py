@@ -242,7 +242,11 @@ class TestLehrerSeiten(Grundlage):
         self.assertEqual(self.anmelden(), (200, {"ok": True, "muss_aendern": False}))
         self.assertIn("HttpOnly", self.cookie_kopf)
         self.assertIn("SameSite=Strict", self.cookie_kopf)
-        self.assertIn('data-tab="benutzer"', self.anfrage("GET", "/lehrer")[1])
+        seite = self.anfrage("GET", "/lehrer")[1]
+        self.assertIn('data-tab="benutzer"', seite)
+        self.assertIn('data-tab="greifer"', seite)
+        self.assertIn('id="tab-greifer"', seite)
+        self.assertIn("%APPDATA%\\RobotControl\\V15\\Data\\Tools", seite)
         self.assertEqual(self.anfrage("GET", "/status.json"), (200, []))
         self.assertEqual(self.anfrage("POST", "/lehrer/abmelden", {})[0], 200)
         self.assertIn("Benutzername", self.anfrage("GET", "/lehrer")[1])
@@ -385,9 +389,19 @@ class TestLehrerSeiten(Grundlage):
             self.assertEqual((status, d["greifer"], d["kenndaten"]["tcp_mm"]), (200, "egp25_robi3", 130.7), d)
             liste = self.anfrage("GET", "/api/lehrer/backensaetze")[1]
             self.assertEqual([(b["name"], b["fest"], b["werkzeugpaket"]) for b in liste], [("robi3", False, True)])
+            # Reiter "Greifer": Schunk-Greifer aus iRC und der eigene mit Kenndaten und Werkzeug
+            with open(os.path.join(uebersicht.WERKZEUG_DIR, "egp25_robi3", "Schunk_EGP25_X.xml"), "w") as f:
+                f.write('<Tool><INFO NAME="EGP-25 Robi3" /><OFFSET OffsetX="0" OffsetZ="130.7" /></Tool>')
+            g = {e["greifer"]: e for e in self.anfrage("GET", "/api/lehrer/greifer_uebersicht")[1]}
+            self.assertEqual((g["egp25_robi3"]["art"], g["egp25_robi3"]["name"], g["egp25_robi3"]["irc_name"],
+                              g["egp25_robi3"]["tcp_mm"], g["egp25_robi3"]["offen_mm"], g["egp25_robi3"]["zu_mm"]),
+                             ("eigen", "robi3", "EGP-25 Robi3", 130.7, 11.0, 0.2))
+            self.assertEqual((g["egp40"]["art"], g["egp40"]["irc_datei"]), ("irc", "Schunk_EGP40_RebelMountingPlate.xml"))
+            self.assertNotIn("kein", g)
+            self.assertEqual(uebersicht.werkzeug_xml(os.path.join(self.tmp.name, "gibtsnicht.xml")), (None, None))
             gelesen = self.anfrage("GET", "/api/lehrer/backensatz?name=robi3")[1]
             self.assertEqual((gelesen["besitzer"], gelesen["entwurf"]["art"], gelesen["teil"]), ("lehrer:mueller", "backensatz", "vorrichtung"))
-            self.assertIn("Backensatz robi3", next(t for t in self.anfrage("GET", "/api/lehrer/teile")[1]
+            self.assertIn("Greifer robi3", next(t for t in self.anfrage("GET", "/api/lehrer/teile")[1]
                                                     if t["name"] == "vorrichtung")["verwendet_in"])
             c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
             c.request("GET", "/api/lehrer/werkzeugpaket?name=robi3", headers={"Cookie": self.cookie})

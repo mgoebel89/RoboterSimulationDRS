@@ -550,7 +550,7 @@ def backensatz_aus_entwurf(name, entwurf, lagen, merkmale_von):
     """backensatz.json fuer tools/erzeuge_rebel_modell.py: die LINKE Backe (x < 0) im Werkzeugsystem.
     Haengt sie am rechten Traeger, wird sie um die Werkzeugachse gedreht (die rechte ist dieselbe Backe)."""
     if not BACKENSATZ_NAME.fullmatch(name or ""):
-        raise BaukastenFehler("Name des Backensatzes: Buchstabe zuerst, dann a-z, 0-9 und _, hoechstens 20 Zeichen.")
+        raise BaukastenFehler("Name des Greifers: Buchstabe zuerst, dann a-z, 0-9 und _, hoechstens 20 Zeichen.")
     basis = greifer_basis(entwurf)
     tcp = tcp_werte(entwurf)
     hub = entwurf.get("hub_mm")
@@ -563,7 +563,7 @@ def backensatz_aus_entwurf(name, entwurf, lagen, merkmale_von):
             raise BaukastenFehler("Hub je Backe: 0 bis 30 mm.")
     backen = [t for t in entwurf.get("teile", []) if t.get("art", "aufbau") == "aufbau"]
     if len(backen) != 1 or len(entwurf["teile"]) != 1:
-        raise BaukastenFehler("Ein Backensatz besteht aus genau einer Backe (die zweite ist dieselbe, gedreht).")
+        raise BaukastenFehler("Ein eigener Greifer hat genau eine Backe (die zweite ist dieselbe, gedreht).")
     backe = backen[0]
     if (backe.get("verbindung") or {}).get("an") != "greifer":
         raise BaukastenFehler("Die Backe muss mit dem Greifer verbunden sein.")

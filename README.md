@@ -13,7 +13,7 @@ Simulation **im Browser**, der Roboter fährt 1:1 mit iRC mit.
   „seine“ Simulation (bis zu 10 gleichzeitig). Automatisches Ende nach 15 Minuten ohne iRC.
 - **Mithören statt Steuern:** Webots liest Gelenke und Ausgänge über die CRI-Schnittstelle mit,
   iRC behält die Kontrolle. Abweichung zur iRC-Kinematik unter 0,1 mm.
-- **Greifer Schunk EGP 40** (Standard) oder EGP 25 (DOut31 öffnen, DOut32 schließen) und eigene Backensätze mit
+- **Greifer Schunk EGP 40** (Standard) oder EGP 25 (DOut31 öffnen, DOut32 schließen) und eigene Greifer (eigene Backen) mit
   einstellbarem TCP und Werkzeugpaket für iRC; gegriffen wird an der
   echten Form der CAD-Werkstücke. Einteach-Hilfe zeigt den Weg zur Greifstellung in iRC-Koordinaten.
 - **Taster, Leuchtmelder, Belegt- und Farbsensoren**, die echte Eingänge in iRC setzen
@@ -21,7 +21,7 @@ Simulation **im Browser**, der Roboter fährt 1:1 mit iRC mit.
 - **Startseite auf Port 80** für alle: Schüler starten dort ihre Welt, Lehrkräfte melden sich dort an.
 - **Lehrerbereich** mit Konten: Simulationen steuern, Welten freigeben, löschen und Greifer wählen,
   Teile aus STEP-Dateien einlesen, Logo wählen. Gestaltung nach dem Corporate Design der DRS.
-- **Welten exportieren/importieren** als ZIP-Paket mit allen Teilen und Backensätzen, z.B. zuhause bauen und in
+- **Welten exportieren/importieren** als ZIP-Paket mit allen Teilen und eigenen Greifern, z.B. zuhause bauen und in
   der Schule einspielen. Aufgabentexte in Markdown, für Schüler als Seitenleiste neben der 3D-Ansicht.
 - **Weltbaukasten im Browser:** Teile über Verbindungspunkte platzieren (wie Mate Connectors in Onshape),
   ebener Tisch oder Profiltisch 800 × 800 mm (Bosch Rexroth, Nut 10) mit Basisplatte im Nutraster.

@@ -117,7 +117,7 @@ Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Mode
 1. **iRC V15** installieren, ReBeL-Projekt laden. Die iRC-Oberfläche startet ihre Steuerung selbst auf Port 3921,
    eine CRI-Einstellung ist nicht nötig.
 2. **Werkzeug** in iRC wählen: `Schunk_EGP40_RebelMountingPlate` (Standardgreifer EGP 40) bzw. das Werkzeug
-   der Welt. Für eigene Backen das **Werkzeugpaket** aus dem Lehrerbereich (Backensätze) laden, entpacken und
+   der Welt. Für eigene Greifer im Lehrerbereich unter **Greifer** auf **Werkzeug für iRC** klicken, das ZIP entpacken und
    `installieren.cmd` doppelklicken: Es kopiert XML und Modelle nach `%APPDATA%\RobotControl\V15\Data\Tools`.
    iRC neu starten, Werkzeug wählen. Dann meldet iRC denselben TCP wie die Simulation und der Abgleich zeigt „TCP“.
 3. **App „WebotsSim“** (nur für Welten mit Tastern oder Sensoren): In iRC unter **Apps** die Datei
@@ -181,11 +181,11 @@ Links steht die Seitenleiste mit allen Bereichen, oben auf jeder Seite die passe
   den Text so, wie ihn die Schüler sehen. Alte Texte ohne Markdown bleiben unverändert lesbar.
 - **Exportieren und importieren** (z.B. zuhause bauen, in der Schule einspielen): Im Dialog einer Roboterumgebung
   **Exportieren (ZIP)** lädt ein Paket mit Vorschaubild, Arbeitsblatt, allen verwendeten Teilen der
-  Teilebibliothek (mit STEP) und einem eigenen Backensatz. In der anderen Instanz unter Roboterumgebungen **Importieren**.
+  Teilebibliothek (mit STEP) und einem eigenen Greifer. In der anderen Instanz unter Roboterumgebungen **Importieren**.
   - Gleichnamige und gleiche Teile werden weiterverwendet; unterscheiden sie sich, kommt das neue als `name-2` dazu.
   - Gibt es sie schon: unter neuem Namen importieren oder die vorhandene ersetzen (sie kommt in den Papierkorb).
-  - Bringt das Paket einen neuen Backensatz mit, wird das Robotermodell neu erzeugt; das Werkzeugpaket für iRC gibt
-    es danach unter Backensätze.
+  - Bringt das Paket einen neuen eigenen Greifer mit, wird das Robotermodell neu erzeugt; das Werkzeugpaket für iRC gibt
+    es danach unter Greifer.
   - Importierte Roboterumgebungen sind zuerst für Schüler gesperrt.
 
 ![Roboterumgebungen im Lehrerbereich](bilder/lehrer_welten.jpg)
@@ -197,11 +197,11 @@ Links steht die Seitenleiste mit allen Bereichen, oben auf jeder Seite die passe
   **Bearbeiten** öffnet ein Teil:
   - **Neue STEP-Datei einlesen** aktualisiert es, z.B. nach einer Änderung in Onshape. Die Verbindungspunkte, an denen
     etwas hängt, sucht der Container im neuen Modell wieder (gleiche Ebene, Achse, Kante oder Ecke); Roboterumgebungen und
-    Backensätze mit dem Teil werden neu gerechnet. Fehlt ein Punkt im neuen Modell, ändert sich erst einmal nichts und
+    eigene Greifer mit dem Teil werden neu gerechnet. Fehlt ein Punkt im neuen Modell, ändert sich erst einmal nichts und
     der Dialog nennt die betroffenen Verbindungen. **Trotzdem ersetzen** übernimmt das neue Modell, die genannten Teile
     stehen dann im Baukasten als „offen“ und müssen neu verbunden werden. Laufende Simulationen zeigen das neue Teil nach
     „Neu starten“.
-  - **Teil löschen** geht nur, solange das Teil in keiner Roboterumgebung und keinem Backensatz steckt.
+  - **Teil löschen** geht nur, solange das Teil in keiner Roboterumgebung und keinem eigenen Greifer steckt.
 
   Gelöschte und ersetzte Teile landen in `teile/papierkorb/<name>-<zeit>/` (zum Zurückholen den Ordner wieder nach
   `teile/<name>` verschieben). Mitgelieferte Teile legt das nächste Update wieder an, wenn sie fehlen.
@@ -283,8 +283,14 @@ den Roboter in iRC von Hand frei fahren: Berührungen mit dem Teil des Crashs z�
 ist, danach wird wieder normal geprüft. Wird der Roboter von Hand verfahren (kein Programm aktiv), gibt es nur die
 Meldung, ohne Anhalten.
 
-**Backensätze** (Lehrerbereich → Backensätze): eigene Greiferbacken aus der Teilebibliothek an den Schunk-Greifer setzen.
-1. **Greifer** wählen: Schunk EGP 40 (Standard) oder EGP 25. Der Greifer steht geschlossen im Werkzeugsystem von iRC.
+**Greifer** (Lehrerbereich → Greifer): alle Greifer als Karten, oben die eigenen, darunter die Schunk-Greifer, die iRC
+mitbringt. Jede Karte zeigt TCP ab Flansch, Backen offen/zu, den Werkzeugnamen in iRC und die Roboterumgebungen, die
+den Greifer verwenden. Knöpfe: **Werkzeug für iRC** (ZIP mit Werkzeugdatei samt TCP und Greifer-Ausgängen, 3D-Modellen
+und `installieren.cmd`), **Bearbeiten** (öffnet den Greifer-Editor) und **Löschen** (nur, solange keine
+Roboterumgebung ihn verwendet).
+
+**Eigenen Greifer bauen** (+ Neuer Greifer): eine Backe aus der Teilebibliothek an den Schunk-Greifer setzen.
+1. **Schunk-Greifer** wählen: Schunk EGP 40 (Standard) oder EGP 25. Der Greifer steht geschlossen im Werkzeugsystem von iRC.
 2. Backe hinzufügen, Punkt an der Backe und Gegenstück am Backenträger anklicken (EGP 40: zwei M3-Gewinde in
    Greifrichtung). Eine Backe genügt, die zweite ist dieselbe, um die Werkzeugachse gedreht.
 3. **TCP** einstellen: Backenspitze oder Mitte der Backe, jeweils mit Versatz entlang der Werkzeugachse, oder ein

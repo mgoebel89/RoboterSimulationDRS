@@ -249,9 +249,9 @@ def importieren(inhalt, welten_dir, teile_dir, backen_dir, neuer_name=None, erse
         try:
             satz = json.loads(dateien[pfade[0]].decode("utf-8"))
         except ValueError:
-            raise PaketFehler("Der Backensatz im Paket ist kaputt.")
+            raise PaketFehler("Der Greifer im Paket ist kaputt.")
         if satz.get("name") != alt_satz or not SATZ_NAME.fullmatch(alt_satz):
-            raise PaketFehler("Der Backensatz im Paket ist kaputt.")
+            raise PaketFehler("Der Greifer im Paket ist kaputt.")
         if satz.get("teil") in umbenannt:
             satz["teil"] = umbenannt[satz["teil"]]
         for t in (satz.get("entwurf") or {}).get("teile", []):
