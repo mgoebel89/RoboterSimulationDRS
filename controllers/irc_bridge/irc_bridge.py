@@ -26,6 +26,7 @@ import time
 from controller import Supervisor
 
 from cri_client import CriClient
+import crash
 import ea
 import kollision
 
@@ -767,8 +768,9 @@ class KollisionsWaechter:
             node = me.getFromProtoDef("FINGER_%s" % seite.upper())
             if node is not None:
                 self.finger[seite] = node
-        log("Kollisionen: an, Sicherheitsabstand %.1f mm, Ablagetoleranz %.1f mm, Reaktion %s (Stufe K1: nur Meldung)"
-            % (einst["abstand_mm"], einst["ablage_mm"], einst["reaktion"]))
+        log("Kollisionen: an, Sicherheitsabstand %.1f mm, Ablagetoleranz %.1f mm, Reaktion %s"
+            % (einst["abstand_mm"], einst["ablage_mm"],
+               "Programm anhalten" if einst["reaktion"] == "stopp" else "nur melden"))
 
     @property
     def an(self):
@@ -946,6 +948,14 @@ def main():
     greifer.beim_loslassen = waechter.losgelassen
     kollision_zeit = 0.0
     kollision_letzt = None   # letzte Meldung (bleibt 3 s stehen)
+    # Crash-Stopp (Stufe K2): laufendes iRC-Programm anhalten, bis der Schueler quittiert
+    crash_zustand = crash.CrashZustand(waechter.einst["reaktion"] if waechter.an else "melden", log=print)
+    stopper = None
+    if crash_zustand.stoppen and not os.environ.get("VORSCHAU_BILD"):
+        stopper = crash.ProgrammStopp(cfg["host"], cfg["app_port"], cfg["app_name"], log=print).start()
+
+    def in_mm(p):   # Weltpunkt -> Basis-Koordinaten wie in iRC (mm)
+        return [v * 1000.0 for v in m_vec(m_t(me.getOrientation()), sub(p, me.getPosition()))]
 
     teile = werkstuecke(robot)
     startlagen = {}
@@ -1005,6 +1015,13 @@ def main():
                 teile_zuruecksetzen(teile, startlagen, greifer)
             elif len(worte) == 3 and worte[0] == "taster" and worte[1].isdigit():
                 taster.ereignis(int(worte[1]), worte[2] == "1", jetzt)
+            elif befehl == "kollision_quittieren":
+                if crash_zustand.quittieren(waechter.treffer) and stopper is not None:
+                    stopper.sperren(False)
+        if stopper is not None:
+            for art, programm, text in stopper.ergebnisse():
+                crash_zustand.ergebnis(art, jetzt, programm, text)
+                stopper.sperren(crash_zustand.gesperrt)
         if sensorfelder.liste and jetzt - sensor_zeit >= 0.1:   # 10x pro Sekunde reicht fuer "belegt"
             sensor_zeit = jetzt
             sensorfelder.pruefen(teile)
@@ -1078,10 +1095,14 @@ def main():
         if waechter.an and not vorschau and jetzt - kollision_zeit >= kollision_takt and not erster_schritt:
             kollision_zeit = jetzt
             treffer = waechter.pruefen(teile, aufbauten(robot), tischhoehe())
+            if crash_zustand.kollision(treffer, jetzt) and stopper is not None:
+                stopper.anhalten()
+            elif crash_zustand.zustand == "pruefe" and stopper is None:
+                crash_zustand.ergebnis("fehler", jetzt, text="keine Verbindung zu iRC vorgesehen")
             if treffer:
                 neu = (treffer[0]["a"], treffer[0]["b"])
                 if kollision_letzt is None or (kollision_letzt["a"], kollision_letzt["b"]) != neu:
-                    p_mm = [v * 1000.0 for v in m_vec(m_t(me.getOrientation()), sub(treffer[0]["punkt"], me.getPosition()))]
+                    p_mm = in_mm(treffer[0]["punkt"])
                     print("KOLLISION: %s mit %s bei x=%.0f y=%.0f z=%.0f mm" % (neu[0], neu[1], p_mm[0], p_mm[1], p_mm[2]))
                 kollision_letzt = dict(treffer[0], zeit=jetzt)
             elif kollision_letzt is not None and jetzt - kollision_letzt["zeit"] > 3.0:
@@ -1090,7 +1111,8 @@ def main():
             hilfe_zeit = jetzt
             hilfe = greifer.einteach_hilfe(teile, me.getOrientation())
 
-        if jetzt - letzter_statusbericht >= status_takt:
+        # bei Kollision/Crash oefter, damit Meldung und Knopf in der Schueleransicht gleich erscheinen
+        if jetzt - letzter_statusbericht >= (0.25 if kollision_letzt or crash_zustand.zustand != "frei" else status_takt):
             letzter_statusbericht = jetzt
             schreibe_status(statusdatei, {
                 "platz": cfg["platz"],
@@ -1111,9 +1133,9 @@ def main():
                 "kollision": None if kollision_letzt is None else {
                     "a": kollision_letzt["a"], "b": kollision_letzt["b"],
                     "punkt": [round(v, 4) for v in kollision_letzt["punkt"]],
-                    "punkt_mm": [round(v * 1000.0, 1) for v in m_vec(m_t(me.getOrientation()),
-                                                                     sub(kollision_letzt["punkt"], me.getPosition()))],
+                    "punkt_mm": [round(v, 1) for v in in_mm(kollision_letzt["punkt"])],
                     "aktiv": bool(waechter.treffer)},
+                "crash": crash_zustand.status(in_mm),
                 "kollision_ms": round(waechter.dauer_ms, 2) if waechter.an else None,
                 "taster": list(taster.gedrueckt),
                 "sensoren": list(sensorfelder.belegt),
@@ -1148,6 +1170,8 @@ def main():
                            0x1E8C4A if hilfe and hilfe["greifbar"] else 0xB34700, 0.0, "Arial")
 
     cri.stop()
+    if stopper is not None:
+        stopper.beenden()
     if app is not None:
         app.stopp()   # Taster loslassen, damit in iRC keine Eingaenge haengen bleiben
 

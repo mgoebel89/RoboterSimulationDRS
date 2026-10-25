@@ -8,7 +8,7 @@ Schueler (erkannt an der IP ihres PCs, siehe verwalter.py):
                   Neu starten, Welt wechseln und Beenden
   /?wechseln=1    Weltenliste, um die Welt der laufenden Simulation zu wechseln
   /api/ich        eigener Zustand (JSON); POST /api/starten, /api/teile_zuruecksetzen,
-                  /api/zuruecksetzen (Neustart), /api/beenden
+                  /api/kollision_quittieren, /api/zuruecksetzen (Neustart), /api/beenden
   /welten/x.png   Vorschaubild bzw. Arbeitsblatt (x.pdf) einer Welt
 
 Lehrkraft (lehrer_ips in verwalter.json, im Container selbst immer):
@@ -1126,6 +1126,14 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
   color:#fff; padding:9px 18px; border-radius:999px; font-weight:700; box-shadow:0 6px 18px rgba(212,0,94,.35);
   max-width:calc(100%% - 24px); text-align:center; pointer-events:none; }
 #kollision.vorbei { background:rgba(212,0,94,.75); }
+#kollision small { display:block; font-weight:400; font-size:.85em; margin-top:2px; }
+/* Crash (Stufe K2): Programm in iRC angehalten, bleibt bis zum Quittieren stehen */
+#kollision.crash { border-radius:var(--ecke); padding:12px 20px; font-size:1.05em; background:#a3003f;
+  box-shadow:0 8px 26px rgba(163,0,63,.45); }
+#kollision.freifahren { background:var(--gelb); color:var(--schwarz); box-shadow:0 6px 18px rgba(248,180,66,.4); }
+#kollision button { pointer-events:auto; margin-top:9px; border:2px solid #fff; background:#fff; color:#a3003f;
+  font:inherit; font-weight:700; padding:6px 16px; border-radius:999px; cursor:pointer; }
+#kollision button:hover { background:#ffe3ee; }
 #kollisionspunkt { position:absolute; left:0; top:0; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%%;
   border:3px solid #fff; background:var(--pink); box-shadow:0 0 0 4px rgba(212,0,94,.35); z-index:6; pointer-events:none;
   animation:pochen 1s ease-in-out infinite; }
@@ -1162,7 +1170,9 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 <button data-ansicht="seite">Seite</button><button data-ansicht="oben">Oben</button>
 <button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button>
 <span class="trenner"></span><button data-schilder title="Namen der Teile im 3D-Bild ein- oder ausblenden">Namen</button></div>
-<div id="schilder"></div><div id="kollision" hidden></div><div id="kollisionspunkt" hidden></div>%(ea)s</div>%(aufgabe)s</div>
+<div id="schilder"></div><div id="kollision" hidden><span id="kollision-text"></span><small id="kollision-zusatz" hidden></small>
+<button id="kollision-quittieren" hidden title="Erst danach darf das Programm wieder laufen. Den Roboter dann von Hand frei fahren.">Kollision quittieren</button></div>
+<div id="kollisionspunkt" hidden></div>%(ea)s</div>%(aufgabe)s</div>
 <script type="module">
 import "%(webots_js)s";
 import MeshLoader from "%(wwi)s/MeshLoader.js";
@@ -1297,16 +1307,42 @@ function kollisionZeichnen(r, e, m, k, tanX, tanY) {
   kollisionMarke.style.transform = 'translate(' + (r.left - e.left + r.width / 2 * (1 - links / (vor * tanX))).toFixed(1) + 'px,'
     + (r.top - e.top + r.height / 2 * (1 - oben / (vor * tanY))).toFixed(1) + 'px)';
 }
+// Kollisionen sieht nur der Schueler (die Ansicht der Lehrkraft zeigt nichts davon)
+const KOLLISION_ZEIGEN = %(kollision_zeigen)s;
+const kollisionFeld = document.getElementById('kollision'), kollisionText = document.getElementById('kollision-text');
+const kollisionZusatz = document.getElementById('kollision-zusatz'), quittierKnopf = document.getElementById('kollision-quittieren');
+function ortText(k) {
+  const mm = k.punkt_mm || [0, 0, 0];
+  return k.a + ' mit ' + k.b + ' · X ' + Math.round(mm[0]) + ' Y ' + Math.round(mm[1]) + ' Z ' + Math.round(mm[2]) + ' mm';
+}
 async function kollisionHolen() {   // Stand aus der Statusdatei des Platzes
   const d = await fetch('/api/platz/%(platz)s', {cache: 'no-store'}).then(r => r.json()).catch(() => null);
-  const kz = d && d.kollision, el = document.getElementById('kollision');
-  if (!kz) { el.hidden = true; kollisionPunkt = null; return; }
-  const mm = kz.punkt_mm || [0, 0, 0];
-  el.textContent = 'Kollision: ' + kz.a + ' mit ' + kz.b + ' · X ' + Math.round(mm[0]) + ' Y ' + Math.round(mm[1]) + ' Z ' + Math.round(mm[2]) + ' mm';
-  el.classList.toggle('vorbei', !kz.aktiv); el.hidden = false;
-  kollisionPunkt = kz.punkt;
+  const kz = d && d.kollision, cr = d && d.crash, zustand = cr ? cr.zustand : 'frei';
+  let text = null, zusatz = cr && cr.meldung, art = '';
+  if (zustand === 'crash') {
+    text = 'Crash: ' + ortText(cr); art = 'crash';
+    zusatz = (cr.programm ? 'Programm „' + cr.programm + '“ angehalten. ' : 'Programm angehalten. ') + (cr.meldung || '');
+  } else if (zustand === 'freifahren') {
+    text = 'Quittiert: Roboter jetzt von Hand frei fahren'; art = 'freifahren';
+    zusatz = 'Berührung mit ' + cr.b + ' zählt nicht, bis der Roboter frei ist.' + (kz && kz.aktiv ? ' Noch: ' + ortText(kz) : '');
+  } else if (kz) {
+    text = 'Kollision: ' + ortText(kz); art = kz.aktiv ? '' : 'vorbei';
+    if (zustand === 'pruefe') zusatz = 'Programm wird angehalten ...';
+  }
+  if (!text) { kollisionFeld.hidden = true; kollisionPunkt = null; return; }
+  kollisionText.textContent = text;
+  kollisionZusatz.textContent = zusatz || ''; kollisionZusatz.hidden = !zusatz;
+  kollisionFeld.className = art; quittierKnopf.hidden = zustand !== 'crash'; kollisionFeld.hidden = false;
+  kollisionPunkt = zustand === 'crash' || zustand === 'pruefe' ? cr.punkt : kz ? kz.punkt : null;
 }
-setInterval(kollisionHolen, 400);
+quittierKnopf.onclick = async () => {
+  quittierKnopf.disabled = true;
+  const r = await fetch('/api/kollision_quittieren', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+    .catch(() => null);
+  if (!r || !r.ok) alert(((r && await r.json().catch(() => ({}))) || {}).fehler || 'Das hat nicht geklappt.');
+  quittierKnopf.disabled = false; kollisionHolen();
+};
+if (KOLLISION_ZEIGEN) setInterval(kollisionHolen, 400);
 function schilderZeichnen() {
   requestAnimationFrame(schilderZeichnen);
   const welt = WbWorld.instance, vp = welt && welt.viewpoint, bild = view.querySelector('canvas');
@@ -1739,6 +1775,7 @@ def seite_viewer(platz, welt=None):
                      "ansichten": json.dumps(kamera_ansichten(platz["welt"])),
                      "beschriftungen": json.dumps(welt_beschriftungen(platz["welt"]), ensure_ascii=False).replace("</", "<\\/"),
                      "knoepfe": knoepfe, "aufgabe": aufgabe, "schueler_js": schueler_js,
+                     "kollision_zeigen": "true" if welt is not None else "false",
                      "irc_host": html.escape(platz["irc_host"]), "stream_port": platz["stream_port"],
                      "welt": html.escape(platz["welt"]), "broadcast": "true",
                      "webots_js": WEBOTS_VIEW_JS, "wwi": WEBOTS_VIEW_JS.rsplit("/", 1)[0]}
@@ -2392,7 +2429,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 st = lese_status(platz["platz"]) or {}
                 self._json(200, {k: st.get(k) for k in ("tcp", "tcp_y", "hilfe", "greifer_zu", "teil", "taster",
-                                                        "leuchten", "sensoren", "ea_meldung", "ea_ok", "kollision")})
+                                                        "leuchten", "sensoren", "ea_meldung", "ea_ok", "kollision", "crash")})
         elif re.fullmatch(r"/welten/[A-Za-z0-9_-]{1,60}\.(png|jpg|pdf)", pfad):
             datei = os.path.join(WELTEN_DIR, pfad.rsplit("/", 1)[1])
             try:
@@ -2576,6 +2613,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"ok": True})
             elif pfad == "/api/teile_zuruecksetzen":
                 VERWALTER.teile_zuruecksetzen(self._pc())
+                self._json(200, {"ok": True})
+            elif pfad == "/api/kollision_quittieren":
+                VERWALTER.kollision_quittieren(self._pc())
                 self._json(200, {"ok": True})
             elif pfad == "/api/taster":
                 VERWALTER.taster(self._pc(), daten.get("nr"), daten.get("an"))

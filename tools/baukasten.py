@@ -478,7 +478,7 @@ def quader_merkmale(lx, ly, lz):
             "kanten": kanten, "ecken": ecken, "bohrungen": []}
 
 
-# Kollisionspruefung je Welt (Stufe K1), Werte wie kollision.einstellungen im Controller
+# Kollisionspruefung je Welt (Stufen K1/K2), Werte wie kollision.einstellungen im Controller
 KOLLISION_STANDARD = {"an": True, "reaktion": "stopp", "abstand_mm": 2.0, "ablage_mm": 2.0}
 
 

@@ -204,6 +204,17 @@ class Verwalter:
         self._teile_zurueck(eigener)
         self.log("Platz %s: Teile zurueckgesetzt von %s" % (eigener["platz"], pc))
 
+    def kollision_quittieren(self, pc):
+        """Knopf "Kollision quittieren" (nur der Schueler): der Controller hebt den Crash-Stopp auf."""
+        eigener = self.platz_von(pc)
+        if eigener is None:
+            raise VerwalterFehler("Du hast gerade keine Simulation.")
+        status = self.status_fn(eigener["platz"])
+        if status is None or status.get("_alter_s", 999) > 5:
+            raise VerwalterFehler("Die Simulation laeuft gerade nicht. Bitte 'Neu starten' nehmen.")
+        self.befehl_fn(eigener["platz"], "kollision_quittieren")
+        self.log("Platz %s: Kollision quittiert von %s" % (eigener["platz"], pc))
+
     def taster(self, pc, nr, an):
         """Taster im Browser gedrueckt (an=True) oder losgelassen; der Controller setzt den Eingang."""
         eigener = self.platz_von(pc)

@@ -265,8 +265,9 @@ gegriffene Teil oder der Roboterarm Tisch, Aufbauten oder Werkstücke berühren.
 Hüllkörpern gerechnet (bis etwa 2 cm, an der Hand gut 1 cm größer als echt), Greifer und Teile genau. Je
 Roboterumgebung einstellbar:
 - **Kollisionen prüfen** ein/aus (Standard: ein)
-- **Reaktion:** wie ein echter Crash (Programm in iRC stoppen) oder nur melden. Das Stoppen kommt mit der nächsten
-  Ausbaustufe; bis dahin wird in beiden Fällen nur gemeldet.
+- **Reaktion:** wie ein echter Crash (Programm in iRC anhalten, Standard) oder nur melden. Angehalten wird über die
+  App WebotsSim (wie bei den Tastern, siehe Abschnitt 9); ist sie am Schüler-PC nicht freigeschaltet, steht in der
+  Meldung „Programm konnte nicht angehalten werden“.
 - **Sicherheitsabstand** (Standard 2 mm): so nah darf der Roboter an Tisch und Teile kommen. Zwischen dem Greifer und
   dem Teil, das er gerade greift oder eben losgelassen hat, zählt nur echtes Eindringen (mehr als 0,5 mm).
 - **Ablagetoleranz** (Standard 2 mm): so tief darf ein abgelegtes Teil in die Auflage drücken.
@@ -274,6 +275,13 @@ Roboterumgebung einstellbar:
 In der Schüleransicht erscheint dann oben eine rote Meldung, z.B. „Kollision: Backe links mit magazin · X 362 Y 14 Z 4 mm“,
 und ein roter Punkt an der Stelle; die Meldung bleibt nach dem Ende der Berührung noch 3 s stehen. Die Lehrkraft
 bekommt davon nichts mit.
+
+**Crash** (Reaktion „wie ein echter Crash“): Läuft in iRC ein Programm, wird es sofort angehalten. Oben steht dann
+„Crash: Greifer mit magazin …“ mit dem Programmnamen und dem Knopf **Kollision quittieren**; die Meldung bleibt, bis
+der Schüler quittiert. Startet er das Programm vorher wieder, hält die Simulation es erneut an. Nach dem Quittieren
+den Roboter in iRC von Hand frei fahren: Berührungen mit dem Teil des Crashs zählen so lange nicht, bis der Roboter frei
+ist, danach wird wieder normal geprüft. Wird der Roboter von Hand verfahren (kein Programm aktiv), gibt es nur die
+Meldung, ohne Anhalten.
 
 **Backensätze** (Lehrerbereich → Backensätze): eigene Greiferbacken aus der Teilebibliothek an den Schunk-Greifer setzen.
 1. **Greifer** wählen: Schunk EGP 40 (Standard) oder EGP 25. Der Greifer steht geschlossen im Werkzeugsystem von iRC.

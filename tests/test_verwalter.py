@@ -157,6 +157,16 @@ class TestVergabe(Grundlage):
         self.assertEqual(self.befehl("01"), "teile_zuruecksetzen")
         self.assertEqual([a[0] for a in self.helfer.aufrufe], ["anlegen"])   # kein Neustart
 
+    def test_kollision_quittieren(self):
+        with self.assertRaises(verwalter.VerwalterFehler):
+            self.v.kollision_quittieren("pc-a")            # keine Simulation
+        self.v.starten("pc-a", "tisch.wbt")
+        with self.assertRaises(verwalter.VerwalterFehler):
+            self.v.kollision_quittieren("pc-a")            # Controller meldet sich (noch) nicht
+        self.status("01", verbunden=True)
+        self.v.kollision_quittieren("pc-a")
+        self.assertEqual(self.befehl("01"), "kollision_quittieren")
+
     def test_taster(self):
         with self.assertRaises(verwalter.VerwalterFehler):
             self.v.taster("pc-a", 0, True)
@@ -287,6 +297,13 @@ class TestSchuelerseiten(Grundlage):
         self.status("01", verbunden=True)
         self.assertEqual(self.senden("/api/teile_zuruecksetzen")[0], 200)
         self.assertTrue(os.path.exists(os.path.join(self.stat, "platz-01.befehl")))
+        self.assertEqual(self.senden("/api/kollision_quittieren")[0], 200)
+        with open(os.path.join(self.stat, "platz-01.befehl"), encoding="utf-8") as f:
+            self.assertIn("kollision_quittieren", f.read())
+        self.assertIn("const KOLLISION_ZEIGEN = true;", ansicht)
+        self.assertIn('id="kollision-quittieren"', ansicht)
+        self.status("01", verbunden=True, crash={"zustand": "crash", "a": "Greifer", "b": "magazin"})
+        self.assertEqual(json.loads(self.holen("/api/platz/01"))["crash"]["zustand"], "crash")
         self.assertEqual(self.senden("/api/taster", {"nr": 0, "an": True})[0], 200)
         self.assertEqual(self.senden("/api/taster", {"nr": 0, "an": "ja"})[0], 409)
         self.assertEqual(self.senden("/api/zuruecksetzen")[0], 200)

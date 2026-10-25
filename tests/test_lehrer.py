@@ -550,6 +550,7 @@ class TestLehrerSeiten(Grundlage):
         seite = uebersicht.seite_viewer({"platz": "03", "irc_host": "192.168.2.20", "stream_port": 1243, "welt": "lager.wbt"})
         self.assertIn('const SCHILDER = [{"name": "halter", "text": "halter", "art": "aufbau", "punkt": [0.35, 0.0, 0.04]}', seite)
         self.assertIn("translate(-50%,-100%)", seite)
+        self.assertIn("const KOLLISION_ZEIGEN = false;", seite)        # Kollisionen sieht nur der Schueler
         # von Hand geschriebene Welt (ohne Baukasten): Werkstuecke aus der .wbt
         with open(os.path.join(self.welten, "hand.wbt"), "w", encoding="utf-8") as f:
             f.write('#VRML_SIM R2025a utf8\nDEF STIFT Werkstueck {\n  translation 0.35 0 0.01\n  name "stift"\n'
