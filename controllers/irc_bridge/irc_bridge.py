@@ -895,8 +895,14 @@ class KollisionsWaechter:
             liste += [kollision.Kugel(name, kollision._welt(lage, k[:3]), k[3]) for k in kugeln]
         return liste
 
-    def pruefen(self, teile, aufbau_nodes, tisch_z):
-        """Neue Liste der Treffer (auch leer); Rechenzeit in dauer_ms."""
+    def _wolke_sensor(self, node, durchmesser, laenge):
+        if node.getId() not in self.wolken:
+            self.wolken[node.getId()] = kollision.Punktwolke(kollision.naeherungssensor_punkte(durchmesser, laenge))
+        return self.wolken[node.getId()]
+
+    def pruefen(self, teile, aufbau_nodes, tisch_z, sensoren=()):
+        """Neue Liste der Treffer (auch leer); Rechenzeit in dauer_ms.
+        sensoren: Naeherungssensoren als (Name, Node, Durchmesser m, Laenge m); sie haben in Webots keine Physik."""
         if not self.an:
             return []
         umgebung = []
@@ -904,6 +910,11 @@ class KollisionsWaechter:
         for node in aufbau_nodes:
             umgebung.append(kollision.Umgebungsteil(node.getField("name").getSFString(), "aufbau",
                                                     self._wolke_aufbau(node), (node.getPosition(), node.getOrientation()), node.getId()))
+        sensor_ids = set()
+        for name, node, d, l in sensoren:
+            umgebung.append(kollision.Umgebungsteil(name, "sensor", self._wolke_sensor(node, d, l),
+                                                    (node.getPosition(), node.getOrientation()), node.getId()))
+            sensor_ids.add(node.getId())
         for node in teile:
             if node.getId() == gegriffen:
                 continue
@@ -950,6 +961,10 @@ class KollisionsWaechter:
         if self.greifer.teil is not None:   # das gegriffene Teil gegen den Arm: Beruehren zaehlt
             for u in selbst:
                 rand_paare[("%s (gegriffen)" % self.greifer.teil_name, u.kennung)] = 0.0
+            # ... und gegen einen Naeherungssensor: dicht davor halten ist gewollt (Schaltabstand), nur
+            # Eindringen zaehlt; die Ablagetoleranz (Teil absetzen) gilt hier nicht
+            for kennung in sensor_ids:
+                rand_paare[("%s (gegriffen)" % self.greifer.teil_name, kennung)] = -0.0005
         umgebung += selbst
         prof = getattr(self, "_profil", None)
         if prof is None and os.environ.get("KOLLISION_PROFIL"):   # Fehlersuche: Rechenzeit je Funktion ins Log
@@ -1099,6 +1114,9 @@ def main():
             feine_wolken[node.getId()] = kollision.Punktwolke(punkte, duenn=0.0007)
         return feine_wolken[node.getId()]
     naeherung = ea.Naeherungssensoren(ea_cfg["naeherung"], robot, cfg["din_versatz"], log=print, wolke_fn=feine_wolke)
+    # dieselben Sensoren als Hindernis fuer die Kollisionspruefung (Webots kennt sie nur als Bild)
+    sensoren = [("Näherungssensor %s" % n["name"], k, n.get("durchmesser_mm", 12.0) / 1000.0, n.get("laenge_mm", 50.0) / 1000.0)
+                for n, k in zip(naeherung.liste, naeherung.knoten)]
     app = None
     if (ea_cfg["taster"] or sensorfelder.liste or naeherung.liste) and not os.environ.get("VORSCHAU_BILD"):
         app = ea.AppVerbindung(cfg["host"], cfg["app_port"], cfg["app_name"], log=print).start()
@@ -1228,7 +1246,7 @@ def main():
         kollision_takt = 0.1 if waechter.dauer_ms < 8 else 0.2 if waechter.dauer_ms < 20 else 0.3
         if (waechter.an or grenzen.an) and not vorschau and jetzt - kollision_zeit >= kollision_takt and not erster_schritt:
             kollision_zeit = jetzt
-            treffer = [dict(t, art="roboter") for t in waechter.pruefen(teile, aufbauten(robot), tischhoehe())]
+            treffer = [dict(t, art="roboter") for t in waechter.pruefen(teile, aufbauten(robot), tischhoehe(), sensoren)]
             if grenzen.an:   # Arbeitsraum, Sperrzonen, Achsgrenzen (K4)
                 gelenke = None if letzter is None else letzter.joints(cfg["gelenkwerte"])
                 for t in grenzen.pruefe(waechter.hand(), (me.getPosition(), me.getOrientation()), gelenke, tcp.getPosition()):

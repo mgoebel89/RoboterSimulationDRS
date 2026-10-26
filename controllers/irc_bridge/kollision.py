@@ -138,6 +138,26 @@ def quader_punkte(halb, abstand=ABTASTUNG * 2):
     return abtasten(ecken, dreiecke, abstand)
 
 
+def zylinder_punkte(r, z0, z1, abstand=ABTASTUNG):
+    """Oberflaechenpunkte eines Zylinders entlang z (Mantel und beide Deckel), Radius r, von z0 bis z1."""
+    erg = []
+    um = max(8, int(math.ceil(2 * math.pi * r / abstand)))
+    hoehe = max(1, int(math.ceil((z1 - z0) / abstand)))
+    for i in range(um):
+        c, s = math.cos(2 * math.pi * i / um), math.sin(2 * math.pi * i / um)
+        erg += [(r * c, r * s, z0 + (z1 - z0) * j / hoehe) for j in range(hoehe + 1)]
+        for k in range(1, int(math.ceil(r / abstand))):   # Deckel: Ringe nach innen
+            erg += [(r * c * k / math.ceil(r / abstand), r * s * k / math.ceil(r / abstand), z) for z in (z0, z1)]
+    return erg + [(0.0, 0.0, z0), (0.0, 0.0, z1)]
+
+
+def naeherungssensor_punkte(durchmesser, laenge):
+    """Naeherungssensor wie in protos/Naeherungssensor.proto: Gewindehuelse von z = 0 bis zur aktiven Flaeche
+    (z = laenge) und die Kontermutter (Eckmass 1,45 x Radius, 4 mm) bei 55 % der Laenge."""
+    r, mitte = durchmesser / 2, laenge * 0.55
+    return zylinder_punkte(r, 0.0, laenge) + zylinder_punkte(r * 1.45, mitte - 0.002, mitte + 0.002)
+
+
 class Punktwolke:
     """Punkte eines Teils im eigenen System, in Rasterzellen einsortiert; Abfrage mit einem Quader im selben System."""
 

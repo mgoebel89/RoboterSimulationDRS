@@ -156,6 +156,24 @@ class TestPruefung(unittest.TestCase):
         self.assertEqual(k.pruefe([k.Formkoerper("s (gegriffen)", ([0.5, 0.0, 0.017], hochkant), form,
                                                  k.eckpunkte(scheibe[0]))], [], 0.0, 0.002, 0.002)[0]["b"], "Tisch")
 
+    def test_naeherungssensor_als_hindernis(self):
+        # M12 x 50 liegend: Sensor-z zeigt in Welt-x, aktive Flaeche bei x = 250 mm, Achse 30 mm ueber dem Tisch
+        liegend = [0, 0, 1, 0, 1, 0, -1, 0, 0]
+        punkte = k.naeherungssensor_punkte(0.012, 0.05)
+        self.assertAlmostEqual(max(math.hypot(p[0], p[1]) for p in punkte), 0.006 * 1.45)   # mit Kontermutter
+        sensor = k.Umgebungsteil("Näherungssensor S1", "sensor", k.Punktwolke(punkte), ([0.2, 0.0, 0.03], liegend), "ini")
+        paare = {("teil (gegriffen)", "ini"): -0.0005}
+
+        def teil_bei(x):   # gegriffener Wuerfel 20 mm, Mitte auf der Sensorachse
+            return k.Quader("teil (gegriffen)", ([x, 0.0, 0.03], EINHEIT), [0.0, 0.0, 0.0], [0.01, 0.01, 0.01])
+        self.assertEqual(k.pruefe([teil_bei(0.263)], [sensor], 0.0, 0.002, 0.002, rand_paare=paare), [])   # 3 mm davor
+        self.assertEqual(k.pruefe([teil_bei(0.2605)], [sensor], 0.0, 0.002, 0.002, rand_paare=paare), [])  # beruehrt
+        t = k.pruefe([teil_bei(0.258)], [sensor], 0.0, 0.002, 0.002, rand_paare=paare)                    # 2 mm hinein
+        self.assertEqual(t[0]["b"], "Näherungssensor S1")
+        seitlich = k.Kugel("Backe links", [0.21, 0.0, 0.03 + 0.006 + 0.011], 0.01)                         # 1 mm ueber der Huelse
+        self.assertEqual(k.pruefe([seitlich], [sensor], 0.0, 0.002, 0.002)[0]["b"], "Näherungssensor S1")
+        self.assertEqual(k.pruefe([seitlich], [sensor], 0.0, 0.0, 0.002), [])
+
     def test_ausnahmen_und_werkstuecke(self):
         stift = teil("stift", 0.02, (0.3, 0.0, 0.01), art="werkstueck")
         backe = k.Quader("Backe links", ([0.3, -0.009, 0.01], EINHEIT), [0.0, 0.0, 0.0], [0.002, 0.004, 0.004])
