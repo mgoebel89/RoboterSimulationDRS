@@ -42,8 +42,9 @@ iRC auf dem Schüler-PC ──CRI (3921)──▶ Webots je Platz im Container �
   Gemessen: je Simulation etwa 400 MB RAM und 5 % eines Kerns.
 
 **Netz** (wichtig für die IT)
-- Schul-PCs → Container: **TCP 80** (Startseite, Lehrerbereich und 3D-Ansicht; nur dieser eine Port,
-  8080 nur noch als Umleitung für alte Lesezeichen).
+- Schul-PCs → Container: **TCP 80** (Startseite und 3D-Ansicht der Schüler) und **TCP 443** (Lehrerbereich,
+  verschlüsselt); 8080 nur noch als Umleitung für alte Lesezeichen. Eine Firewall im Container
+  (`rebel-sim-firewall`) lässt von außen nur diese Ports und SSH (22) zu.
 - Container → Schul-PCs: **TCP 3921** (iRC-Steuerung) und **TCP 5000** (App-Schnittstelle von iRC).
   Die Windows-Firewall-Regel „robotcontrol“, die iRC mitbringt, muss auch im **Domänenprofil** gelten.
 - Zwischen Schul-PCs und Container **kein NAT/Proxy**, sonst stimmt die Erkennung an der IP nicht.
@@ -79,7 +80,8 @@ rebel-sim-admin <name>
 ```
 
 Danach erreichbar: **`http://<container>`** – Startseite mit allen freigegebenen Roboterumgebungen (Schüler) und dem
-Knopf „Anmeldung Lehrkraft“ (oder direkt `http://<container>/lehrer`).
+Knopf „Anmeldung Lehrkraft“ (oder direkt `https://<container>/lehrer`; beim ersten Mal das Stammzertifikat
+installieren, siehe Abschnitt 7).
 
 ## 4. Robotermodell aus iRC erzeugen
 
@@ -162,7 +164,25 @@ Die Simulation endet automatisch nach 15 Minuten ohne iRC und zu den eingestellt
 
 ## 7. Lehrerbereich
 
-Auf der Startseite **„Anmeldung Lehrkraft“** (oder `http://<container>/lehrer`), Anmeldung mit dem Lehrerkonto.
+Auf der Startseite **„Anmeldung Lehrkraft“** (oder `https://<container>/lehrer`), Anmeldung mit dem Lehrerkonto.
+
+**Verschlüsselt (https):** Der Lehrerbereich läuft nur über https, damit Passwörter und die Anmeldung nicht im
+Schulnetz mitgelesen werden können; die Schülerseiten bleiben bei http. Der Container hat dafür eine eigene kleine
+Zertifizierungsstelle. Ihr Stammzertifikat muss **einmal je Lehrer-PC** (bzw. Windows-Benutzer) installiert werden;
+die Lehrerseite führt automatisch dorthin, solange es fehlt:
+
+1. `http://<container>/lehrer` öffnen und „Stammzertifikat herunterladen“ (oder direkt `http://<container>/ca.crt`).
+2. Datei öffnen, unter „Details“ den Fingerabdruck mit dem auf der Seite vergleichen.
+3. „Zertifikat installieren …“ → „Aktueller Benutzer“ → „Alle Zertifikate in folgendem Speicher speichern“ →
+   „Vertrauenswürdige Stammzertifizierungsstellen“ → Fertigstellen, Sicherheitswarnung mit „Ja“ bestätigen.
+4. Browser ganz schließen und neu öffnen. Edge und Chrome nutzen den Windows-Speicher; Firefox: Einstellungen →
+   Datenschutz & Sicherheit → Zertifikate anzeigen → Zertifizierungsstellen → Importieren.
+
+Für viele PCs kann die IT das Stammzertifikat per Gruppenrichtlinie verteilen. Die Zertifizierungsstelle darf nur
+Zertifikate für das Netz des Containers (/16) und seinen Namen ausstellen, nicht für andere Webseiten. Das Zertifikat
+der Seite erneuert der Container selbst (`rebel-sim-tls`, wöchentlich geprüft). Zieht der Container in ein anderes
+Netz um, entsteht eine neue Zertifizierungsstelle; dann das Stammzertifikat auf den Lehrer-PCs neu installieren.
+
 Links steht die Seitenleiste mit allen Bereichen, oben auf jeder Seite die passenden Knöpfe. Eine **Roboterumgebung**
 (früher „Welt“) ist ein Tisch mit Teilen, Greifer und Aufgabe, so wie ihn die Schüler starten.
 
@@ -403,6 +423,8 @@ Einstellungen und das Robotermodell bleiben erhalten.** Laufende Simulationen nu
 | `rebel-sim-platz liste` | laufende Simulationen |
 | `rebel-sim-platz anlegen 99 192.168.3.11 rebel_tisch.wbt dauerhaft` | fester Platz, z.B. Zwilling des echten ReBeL |
 | `journalctl -u rebel-sim-web` | Protokoll der Webseite und des Verwalters |
+| `rebel-sim-tls` | HTTPS-Zertifikat prüfen bzw. erneuern (läuft auch automatisch) |
+| `systemctl disable --now rebel-sim-firewall` | Firewall abschalten (Fehlersuche); `enable --now` schaltet sie wieder ein |
 | `journalctl -u rebel-sim@01`, `/var/log/rebel-sim/platz-01.log` | Protokoll einer Simulation |
 
 Wichtige Orte: `/opt/rebel-sim` (Programm, Git), `/opt/rebel-sim/worlds` und `/opt/rebel-sim/teile`
@@ -419,6 +441,8 @@ Einstellungen, iRC-Daten).
 | iRC startet nicht, „Datenverzeichnispfad…“ | Windows-Konto ohne Umlaut verwenden. |
 | Falscher PC erkannt / „nicht deine Simulation“ | NAT oder Proxy zwischen Schul-PC und Container. |
 | 3D-Ansicht bleibt leer | Browser ohne Internet (WebotsView.js) oder Port 80 gesperrt. |
+| Lehrerbereich: Seite „Verschlüsselte Verbindung“ mit Anleitung, oder Browser warnt bei https | Stammzertifikat auf diesem PC noch nicht installiert (Abschnitt 7), oder der Container ist in ein anderes Netz umgezogen (neues Stammzertifikat installieren). |
+| Lehrerbereich über https nicht erreichbar | Port 443 im Netz gesperrt; `journalctl -u rebel-sim-web` zeigt, ob HTTPS läuft („HTTPS auf Port 443“). |
 | Greifer greift ins Leere | Einteach-Hilfe beachten: Teil zu breit für die Backen, Greifer drehen (A6) oder Höhe anpassen. |
 | Teil wird nach dem Zurücklegen nicht mehr gegriffen | Es wurde zu tief in einem Aufbau abgelegt (z.B. unter dem Boden einer Magazintasche). Die Simulation hebt es jetzt auf die Auflage und schreibt ins Protokoll, um wie viel; den Ablegepunkt in iRC höher setzen. |
 | Abgleich zeigt große Abweichung | In iRC das passende Werkzeug wählen (TCP), sonst vergleicht der Abgleich mit dem Flansch. |
