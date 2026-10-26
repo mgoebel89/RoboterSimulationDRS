@@ -2687,6 +2687,7 @@ def baukasten_speichern(welt, entwurf, wer_name):
         raise baukasten.BaukastenFehler("Die Roboterumgebung %s wurde nicht mit dem Baukasten gebaut und bleibt unverändert." % welt)
     lade = baukasten.teile_lader(TEILE_DIR)
     lagen = baukasten.loese(entwurf, lade)
+    baukasten.pruefe_punkte(entwurf)   # Greifpunkte, Ablagen, Magazine (iRC-Export)
     entwurf = dict(entwurf, besitzer=entwurf.get("besitzer") or "lehrer:%s" % wer_name,
                    ea=baukasten.ea_werte(entwurf), kollision=baukasten.kollision_werte(entwurf),
                    grenzen=baukasten.grenzen_werte(entwurf))

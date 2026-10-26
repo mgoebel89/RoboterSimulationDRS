@@ -776,6 +776,127 @@ def _umklappen(art_teil, art_ziel):
 
 # --- Entwurf loesen ---
 
+# --- Greif- und Ablagepunkte fuer den Export als iRC-Programm (Rechnung in tools/punkte.py) ---
+# Werkstueck: "griff": {"flaechen": [f1, f2]} (zwei gegenueberliegende Greifflaechen) oder {"zylinder": <Zapfen>}
+#   (runde Greifflaeche, die zweite Seite ergibt sich), "anfahrt": <ebene Flaeche, von der der Greifer kommt>,
+#   "tiefe_mm" (TCP so tief unter der Anfahrflaeche; leer = passend zu den Backen), "vor_mm" (Vorposition entlang der
+#   Werkzeugachse zurueck), "drehung_grad" (nur Zylinder von der Stirnseite: Backen um die Achse drehen), "name".
+# Teil-Art "ablage": Abbild eines Werkstuecks ("von": Werkstueck-Id, "teil" wie dort) an der Zielstelle; erscheint
+#   nicht in der Webots-Welt. "ablage": {"vor_mm", "name"}.
+# entwurf["magazine"]: [{"name", "a", "b", "c" (Ablagen: erste Tasche, letzte der ersten Reihe, erste der letzten
+#   Reihe), "spalten" (A nach B), "zeilen" (A nach C)}] fuer den Matrix-Befehl von iRC.
+
+VOR_MM = 40.0
+VARIABLE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,30}")
+
+
+def variablen_name(text):
+    """Name fuer eine iRC-Variable: Buchstaben, Ziffern und _, Buchstabe zuerst (iRC erlaubt keine Leerzeichen)."""
+    name = re.sub(r"[^A-Za-z0-9_]", "_", str(text or ""))[:30]
+    return name if re.match(r"[A-Za-z]", name) else ("P_" + name)[:30]
+
+
+def _zahl(wert, standard, lo, hi, was):
+    if wert in (None, ""):
+        return standard
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)) or not lo <= wert <= hi:
+        raise BaukastenFehler("%s: Zahl von %g bis %g." % (was, lo, hi))
+    return float(wert)
+
+
+def _name(wert, standard, wer):
+    name = str(wert or "") or variablen_name(standard)
+    if not VARIABLE.fullmatch(name):
+        raise BaukastenFehler("%s: Name %r (Buchstabe zuerst, dann Buchstaben, Ziffern und _, hoechstens 31)." % (wer, name))
+    return name
+
+
+def griff_werte(t):
+    """Griff eines Werkstuecks (siehe oben), geprueft; None, wenn keiner festgelegt ist."""
+    g = t.get("griff")
+    if g is None:
+        return None
+    wer = "%s, Greifpunkt" % t.get("id")
+    if not isinstance(g, dict):
+        raise BaukastenFehler("%s: 'griff' muss ein Objekt sein." % wer)
+    flaechen, zylinder = g.get("flaechen"), g.get("zylinder")
+    if (flaechen is None) == (zylinder is None):
+        raise BaukastenFehler("%s: entweder zwei Greifflaechen oder eine runde Flaeche." % wer)
+    if flaechen is not None and (not isinstance(flaechen, list) or len(flaechen) != 2 or str(flaechen[0]) == str(flaechen[1])):
+        raise BaukastenFehler("%s: zwei verschiedene Greifflaechen anklicken." % wer)
+    if g.get("anfahrt") in (None, ""):
+        raise BaukastenFehler("%s: die Anfahrseite fehlt." % wer)
+    return {"flaechen": flaechen, "zylinder": zylinder, "anfahrt": g["anfahrt"],
+            "tiefe_mm": _zahl(g.get("tiefe_mm"), None, -200, 500, wer + ", Tiefe"),
+            "vor_mm": _zahl(g.get("vor_mm"), VOR_MM, 0, 300, wer + ", Vorposition"),
+            "drehung_grad": _zahl(g.get("drehung_grad"), 0.0, -360, 360, wer + ", Drehung"),
+            "name": _name(g.get("name"), t.get("id"), wer)}
+
+
+def ablage_werte(t, teile_nach_id):
+    """Ablage-Abbild: zu welchem Werkstueck es gehoert, Vorposition und Name."""
+    a = t.get("ablage") or {}
+    w = teile_nach_id.get(t.get("von"))
+    if w is None or w.get("art") != "werkstueck":
+        raise BaukastenFehler("%s: die Ablage gehoert zu keinem Werkstueck (von)." % t.get("id"))
+    if t.get("teil") != w.get("teil"):
+        raise BaukastenFehler("%s: die Ablage zeigt ein anderes Teil als das Werkstueck %s." % (t.get("id"), w["id"]))
+    return {"von": w["id"], "vor_mm": _zahl(a.get("vor_mm"), None, 0, 300, "%s, Vorposition" % t["id"]),
+            "name": _name(a.get("name"), t["id"], t["id"])}
+
+
+def magazin_werte(m, teile_nach_id):
+    """Magazin fuer den Matrix-Befehl: drei Ablagen (A, B, C) und Anzahl Spalten (A nach B) und Zeilen (A nach C)."""
+    if not isinstance(m, dict):
+        raise BaukastenFehler("Magazin: muss ein Objekt sein.")
+    name = _name(m.get("name"), "Magazin", "Magazin")
+    werte = {"name": name}
+    for k in ("spalten", "zeilen"):
+        v = m.get(k)
+        if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 50:
+            raise BaukastenFehler("Magazin %s: %s ist eine ganze Zahl von 1 bis 50." % (name, k.capitalize()))
+        werte[k] = v
+    if werte["spalten"] * werte["zeilen"] < 2:
+        raise BaukastenFehler("Magazin %s: mindestens zwei Plaetze." % name)
+    noetig = ["a"] + (["b"] if werte["spalten"] > 1 else []) + (["c"] if werte["zeilen"] > 1 else [])
+    for k in ("a", "b", "c"):
+        if k not in noetig:
+            werte[k] = None
+            continue
+        t = teile_nach_id.get(m.get(k))
+        if t is None or t.get("art") != "ablage":
+            raise BaukastenFehler("Magazin %s: Position %s ist keine Ablage." % (name, k.upper()))
+        werte[k] = t["id"]
+    if len({werte[k] for k in noetig}) < len(noetig):
+        raise BaukastenFehler("Magazin %s: A, B und C muessen verschiedene Ablagen sein." % name)
+    if len({teile_nach_id[werte[k]].get("von") for k in noetig}) > 1:
+        raise BaukastenFehler("Magazin %s: A, B und C muessen Abbilder desselben Werkstuecks sein." % name)
+    return werte
+
+
+def pruefe_punkte(entwurf):
+    """Griffe, Ablagen, Magazine und eindeutige Variablennamen (fuer den iRC-Export)."""
+    teile = {t["id"]: t for t in entwurf.get("teile", [])}
+    namen = []
+    for t in entwurf.get("teile", []):
+        if t.get("art") == "werkstueck":
+            g = griff_werte(t)
+            if g:
+                namen += [g["name"] + "_greifen", g["name"] + "_greifen_vor"]
+        elif t.get("art") == "ablage":
+            a = ablage_werte(t, teile)
+            namen += [a["name"] + "_ablegen", a["name"] + "_ablegen_vor"]
+    magazine = entwurf.get("magazine") or []
+    if not isinstance(magazine, list) or len(magazine) > 20:
+        raise BaukastenFehler("'magazine' ist eine Liste (hoechstens 20).")
+    for m in magazine:
+        w = magazin_werte(m, teile)
+        namen += [w["name"] + s for s in ("_A", "_B", "_C", "_A_vor", "_B_vor", "_C_vor", "_pos", "_x", "_y")]
+    doppelt = sorted({n for n in namen if namen.count(n) > 1})
+    if doppelt:
+        raise BaukastenFehler("Diese Variablennamen kaemen doppelt vor: %s" % ", ".join(doppelt))
+
+
 def pruefe_entwurf(entwurf):
     teile = entwurf.get("teile")
     if not isinstance(teile, list) or len(teile) > MAX_TEILE:
@@ -787,8 +908,9 @@ def pruefe_entwurf(entwurf):
         if t["id"] in ids or t["id"] == "greifer":
             raise BaukastenFehler("Der Name %s kommt doppelt vor oder ist vergeben." % t["id"])
         ids.add(t["id"])
-        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor", "sperrzone", "naeherung"):
-            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck', 'sensor', 'sperrzone' oder 'naeherung'." % t["id"])
+        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor", "sperrzone", "naeherung", "ablage"):
+            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck', 'sensor', 'sperrzone', 'naeherung' oder 'ablage'."
+                                  % t["id"])
         if t.get("art") == "naeherung":
             naeherung_werte(t)
         if t.get("art", "aufbau") in ("aufbau", "werkstueck"):
@@ -1040,7 +1162,7 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
                 _vrml_text("sensor_" + t["id"]), _zahlen([v / 1000 for v in s["groesse_mm"]])))
             sensor_nr += 1
             continue
-        if t.get("art") == "sperrzone":   # nur in worlds/<welt>.json ("grenzen"), nicht sichtbar in Webots
+        if t.get("art") in ("sperrzone", "ablage"):   # Sperrzone: worlds/<welt>.json; Ablage: nur fuer den iRC-Export
             continue
         if t.get("art") == "naeherung":   # DEF-Name wie in ea_naeherung: NAEHERUNG_<Reihenfolge>
             n = naeherung_werte(t)
