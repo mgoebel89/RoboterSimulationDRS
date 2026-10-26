@@ -1904,6 +1904,19 @@ function backenInfo() {
   $('backen-paket').href = '/api/lehrer/werkzeugpaket?name=' + encodeURIComponent(weltName || '');
   $('backen-loeschen').hidden = !b;
 }
+// Werkzeugpaket ueber fetch laden und aus dem Speicher sichern (wie im Lehrerbereich): Chrome lehnt direkte Downloads ab,
+// wenn das Zertifikat auf diesem PC nicht installiert ist, und meldet das als "Netzwerkfehler"
+$('backen-paket').addEventListener('click', async ev => {
+  ev.preventDefault();
+  try {
+    const r = await fetch($('backen-paket').getAttribute('href'), {cache: 'no-store'});
+    if (!r.ok) { status(((await r.json().catch(() => ({}))).fehler) || 'Das Herunterladen ging nicht.', true); return; }
+    const name = (/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || 'Werkzeug.zip';
+    const url = URL.createObjectURL(await r.blob()), link = document.createElement('a');
+    link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (e) { status('Das Herunterladen ging nicht: ' + e.message, true); }
+});
 async function backenSpeichern() {
   if (entwurf.teile.length !== 1 || rechenbar().length !== 1) { status('Erst eine Backe hinzufügen und mit dem Greifer verbinden.', true); return; }
   if (!weltName) {

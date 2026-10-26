@@ -1281,6 +1281,22 @@ $('n-anlegen').onclick = async () => {
   await anmeldung(); benutzer();
 };
 
+// Downloads (Punkte fuer iRC, Welt-Export, Werkzeugpaket, STEP) ueber fetch wie alle anderen Anfragen der Seite und dann
+// aus dem Speicher sichern: Chrome brach den direkten Download ueber https mit "Netzwerkfehler" ab
+document.addEventListener('click', async ev => {
+  const a = ev.target.closest('a[href^="/api/lehrer/"]');
+  if (!a || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  ev.preventDefault();
+  try {
+    const r = await fetch(a.getAttribute('href'), {cache: 'no-store'});
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.fehler || 'Das Herunterladen ging nicht.'); return; }
+    const name = (/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || 'download';
+    const url = URL.createObjectURL(await r.blob());
+    const link = document.createElement('a');
+    link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (e) { alert('Das Herunterladen ging nicht: ' + e.message); }
+});
 anmeldung().then(() => {
   const marke = {umgebungen: 'welten'}[location.hash.slice(1)] || location.hash.slice(1);
   const tab = document.querySelector('nav button[data-tab="' + marke + '"]');   // z.B. /lehrer#teile, #welten
@@ -3456,9 +3472,14 @@ class TLSServer(ThreadingHTTPServer):
         try:
             self.RequestHandlerClass(tls, client_address, self)
         finally:
+            # nur die Schreibrichtung schliessen und den Rest noch lesen (wie socketserver bei http): ein hartes Schliessen
+            # mit ungelesenen Daten schickt ein RST, und der Browser verwirft dann womoeglich die schon gesendete Antwort
             try:
-                tls.shutdown(socket.SHUT_RDWR)
-            except OSError:
+                tls.shutdown(socket.SHUT_WR)
+                tls.settimeout(1.0)
+                while tls.recv(4096):
+                    pass
+            except (OSError, ssl.SSLError):
                 pass
             tls.close()
 
