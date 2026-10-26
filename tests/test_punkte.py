@@ -128,6 +128,24 @@ class TestGriff(unittest.TestCase):
         self.assertAlmostEqual(s["gelenke"][5], 0, places=3)                                 # Backen entlang Fuss - Teil
         self.assertAlmostEqual(abs(s2["gelenke"][5]), 90, places=3)                          # um 90 Grad gedreht
 
+    def test_zapfen_von_oben(self):
+        # Target: Scheibe d40 (z 0..30) mit Zapfen d10 (z 32..39 erkannt, Stirnflaeche bei 40); gegriffen am Zapfen.
+        # Ob als Anfahrseite die Stirnflaeche des Zapfens (5) oder die Oberseite der Scheibe (2) angeklickt wird:
+        # angesetzt wird am oberen Ende des Zapfens, die Backen bleiben ueber der Scheibe
+        target = {"box": [-20, -20, 0, 20, 20, 40], "volumen_mm3": 38000, "kanten": [], "ecken": [],
+                  "flaechen": [{"id": 2, "normale": [0, 0, 1], "mitte": [0, 0, 30]}, {"id": 3, "normale": [0, 0, -1], "mitte": [0, 0, 0]},
+                               {"id": 5, "normale": [0, 0, 1], "mitte": [0, 0, 40]}],
+                  "bohrungen": [{"id": 1, "innen": False, "durchmesser": 40, "enden": [[0, 0, 29], [0, 0, 2]]},
+                                {"id": 4, "innen": False, "durchmesser": 10, "enden": [[0, 0, 39], [0, 0, 32]]}]}
+        breit = dict(EGP40, zu_mm=4)   # Backen, die bis 4 mm schliessen
+        for anfahrt in (5, 2):
+            e = {"titel": "T", "teile": [werkstueck("t", "target", {"zylinder": 4, "anfahrt": anfahrt}, punkt={"art": "flaeche", "id": 3})]}
+            erg = punkte.berechne(e, dict(ALLE, target=target).__getitem__, breit)
+            p = self.punkt(erg, "t_greifen")
+            # Zapfen 7 mm lang (Ende bei 39): Spitze der Backen (5,65 mm unter dem TCP) 1 mm ueber dem Absatz bei 32
+            self.assertEqual([round(v, 2) for v in p["lage"].o], [250, 0, 38.65], anfahrt)
+            self.assertEqual(p["warnungen"], [])
+
     def test_ablage_und_magazin(self):
         teile = [teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)),
                  werkstueck("w", "wuerfel", {"flaechen": [3, 4], "anfahrt": 2, "name": "Klotz"}, versatz=(0, 150, 0))]

@@ -103,11 +103,19 @@ def griff_im_teil(m, g, greifer):
             mitte = bk._add(b["enden"][0], bk._mul(achse, s))
         else:
             raise bk.BaukastenFehler("Die Anfahrt muss entlang oder quer zur Achse der runden Flaeche liegen.")
-    # Punkt auf der Anfahrflaeche ueber der Greifmitte, Tiefe des Teils dahinter (aus dem Huellquader)
-    auf = bk._sub(mitte, bk._mul(na, bk._dot(bk._sub(mitte, fa["mitte"]), na)))
-    box = m["box"]
-    ecken = [[box[i] if (k >> i) & 1 == 0 else box[i + 3] for i in range(3)] for k in range(8)]
-    teil_tief = max(bk._dot(bk._sub(e, auf), z) for e in ecken)
+    if frei:
+        # runde Flaeche von der Stirnseite (z.B. Zapfen): die Anfahrseite gibt nur die Richtung vor; angesetzt wird am
+        # Ende der runden Flaeche, das zuerst erreicht wird, und die Backen reichen hoechstens bis zu ihrem anderen Ende
+        # (Absatz) - auch wenn als Anfahrseite die Oberseite der Scheibe darunter angeklickt wurde
+        e0, e1 = b["enden"]
+        auf, ende = (e0, e1) if bk._dot(e0, z) < bk._dot(e1, z) else (e1, e0)
+        teil_tief = bk._dot(bk._sub(ende, auf), z)
+    else:
+        # Punkt auf der Anfahrflaeche ueber der Greifmitte, Tiefe des Teils dahinter (aus dem Huellquader)
+        auf = bk._sub(mitte, bk._mul(na, bk._dot(bk._sub(mitte, fa["mitte"]), na)))
+        box = m["box"]
+        ecken = [[box[i] if (k >> i) & 1 == 0 else box[i + 3] for i in range(3)] for k in range(8)]
+        teil_tief = max(bk._dot(bk._sub(e, auf), z) for e in ecken)
     if g["tiefe_mm"] is not None:
         tiefe = g["tiefe_mm"]
     elif g["zylinder"] is not None and not frei:   # von der Seite: TCP auf der Achse

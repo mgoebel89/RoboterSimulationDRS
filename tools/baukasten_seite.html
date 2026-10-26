@@ -43,7 +43,12 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
 .liste .art { color:var(--leise); font-size:.8em; white-space:nowrap; }
 .symbol { width:22px; height:22px; border-radius:6px; flex:none; display:flex; align-items:center; justify-content:center;
   font-size:.7em; font-weight:800; color:#fff; }
-.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; } .symbol.sperrzone { background:var(--pink); } .symbol.naeherung { background:#5d6779; } .symbol.ablage { background:#2a9d6a; }
+.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; } .symbol.sperrzone { background:var(--pink); } .symbol.naeherung { background:#5d6779; } .symbol.ablage { background:#2a9d6a; } .symbol.griff { background:#0a7a3e; }
+/* Greifpunkt und Ablagen als Unterobjekte ihres Werkstuecks in der Teileliste */
+#teileliste .kind { padding-left:30px; }
+#teileliste .kind.neu { color:var(--leise, #6b7280); font-style:italic; }
+#griff-panel .schritt.an { box-shadow: inset 3px 0 0 #0a7a3e; }
+#griff-panel .schritt.erledigt h3::after { content:" ✓"; color:#0a7a3e; }
 #md-liste .magazin { border:1px solid var(--linie); border-radius:8px; padding:8px 10px; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; }
 #md-liste .magazin input[type=number] { width:64px; }
 .achsgrenzen { display:grid; grid-template-columns:auto 1fr 1fr auto; gap:6px 10px; align-items:center; font-size:.9em; }
@@ -160,6 +165,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <button id="plus-sensor" title="Fläche, die meldet, ob ein Werkstück darauf liegt (oder welche Farbe es hat)">%%ICON_SENSOR%%Sensorfläche</button>
   <button id="plus-ini" title="Induktiver oder kapazitiver Näherungssensor M12/M18: erkennt Werkstücke davor, je nach Material">%%ICON_NAEHERUNG%%Näherung</button>
   <button id="plus-zone" title="Bereich, in den Greifer und gegriffenes Teil nicht dürfen (Warnung oder Stopp)">%%ICON_SPERRZONE%%Sperrzone</button>
+  <button id="plus-griff" title="Greifpunkt für iRC am gewählten Werkstück festlegen (Greifflächen, Anfahrseite)">%%ICON_BACKEN%%Greifpunkt</button>
   <button id="w-tisch" title="Tisch und Lage des Roboters">%%ICON_TISCH%%Tisch</button>
   <button id="w-ea" title="Taster und Leuchtmelder für die Schüleransicht">%%ICON_TASTER%%Taster &amp; Leuchten</button>
   <button id="w-kollision" title="Kollisionsprüfung, Arbeitsraum und Achsgrenzen für diese Roboterumgebung">%%ICON_KOLLISION%%Kollisionen &amp; Grenzen</button>
@@ -263,17 +269,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
         wie eine Kollision, Warnung zeigt nur einen Hinweis. In Webots unsichtbar; Schüler sehen sie mit „Grenzen“.</div>
     </div>
     <div class="abschnitt" id="e-griff" hidden><h3>Greifpunkt für iRC</h3>
-      <div class="zeile"><span class="wahlpunkt" id="g-flaechen">Greifflächen: –</span><button id="g-wahl">anklicken</button></div>
-      <div class="zeile"><span class="wahlpunkt" id="g-anfahrt">Anfahrseite: –</span><button id="g-wahl-anfahrt">anklicken</button></div>
-      <div class="zahlen">
-        <label title="TCP so tief unter der Anfahrseite; leer = Backen möglichst ganz am Teil">Tiefe (mm) <input id="g-tiefe" type="number" step="0.5" placeholder="auto"></label>
-        <label title="Vorposition: so weit entlang der Werkzeugachse zurück">Vorpos. (mm) <input id="g-vor" type="number" min="0" max="300" step="5" placeholder="40"></label>
-        <label id="g-dreh-zeile" title="Rundes Teil von der Stirnseite: Backen um die Achse drehen (0 = A6 dreht kaum)">Drehung (°) <input id="g-dreh" type="number" step="15" value="0"></label>
-      </div>
-      <label class="feldspalte">Name der Variablen <input id="g-name" placeholder="wie das Werkstück" maxlength="31"></label>
-      <div class="hilfe" id="g-hilfe"></div>
-      <div class="zeile"><button id="g-ablage" title="Abbild dieses Werkstücks an eine Zielstelle setzen (z.B. in eine Magazintasche)">+ Ablage</button>
-        <button id="g-weg" class="warnen" style="margin-left:auto">Greifpunkt entfernen</button></div>
+      <div class="zeile"><span class="wahlpunkt" id="g-kurz">–</span><button id="g-oeffnen">bearbeiten …</button></div>
     </div>
     <div class="abschnitt" id="e-ablage" hidden><h3>Ablage für iRC</h3>
       <div class="hilfe" id="a-von"></div>
@@ -305,6 +301,30 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
     </div>
     <div class="abschnitt"><div class="zeile"><button id="e-loesen">Verbindung lösen</button>
       <button id="e-entfernen" class="warnen" style="margin-left:auto">Entfernen</button></div></div>
+  </div>
+
+  <!-- Greifpunkt-Assistent: wie das Eigenschaften-Panel, das 3D-Bild bleibt bedienbar -->
+  <div class="panel" id="griff-panel" hidden>
+    <div class="panel-kopf"><span class="symbol griff">G</span><h2 id="gp-titel">Greifpunkt</h2>
+      <button class="zu" id="gp-zu" title="Schließen (Esc)">&times;</button></div>
+    <div class="abschnitt schritt" id="gp-schritt1"><h3>1. Greifflächen</h3>
+      <div class="hilfe">Zwei gegenüberliegende ebene Flächen am Werkstück anklicken – oder eine runde Fläche, die
+        Gegenseite ergibt sich. Beim Überfahren leuchtet eine nutzbare Fläche grün.</div>
+      <div class="zeile"><span class="wahlpunkt" id="g-flaechen">–</span><button id="g-wahl">neu wählen</button></div></div>
+    <div class="abschnitt schritt" id="gp-schritt2"><h3>2. Anfahrseite</h3>
+      <div class="hilfe">Die ebene Fläche, von der der Greifer kommt (meist oben; auch schräg oder seitlich).</div>
+      <div class="zeile"><span class="wahlpunkt" id="g-anfahrt">–</span><button id="g-wahl-anfahrt">neu wählen</button></div></div>
+    <div class="abschnitt schritt" id="gp-schritt3"><h3>3. Einstellungen</h3>
+      <div class="zahlen">
+        <label title="TCP so tief unter der Anfahrseite; leer = Backen möglichst ganz am Teil">Tiefe (mm) <input id="g-tiefe" type="number" step="0.5" placeholder="auto"></label>
+        <label title="Vorposition: so weit entlang der Werkzeugachse zurück">Vorpos. (mm) <input id="g-vor" type="number" min="0" max="300" step="5" placeholder="40"></label>
+        <label id="g-dreh-zeile" title="Rundes Teil von der Stirnseite: Backen um die Achse drehen (0 = A6 dreht kaum)">Drehung (°) <input id="g-dreh" type="number" step="15" value="0"></label>
+      </div>
+      <label class="feldspalte">Name der Variablen <input id="g-name" placeholder="wie das Werkstück" maxlength="31"></label>
+      <div class="hilfe" id="g-hilfe"></div></div>
+    <div class="abschnitt"><div class="zeile"><button class="haupt" id="gp-fertig">Fertig</button>
+      <button id="g-ablage" title="Abbild dieses Werkstücks an eine Zielstelle setzen (z.B. in eine Magazintasche)">+ Ablage</button>
+      <button id="g-weg" class="warnen" style="margin-left:auto">Entfernen</button></div></div>
   </div>
 </div>
 </div>
@@ -526,7 +546,8 @@ const ANSCHLAEGE_HINTEN = Array.from({length: PROFIL.nuten}, (_, k) => ({nut: k 
 const RAND = PROFIL.rahmen + PROFIL.nut / 2;
 const ALINKS = [Math.ceil(RAND + PLATTE.quer - PLATTE.anschlag), Math.floor(PROFIL.groesse - RAND - PLATTE.quer - PLATTE.anschlag)];
 let entwurf = {titel: '', aufgabe: '', greifer: 'egp40', teile: []};
-let weltName = null, auswahl = null, wahl = null;   // wahl: 'teil' | 'ziel' beim Anklicken
+let weltName = null, auswahl = null, wahl = null;   // wahl: 'teil' | 'ziel' beim Anklicken, 'griff' | 'griff2' | 'anfahrt' beim Greifpunkt
+let griffOffen = null;   // Werkstueck, dessen Greifpunkt-Assistent offen ist
 let lagen = {}, teilDaten = {}, objekte = {};
 
 // ---------- Hilfen ----------
@@ -781,6 +802,20 @@ const datenVonId = id => id === 'greifer' ? teilDaten[GREIFER_TEILE[basis()]] : 
 const vorschauGruppe = new THREE.Group(), punktGruppe = new THREE.Group();
 szene.add(vorschauGruppe, punktGruppe);
 const ORANGE = new THREE.MeshBasicMaterial({color: 0xD4005E, transparent: true, opacity: 0.7, depthTest: false});   // DRS-Pink
+// Greifpunkt fuer iRC: Greifflaechen gruen, Anfahrseite blau, nicht nutzbare Flaeche grau
+const flaechenMat = farbe => new THREE.MeshBasicMaterial({color: farbe, transparent: true, opacity: 0.55, depthTest: false, side: THREE.DoubleSide});
+const GRIFF_FLAECHE = flaechenMat(0x0A9A4E), ANFAHRT_FLAECHE = flaechenMat(0x1F6FD1), NEIN_FLAECHE = flaechenMat(0x8A93A3);
+function flaechenOverlay(id, tags, material) {   // CAD-Flaechen eines Teils eingefaerbt (wie beim Anklicken der Bezugsflaechen)
+  const g = new THREE.Group(), d = datenVonId(id), o = objektVon(id);
+  for (const tag of tags) {
+    const n = d && d.flaechenNetz[tag];
+    if (!n) continue;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(n.p, 3)); geo.setIndex(n.i);
+    const m = new THREE.Mesh(geo, material); m.renderOrder = 10; g.add(m);
+  }
+  if (o) { g.position.copy(o.position); g.quaternion.copy(o.quaternion); }
+  return g;
+}
 function leeren(g) { while (g.children.length) { const c = g.children.pop(); c.geometry?.dispose?.(); } }
 function stab(a, b, dicke, material) {
   const va = V(a), vb = V(b), laenge = va.distanceTo(vb);
@@ -968,6 +1003,12 @@ function groesseVon(id) { return (id === 'tisch' || id === 'roboterfuss') ? 1000
 function punkteZeigen() {
   leeren(punktGruppe);
   const t = auswahl && teil(auswahl);
+  if (t && t.art === 'werkstueck' && t.griff && objektVon(t.id)) {   // gewaehlte Greifflaechen und Anfahrseite einfaerben
+    const g = t.griff, b = datenVonId(t.id).teil.bohrungen.find(b => String(b.id) === String(g.zylinder));
+    const tags = g.zylinder != null ? (b ? b.flaechen : []) : (g.flaechen || []);
+    if (tags.length) punktGruppe.add(flaechenOverlay(t.id, tags, GRIFF_FLAECHE));
+    if (g.anfahrt != null) punktGruppe.add(flaechenOverlay(t.id, [g.anfahrt], ANFAHRT_FLAECHE));
+  }
   if (!t || !t.verbindung) return;
   const v = t.verbindung;
   if (v.punkt) {
@@ -1053,10 +1094,11 @@ function merkmalBei(hit, nurTeil) {
 
 let zeigerRahmen = null;
 renderer.domElement.addEventListener('pointermove', ev => {
-  if (!wahl || zeigerRahmen || wahl === 'griff' || wahl === 'griff2' || wahl === 'anfahrt') return;   // Greifpunkt: eigener Hinweis
+  if (!wahl || zeigerRahmen) return;
   zeigerRahmen = requestAnimationFrame(() => {
     zeigerRahmen = null;
     leeren(vorschauGruppe);
+    if (wahl === 'griff' || wahl === 'griff2' || wahl === 'anfahrt') { griffZeiger(treffer(ev)); return; }   // Greifpunkt
     const mk = merkmalBei(treffer(ev), wahl === 'teil' ? auswahl : null);
     $('hinweis3d').hidden = false;
     $('hinweis3d').textContent = (wahl === 'teil' ? 'Punkt am Teil wählen' : 'Gegenstück wählen') + (mk ? ': ' + mk.text : ' (Esc = abbrechen)');
@@ -1081,7 +1123,11 @@ renderer.domElement.addEventListener('pointerup', ev => {
   else { t.verbindung.an = mk.ziel; t.verbindung.an_punkt = mk.punkt; }
   merken(); wahlBeenden(); formularZeigen(); rechnen();
 });
-window.addEventListener('keydown', ev => { if (ev.key === 'Escape' && wahl) { wahlBeenden(); ev.stopImmediatePropagation(); } });
+window.addEventListener('keydown', ev => {
+  if (ev.key !== 'Escape') return;
+  if (wahl) { wahlBeenden(); if (griffOffen) griffFormular(teil(griffOffen)); ev.stopImmediatePropagation(); }
+  else if (griffOffen) { griffAssistentZu(); ev.stopImmediatePropagation(); }
+});
 // Kamera: auf ein Teil zoomen (Blickrichtung bleibt) oder den ganzen Tisch zeigen
 function blickAuf(id) {
   const g = id && objekte[id]; if (!g) return;
@@ -1128,8 +1174,9 @@ function feld(id, wert) { const e = $(id); if (e !== document.activeElement) e.v
 function formularZeigen() {
   const t = auswahl && teil(auswahl);
   $('eigenschaften').hidden = !t;
+  if (!t && griffOffen) { griffOffen = null; $('griff-panel').hidden = true; }
   listeZeigen();
-  if (!t) return;
+  if (!t) { leeren(punktGruppe); return; }   // Markierungen des abgewaehlten Teils weg
   const v = t.verbindung || {};
   const sensor = t.art === 'sensor', zone = t.art === 'sperrzone', ini = t.art === 'naeherung', ablage = t.art === 'ablage';
   $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : zone ? 'Sperrzone' : ini ? 'Näherungssensor' : ablage ? 'Ablage' : t.teil) + ')';
@@ -1144,8 +1191,14 @@ function formularZeigen() {
   if (sensor) sensorFormular(t);
   if (zone) zoneFormular(t);
   if (ini) iniFormular(t);
-  if (t.art === 'werkstueck' && !BACKEN) griffFormular(t);
+  if (t.art === 'werkstueck' && !BACKEN) {
+    $('g-kurz').textContent = !t.griff ? 'noch keiner' : griffFertig(t.griff) ? 'festgelegt' + (t.griff.name ? ' (' + t.griff.name + ')' : '') : 'unvollständig';
+    $('g-oeffnen').textContent = t.griff ? 'bearbeiten …' : 'festlegen …';
+    if (griffOffen === t.id) griffFormular(t);
+  }
   if (ablage) ablageFormular(t);
+  if (griffOffen && griffOffen !== t.id) { griffOffen = null; $('griff-panel').hidden = true; }
+  if (griffOffen === t.id) $('eigenschaften').hidden = true;   // der Assistent steht an der Stelle des Panels
   feld('e-masse', t.masse_kg ? Math.round(t.masse_kg * 1000) : '');
   $('p-teil').textContent = 'Punkt am Teil: ' + punktText(t.id, v.punkt);
   $('p-ziel').textContent = 'Gegenstück: ' + punktText(v.an, v.an_punkt);
@@ -1164,7 +1217,21 @@ const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S', sperrzone: 'Z', nae
 function listeZeigen() {
   $('teile-anzahl').textContent = entwurf.teile.length || '';
   $('magazine-kurz').textContent = (entwurf.magazine || []).length || '';
-  $('teileliste').innerHTML = entwurf.teile.map(t => '<div data-id="' + t.id + '" class="' + (t.id === auswahl ? 'an' : '') + '" title="'
+  // Werkstuecke mit ihrem Greifpunkt und ihren Ablagen als Unterobjekte (eingerueckt)
+  const ohneZeichen = s => String(s ?? '').replace(/[&<>"]/g, '');
+  const ids = new Set(entwurf.teile.map(t => t.id));
+  const kinder = t => t.art !== 'werkstueck' || BACKEN ? '' :
+    (t.griff ? '<div class="kind' + (griffOffen === t.id ? ' an' : '') + '" data-griff="' + t.id + '" title="Greifpunkt für iRC bearbeiten">'
+      + '<span class="symbol griff">G</span><span class="name">Greifpunkt</span><span class="art">'
+      + (griffFertig(t.griff) ? ohneZeichen(t.griff.name || t.id) : 'unvollständig') + '</span></div>'
+      : '<div class="kind neu" data-griff="' + t.id + '" title="Greifpunkt für iRC festlegen (Greifflächen, Anfahrseite)">+ Greifpunkt</div>')
+    + entwurf.teile.filter(a => a.art === 'ablage' && a.von === t.id).map(a => zeile(a, true)).join('');
+  const oben = entwurf.teile.filter(t => t.art !== 'ablage' || !ids.has(t.von));
+  $('teileliste').innerHTML = oben.map(t => zeile(t, false) + kinder(t)).join('')
+    || '<span class="hilfe" style="padding:4px 10px">Noch keine Teile. Oben auf „Teil“ klicken.</span>';
+}
+function zeile(t, kind) {
+  return '<div data-id="' + t.id + '" class="' + (kind ? 'kind ' : '') + (t.id === auswahl ? 'an' : '') + '" title="'
     + (t.art === 'werkstueck' ? 'Werkstück' : t.art === 'sensor' ? 'Sensorfläche' : t.art === 'sperrzone' ? 'Sperrzone'
        : t.art === 'naeherung' ? 'Näherungssensor' : t.art === 'ablage' ? 'Ablage (Abbild für iRC)' : 'Aufbau') + ' · Rechtsklick für das Menü">'
     + '<span class="symbol ' + (t.art || 'aufbau') + '">' + ART_KURZ[t.art || 'aufbau'] + '</span><span class="name">' + t.id + '</span>'
@@ -1174,10 +1241,13 @@ function listeZeigen() {
        : t.art === 'sperrzone' ? (zoneWerte(t).reaktion === 'stopp' ? 'Sperrzone, Stopp' : 'Sperrzone, Warnung')
        : t.art === 'naeherung' ? (iniWerte(t).typ === 'induktiv' ? 'induktiv ' : 'kapazitiv ') + iniWerte(t).bauform + ', DIn' + iniWerte(t).din
        : t.teil + (t.material && t.material !== 'pla' ? ', ' + MATERIALIEN[t.material].name : '')) + '</span>'
-    + (lagen[t.id] ? '' : '<span class="offen">offen</span>') + '</div>').join('')
-    || '<span class="hilfe" style="padding:4px 10px">Noch keine Teile. Oben auf „Teil“ klicken.</span>';
+    + (lagen[t.id] ? '' : '<span class="offen">offen</span>') + '</div>';
 }
-$('teileliste').onclick = ev => { const d = ev.target.closest('[data-id]'); if (d) waehlen(d.dataset.id); };
+$('teileliste').onclick = ev => {
+  const g = ev.target.closest('[data-griff]');   // Greifpunkt eines Werkstuecks: Assistent oeffnen
+  if (g) { griffAssistent(g.dataset.griff); return; }
+  const d = ev.target.closest('[data-id]'); if (d) waehlen(d.dataset.id);
+};
 function waehlen(id) {
   auswahl = id; wahlBeenden(); formularZeigen();
   for (const [i, g] of Object.entries(objekte)) g.userData.mesh.material.emissive?.setHex(i === id ? 0x332200 : 0x000000);
@@ -1275,13 +1345,38 @@ function griffWahl(modus) {
   wahlBeenden();
   wahl = modus;
   $('hinweis3d').hidden = false; $('hinweis3d').textContent = GRIFF_HINWEIS[modus] + ' (Esc bricht ab)';
+  const t = teil(auswahl); if (t && griffOffen === t.id) griffFormular(t);   // aktiven Schritt markieren
+}
+function griffUnter(hit) {   // Flaeche unter dem Zeiger am gewaehlten Werkstueck: {tag, eben, rund} oder null
+  if (!hit || hit.object.userData.teilId !== auswahl) return null;
+  const d = datenVonId(auswahl), tag = String(d.dreieckFlaeche[hit.faceIndex]);
+  return {tag, eben: d.teil.flaechen.find(f => String(f.id) === tag),
+          rund: d.teil.bohrungen.find(b => !b.innen && b.flaechen.map(String).includes(tag))};
+}
+function griffZeiger(hit) {   // beim Ueberfahren: nutzbare Flaeche gruen (Anfahrseite blau), sonst grau mit Grund
+  const u = griffUnter(hit);
+  let text = 'am gewählten Werkstück zeigen', tags = null, mat = NEIN_FLAECHE;
+  if (wahl === 'griff2' && griffErste != null) vorschauGruppe.add(flaechenOverlay(auswahl, [griffErste], GRIFF_FLAECHE));
+  if (u && wahl === 'anfahrt') {
+    tags = [u.tag]; text = u.eben ? 'Fläche ' + u.eben.id + ' (eben)' : 'nicht eben – die Anfahrseite muss eben sein';
+    if (u.eben) mat = ANFAHRT_FLAECHE;
+  } else if (u && wahl === 'griff' && u.rund) {
+    tags = u.rund.flaechen; mat = GRIFF_FLAECHE; text = 'runde Fläche Ø' + (+u.rund.durchmesser).toFixed(1).replace('.', ',') + ' mm';
+  } else if (u && u.eben) {
+    tags = [u.tag];
+    if (wahl === 'griff2' && String(u.eben.id) === String(griffErste)) text = 'das ist schon die erste Fläche';
+    else { mat = GRIFF_FLAECHE; text = 'Fläche ' + u.eben.id + ' (eben)'; }
+  } else if (u) {
+    tags = [u.tag]; text = 'gekrümmt, nicht als Greiffläche erkannt (Teil unter „Teile“ aktualisieren?)';
+  }
+  $('hinweis3d').hidden = false; $('hinweis3d').textContent = GRIFF_HINWEIS[wahl] + ': ' + text;
+  if (tags) vorschauGruppe.add(flaechenOverlay(auswahl, tags, mat));
 }
 function griffKlick(hit) {
   const t = teil(auswahl);
-  if (!t || !hit || hit.object.userData.teilId !== auswahl) { status('Bitte am gewählten Werkstück klicken.', true); return; }
-  const d = datenVonId(auswahl), tag = String(d.dreieckFlaeche[hit.faceIndex]);
-  const eben = d.teil.flaechen.find(f => String(f.id) === tag);
-  const rund = d.teil.bohrungen.find(b => !b.innen && b.flaechen.map(String).includes(tag));
+  const u = griffUnter(hit);
+  if (!t || !u) { status('Bitte am gewählten Werkstück klicken.', true); return; }
+  const eben = u.eben, rund = u.rund;
   const g = Object.assign({}, t.griff || {});
   let weiter = null;
   if (wahl === 'anfahrt') {
@@ -1297,22 +1392,57 @@ function griffKlick(hit) {
   if (weiter !== 'griff2') t.griff = g;
   status('');
   merken(); formularZeigen();
-  if (weiter) griffWahl(weiter); else { wahlBeenden(); punkteRechnen(); }
+  if (weiter) griffWahl(weiter); else { wahlBeenden(); griffFormular(t); punkteRechnen(); }
 }
-const griffFertig = g => g && g.anfahrt != null && (g.zylinder != null || (g.flaechen || []).length === 2);
+// Greifpunkt-Assistent: Schritte 1 Greifflaechen, 2 Anfahrseite, 3 Einstellungen; das 3D-Bild bleibt bedienbar
+function griffAssistent(id) {
+  const t = id && teil(id);
+  if (!t || t.art !== 'werkstueck') { status('Erst ein Werkstück wählen (in der Liste oder im Bild).', true); return; }
+  if (auswahl !== id) waehlen(id);
+  griffOffen = id;
+  $('gp-titel').textContent = 'Greifpunkt: ' + id;
+  $('griff-panel').hidden = false; $('eigenschaften').hidden = true;
+  blickAuf(id); listeZeigen(); punkteZeigen();
+  const g = t.griff || {};
+  if (g.zylinder == null && !(g.flaechen || []).length) griffWahl('griff');
+  else if (g.anfahrt == null) griffWahl('anfahrt');
+  else griffFormular(t);
+}
+function griffAssistentZu() {
+  if (!griffOffen) return;
+  griffOffen = null; $('griff-panel').hidden = true;
+  if (wahl === 'griff' || wahl === 'griff2' || wahl === 'anfahrt') wahlBeenden();
+  formularZeigen();
+}
+$('gp-zu').onclick = griffAssistentZu;
+$('gp-fertig').onclick = griffAssistentZu;
+$('g-oeffnen').onclick = () => griffAssistent(auswahl);
+$('plus-griff').onclick = () => {
+  const t = auswahl && teil(auswahl), werkstuecke = entwurf.teile.filter(x => x.art === 'werkstueck');
+  if (t && t.art === 'werkstueck') griffAssistent(t.id);
+  else if (werkstuecke.length === 1) griffAssistent(werkstuecke[0].id);
+  else status(werkstuecke.length ? 'Erst das Werkstück wählen – oder in der Teileliste „+ Greifpunkt“ darunter.' : 'Es gibt noch kein Werkstück.', true);
+};
+function griffFertig(g) { return !!g && g.anfahrt != null && (g.zylinder != null || (g.flaechen || []).length === 2); }
 function ircPunkte(f) { return irc ? irc.punkte.filter(f) : []; }
 function punktText2(p) { return p.mm.map(v => Math.round(v)).join(' / ') + ' mm' + (p.erreichbar ? '' : ' (nicht erreichbar)'); }
 function warnHtml(liste) { return liste.length ? '<div style="color:var(--pink)">' + liste.map(esc).join('<br>') + '</div>' : ''; }
 function griffFormular(t) {
   const g = t.griff || {};
-  $('g-flaechen').textContent = 'Greifflächen: ' + (g.zylinder != null ? 'rund (' + g.zylinder + ')'
-    : g.flaechen ? 'Flächen ' + g.flaechen.join(' und ') : '–');
-  $('g-anfahrt').textContent = 'Anfahrseite: ' + (g.anfahrt != null ? 'Fläche ' + g.anfahrt : '–');
+  const b = g.zylinder != null && datenVonId(t.id) ? datenVonId(t.id).teil.bohrungen.find(b => String(b.id) === String(g.zylinder)) : null;
+  $('g-flaechen').textContent = wahl === 'griff2' ? 'erste Fläche ' + griffErste + ' gewählt – jetzt die gegenüberliegende'
+    : g.zylinder != null ? 'runde Fläche' + (b ? ' Ø' + (+b.durchmesser).toFixed(1).replace('.', ',') + ' mm' : '')
+    : g.flaechen ? 'Flächen ' + g.flaechen.join(' und ') : '–';
+  $('g-anfahrt').textContent = g.anfahrt != null ? 'Fläche ' + g.anfahrt : '–';
+  const s1 = g.zylinder != null || (g.flaechen || []).length === 2, s2 = g.anfahrt != null;
+  $('gp-schritt1').classList.toggle('an', wahl === 'griff' || wahl === 'griff2'); $('gp-schritt1').classList.toggle('erledigt', s1);
+  $('gp-schritt2').classList.toggle('an', wahl === 'anfahrt'); $('gp-schritt2').classList.toggle('erledigt', s2);
+  $('gp-schritt3').classList.toggle('an', s1 && s2 && !wahl);
   feld('g-tiefe', g.tiefe_mm ?? ''); feld('g-vor', g.vor_mm ?? ''); feld('g-dreh', g.drehung_grad || 0); feld('g-name', g.name || '');
   $('g-dreh-zeile').hidden = g.zylinder == null;
   $('g-weg').hidden = !t.griff; $('g-ablage').disabled = !griffFertig(g);
   const eigene = ircPunkte(p => p.werkstueck === t.id && !p.magazin && p.name.endsWith('_greifen'));
-  $('g-hilfe').innerHTML = !t.griff ? 'Für die Punkte in iRC: Greifflächen und Anfahrseite anklicken (Lehrerbereich → Punkte für iRC).'
+  $('g-hilfe').innerHTML = !t.griff ? 'Greifflächen und Anfahrseite im Bild anklicken; die Punkte gibt es danach im Lehrerbereich unter „Punkte für iRC“.'
     : !griffFertig(g) ? 'Noch die Anfahrseite anklicken.'
     : ircFehler ? warnHtml([ircFehler])
     : eigene.map(p => 'Variable <code>' + esc(p.name) + '</code> (und <code>_vor</code>): ' + punktText2(p) + warnHtml(p.warnungen)).join('')
@@ -1347,7 +1477,7 @@ for (const [id, schluessel, zahl] of [['a-vor', 'vor_mm', true], ['a-name', 'nam
     merken(); punkteRechnenSpaeter();
   });
 }
-$('g-weg').onclick = () => { const t = teil(auswahl); delete t.griff; merken(); formularZeigen(); punkteRechnen(); };
+$('g-weg').onclick = () => { const t = teil(auswahl); delete t.griff; merken(); griffAssistentZu(); formularZeigen(); punkteRechnen(); };
 $('g-ablage').onclick = async () => {   // Abbild des Werkstuecks, gleich gestellt (gleicher Punkt am Teil); Zielstelle anklicken
   const w = teil(auswahl); if (!w) return;
   let n = 1;

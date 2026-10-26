@@ -346,11 +346,15 @@ Roboterumgebung ihn verwendet).
 Die Simulation rechnet die Positionen zum Greifen und Ablegen selbst aus und gibt sie als iRC-Unterprogramm mit
 Positionsvariablen aus – so lassen sich Programme schreiben, ohne jeden Punkt von Hand einzuteachen.
 
-1. **Greifpunkt** (Werkstück wählen, Abschnitt „Greifpunkt für iRC“): „anklicken“ und die zwei gegenüberliegenden
-   Greifflächen anklicken – bei einer **runden** Fläche genügt ein Klick, die Gegenseite ergibt sich. Danach die
-   **Anfahrseite** anklicken (ebene Fläche, von der der Greifer kommt; auch schräg oder seitlich). Tiefe (leer = Backen
-   möglichst ganz am Teil), Abstand der **Vorposition** (Standard 40 mm entlang der Werkzeugachse zurück) und bei runden
-   Teilen von oben die Drehung der Backen (0 = A6 dreht kaum) sind einstellbar.
+1. **Greifpunkt**: In der Teileleiste unter dem Werkstück „+ Greifpunkt“ (oder Werkzeugleiste „Greifpunkt“) öffnet den
+   Assistenten. **Schritt 1:** die zwei gegenüberliegenden Greifflächen anklicken – bei einer **runden** Fläche (z.B.
+   Zapfen) genügt ein Klick, die Gegenseite ergibt sich. Beim Überfahren leuchtet eine nutzbare Fläche grün, sonst grau
+   mit Grund. **Schritt 2:** die **Anfahrseite** (ebene Fläche, von der der Greifer kommt; auch schräg oder seitlich; beim
+   Zapfen von oben gibt sie nur die Richtung vor). **Schritt 3:** Tiefe (leer = Backen möglichst ganz am Teil, beim
+   Zapfen bis kurz vor den Absatz), Abstand der **Vorposition** (Standard 40 mm entlang der Werkzeugachse zurück), bei
+   runden Teilen von oben die Drehung der Backen (0 = A6 dreht kaum), Name der Variablen. Gewählte Greifflächen bleiben
+   grün, die Anfahrseite blau. Der Greifpunkt steht danach als Unterobjekt „Greifpunkt“ unter dem Werkstück, ebenso seine
+   Ablagen. Wird eine runde Fläche nicht erkannt, das Teil unter „Teile“ mit derselben STEP-Datei aktualisieren.
 2. **Ablage**: „+ Ablage“ setzt ein durchsichtiges Abbild des Werkstücks; dann die Zielstelle anklicken (z.B. den Boden
    einer Magazintasche). Die Ablage nutzt den Greifpunkt des Werkstücks. In der Webots-Welt erscheint sie nicht.
 3. **Magazin** (Baum „Magazine“ oder bei einer Ablage „Magazin …“): drei Ablagen als **A** (erste Tasche), **B** (letzte
