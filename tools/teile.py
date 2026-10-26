@@ -181,11 +181,12 @@ def _zylinder_probe(gmsh, tag, punkte):
         return None
     mitte = [u[k] * cx + v[k] * cy for k in range(3)]   # Achspunkt bei Achskoordinate 0
     # Punkte auf den Randkanten dazu: kurze Zylinder haben sonst zu wenige Netzpunkte,
-    # um zu erkennen, ob sie rundherum gehen
+    # um zu erkennen, ob sie rundherum gehen (72 Punkte: ein voller Randkreis trifft sicher alle 10-Grad-Abschnitte,
+    # mit 24 fehlten bei kleinen Bohrungen je nach Netz einzelne Abschnitte)
     punkte = list(punkte)
     for _dim, kante in gmsh.model.getBoundary([(2, tag)], oriented=False):
         k0, k1 = gmsh.model.getParametrizationBounds(1, abs(kante))
-        ts = [k0[0] + (k1[0] - k0[0]) * i / 23 for i in range(24)]
+        ts = [k0[0] + (k1[0] - k0[0]) * i / 71 for i in range(72)]
         werte = gmsh.model.getValue(1, abs(kante), ts)
         punkte += [werte[3 * i:3 * i + 3] for i in range(len(ts))]
     werte = gmsh.model.getValue(2, tag, params[:2])
