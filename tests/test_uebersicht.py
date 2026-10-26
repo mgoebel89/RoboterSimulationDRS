@@ -252,5 +252,119 @@ class TestDurchleitung(Grundlage):
         fehler.exception.close()
 
 
+@unittest.skipUnless(__import__("shutil").which("openssl"), "openssl fehlt (fuer das Testzertifikat)")
+class TestHttps(Grundlage):
+    """Lehrerbereich mit HTTPS: ueber http nur die Umstiegsseite, Anmeldung und Cookie nur verschluesselt,
+    die 3D-Ansicht (WebSocket) laeuft auch ueber TLS. Anfragen kommen scheinbar von einem PC im Netz."""
+
+    PC = "10.1.2.3"
+
+    def setUp(self):
+        import socket
+        import ssl
+        import subprocess
+        super().setUp()
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import lehrer
+        self.lehrer = lehrer
+        self.tls = os.path.join(self.tmp.name, "tls")
+        os.makedirs(self.tls)
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
+                        "-keyout", os.path.join(self.tls, "server.key"), "-out", os.path.join(self.tls, "server.crt"),
+                        "-days", "2", "-subj", "/CN=test", "-addext", "subjectAltName=IP:127.0.0.1"],
+                       check=True, capture_output=True)
+        with open(os.path.join(self.tls, "server.crt"), "rb") as f, open(os.path.join(self.tls, "ca.crt"), "wb") as g:
+            g.write(f.read())   # selbstsigniert: das Zertifikat ist zugleich seine "CA"
+        self.webots = FalschesWebots()
+        with open(os.path.join(self.konf, "07.env"), "w", encoding="utf-8") as f:
+            f.write("IRC_HOST=%s\nSTREAM_PORT=%d\n" % (self.PC, self.webots.port))
+        self.alt = (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.ZUSTAND_DIR, uebersicht.TLS_DIR,
+                    uebersicht.TLS_AKTIV, uebersicht.Handler._pc)
+        uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR = self.konf, self.stat
+        uebersicht.ZUSTAND_DIR = os.path.join(self.tmp.name, "lib")
+        uebersicht.TLS_DIR, uebersicht.TLS_AKTIV = self.tls, True
+        uebersicht.Handler._pc = lambda _self: self.PC
+        lehrer.benutzer_anlegen(uebersicht.ZUSTAND_DIR, "goebel", "", "admin", "geheim123", muss_aendern=False)
+        self.http = uebersicht.ThreadingHTTPServer(("127.0.0.1", 0), uebersicht.Handler)
+        self.https = uebersicht.TLSServer(("127.0.0.1", 0), uebersicht.Handler, uebersicht.tls_kontext(self.tls))
+        for s in (self.http, self.https):
+            threading.Thread(target=s.serve_forever, daemon=True).start()
+        self.kontext = ssl.create_default_context(cafile=os.path.join(self.tls, "ca.crt"))
+        self.socket = socket
+
+    def tearDown(self):
+        for s in (self.http, self.https):
+            s.shutdown()
+            s.server_close()
+        self.webots.schliessen()
+        (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.ZUSTAND_DIR, uebersicht.TLS_DIR,
+         uebersicht.TLS_AKTIV, uebersicht.Handler._pc) = self.alt
+        super().tearDown()
+
+    def anfrage(self, verschluesselt, methode, pfad, daten=None, cookie=None):
+        import http.client
+        port = (self.https if verschluesselt else self.http).server_address[1]
+        c = (http.client.HTTPSConnection("127.0.0.1", port, timeout=5, context=self.kontext) if verschluesselt
+             else http.client.HTTPConnection("127.0.0.1", port, timeout=5))
+        kopf = {"Content-Type": "application/json", "X-Lehrer": "1"}
+        if cookie:
+            kopf["Cookie"] = cookie
+        c.request(methode, pfad, body=json.dumps(daten).encode() if daten is not None else None, headers=kopf)
+        r = c.getresponse()
+        antwort = (r.status, r.read(), r.getheader("Set-Cookie"))
+        c.close()
+        return antwort
+
+    def test_http_nur_umstieg_und_zertifikat(self):
+        status, seite, _ = self.anfrage(False, "GET", "/lehrer")
+        self.assertEqual(status, 200)
+        self.assertIn("Verschlüsselte Verbindung", seite.decode())
+        self.assertIn(uebersicht.ca_fingerabdruck(self.tls), seite.decode())
+        self.assertNotIn("%%", seite.decode())
+        for methode, pfad in (("GET", "/api/lehrer/ich"), ("GET", "/status.json"), ("POST", "/lehrer/anmelden"),
+                              ("POST", "/api/lehrer/alle_beenden")):
+            status, text, cookie = self.anfrage(False, methode, pfad, {"name": "goebel", "passwort": "geheim123"})
+            self.assertEqual(status, 403, pfad)
+            self.assertIn("https", text.decode(), pfad)
+            self.assertIsNone(cookie)
+        with open(os.path.join(self.tls, "ca.crt"), "rb") as f:
+            self.assertEqual(self.anfrage(False, "GET", "/ca.crt")[1], f.read())
+        status, seite, _ = self.anfrage(False, "GET", "/")   # Schuelerseite bleibt bei http
+        self.assertEqual(status, 200)
+        self.assertNotIn("Verschlüsselte Verbindung", seite.decode())
+
+    def test_anmelden_ueber_https(self):
+        self.assertEqual(self.anfrage(True, "GET", "/tls-test")[0], 200)
+        status, _text, cookie = self.anfrage(True, "POST", "/lehrer/anmelden", {"name": "goebel", "passwort": "geheim123"})
+        self.assertEqual(status, 200)
+        self.assertIn("; Secure", cookie)
+        status, ich, _ = self.anfrage(True, "GET", "/api/lehrer/ich", cookie=cookie.split(";", 1)[0])
+        self.assertEqual((status, json.loads(ich)["name"]), (200, "goebel"))
+
+    def test_websocket_ueber_https(self):
+        roh = self.socket.create_connection(("127.0.0.1", self.https.server_address[1]), timeout=5)
+        s = self.kontext.wrap_socket(roh, server_hostname="127.0.0.1")
+        s.sendall(b"GET /sim/07/ HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                  b"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: abc\r\n\r\n")
+        antwort = b""
+        while b"\r\n\r\n" not in antwort:
+            antwort += s.recv(4096)
+        self.assertTrue(antwort.startswith(b"HTTP/1.1 101"), antwort)
+        puffer = antwort.split(b"\r\n\r\n", 1)[1]
+        for text in ("w3d;broadcast", "pause", "x" * 70000):   # grosse Nachricht: ueber mehrere TLS-Pakete
+            s.sendall(uebersicht.baue_rahmen(text))
+        texte = []
+        while len(texte) < 3:
+            puffer += s.recv(65536)
+            while True:
+                r = uebersicht.zerlege_rahmen(puffer)
+                if r is None:
+                    break
+                puffer = puffer[len(r[0]):]
+                texte.append(r[3].decode())
+        s.close()
+        self.assertEqual(texte, ["w3d;broadcast", "real-time:-1", "x" * 70000])
+
+
 if __name__ == "__main__":
     unittest.main()

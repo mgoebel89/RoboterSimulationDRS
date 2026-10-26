@@ -1,0 +1,14 @@
+# Firewall der ReBeL-Simulation (Regeln: /etc/rebel-sim/firewall.nft). Abschalten: systemctl disable --now rebel-sim-firewall
+[Unit]
+Description=ReBeL-Simulation Firewall (von aussen nur Webseite und SSH)
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/rebel-sim/firewall.nft
+ExecStop=/usr/sbin/nft delete table inet rebel_sim
+
+[Install]
+WantedBy=multi-user.target

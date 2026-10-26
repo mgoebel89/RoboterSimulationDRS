@@ -4,6 +4,8 @@
 *.sh text eol=lf
 *.py text eol=lf
 *.service text eol=lf
+*.timer text eol=lf
+*.nft text eol=lf
 *.tmpfiles text eol=lf
 *.proto text eol=lf
 *.wbt text eol=lf

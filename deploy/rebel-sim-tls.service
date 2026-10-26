@@ -1,0 +1,7 @@
+# Zertifikat fuer HTTPS pruefen und bei Bedarf erneuern (laeuft per rebel-sim-tls.timer jede Woche)
+[Unit]
+Description=ReBeL-Simulation HTTPS-Zertifikat erneuern
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rebel-sim-tls --neustart

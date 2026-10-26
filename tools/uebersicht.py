@@ -30,11 +30,14 @@ deploy/platz.sh), der Zustand aus den Statusdateien der Controller in
 /run/rebel-sim. Nur Python-Standardbibliothek.
 """
 
+import hashlib
 import html
 import json
 import os
 import re
+import selectors
 import socket
+import ssl
 import subprocess
 import sys
 import threading
@@ -56,6 +59,10 @@ TEILE_DIR = os.environ.get("TEILE_DIR", os.path.join(os.path.dirname(os.path.abs
 WELT_NAME = re.compile(r"[a-z0-9_-]{1,50}")
 TEIL_NAME = re.compile(r"[a-z0-9_-]{1,60}")
 PORT = int(os.environ.get("UEBERSICHT_PORT", "80"))
+# HTTPS fuer den Lehrerbereich (Zertifikat von tools/tls_zertifikat.sh); ohne Zertifikat bleibt alles bei http
+TLS_DIR = os.environ.get("TLS_DIR", "/var/lib/rebel-sim/tls")
+TLS_PORT = int(os.environ.get("TLS_PORT", "443"))
+TLS_AKTIV = False   # setzt main(), wenn der HTTPS-Server laeuft
 WEBOTS_VIEW_JS = os.environ.get("WEBOTS_VIEW_JS", "https://cyberbotics.com/wwi/R2025a/WebotsView.js")
 STREAM_HOST = os.environ.get("STREAM_HOST", "127.0.0.1")
 VERALTET_NACH_S = 5.0
@@ -346,6 +353,81 @@ document.getElementById('form').onsubmit = async ev => {
   else { document.getElementById('fehler').textContent = d.fehler || 'Anmeldung fehlgeschlagen.'; document.getElementById('passwort').select(); }
 };
 </script></body></html>"""
+
+# Lehrerseite ueber http aufgerufen: kennt der PC das Zertifikat schon, geht es gleich weiter zu https;
+# sonst eine kurze Anleitung zum einmaligen Installieren des Stammzertifikats
+UMSTIEG = """<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ReBeL - Lehrerbereich</title><style>%%STIL%%
+.umstieg { max-width:640px; margin:56px auto; background:var(--karte); border-radius:var(--ecke) 8px 8px 8px; padding:26px 30px;
+  border:1px solid var(--linie); box-shadow:var(--schatten-2); }
+.umstieg h1 { margin:0 0 10px; font-size:1.35em; display:flex; align-items:center; }
+.umstieg li { margin:7px 0; } .umstieg code { word-break:break-all; }
+</style></head>
+<body><header>%%MARKE%% <span class="unter">Lehrerbereich</span></header>
+<div class="umstieg">
+  <h1>%%DREIECK%%Verschlüsselte Verbindung</h1>
+  <p id="pruefe">Der Lehrerbereich läuft verschlüsselt (https), damit Passwörter nicht mitgelesen werden können. Einen Moment …</p>
+  <div id="anleitung" hidden>
+    <p>Dieser PC kennt das Zertifikat der Simulation noch nicht. Einmal je PC (bzw. Windows-Benutzer):</p>
+    <ol>
+      <li><a href="/ca.crt" download="ReBeL-Simulation-CA.crt">Stammzertifikat herunterladen</a> und öffnen.</li>
+      <li>Unter „Details“ prüfen, dass der Fingerabdruck stimmt: <code>%%FINGERABDRUCK%%</code></li>
+      <li>„Zertifikat installieren …“ → „Aktueller Benutzer“ → „Alle Zertifikate in folgendem Speicher speichern“ →
+        „Vertrauenswürdige Stammzertifizierungsstellen“ → Fertigstellen, die Sicherheitswarnung mit „Ja“ bestätigen.</li>
+      <li>Den Browser ganz schließen und neu öffnen. Edge und Chrome nutzen den Windows-Speicher; Firefox: Einstellungen →
+        Datenschutz &amp; Sicherheit → Zertifikate anzeigen → Zertifizierungsstellen → Importieren.</li>
+    </ol>
+    <p class="leise">Diese Zertifizierungsstelle gehört nur zu dieser Simulation (%%NAME%%): Sie darf ausschließlich
+      Zertifikate für deren Adresse ausstellen, nicht für andere Webseiten.</p>
+    <p><a class="btn" id="weiter" href="#">Weiter zum Lehrerbereich (https)</a></p>
+  </div>
+</div>
+<script>
+const basis = 'https://' + location.hostname + '%%TLS_PORT%%';
+const ziel = basis + location.pathname + location.search + location.hash;
+document.getElementById('weiter').href = ziel;
+const abbruch = new AbortController();
+setTimeout(() => abbruch.abort(), 3000);
+// gelingt nur, wenn der Browser dem Zertifikat schon vertraut
+fetch(basis + '/tls-test', {mode: 'no-cors', cache: 'no-store', signal: abbruch.signal})
+  .then(() => location.replace(ziel))
+  .catch(() => { document.getElementById('pruefe').hidden = true; document.getElementById('anleitung').hidden = false; });
+</script></body></html>"""
+
+
+def lehrer_pfad(pfad):
+    """Seiten und Schnittstellen der Lehrkraft: mit HTTPS nur noch verschluesselt (Passwort, Anmelde-Cookie)."""
+    return pfad in ("/lehrer", "/status.json") or pfad.startswith(("/lehrer/", "/api/lehrer/", "/platz/"))
+
+
+def tls_kontext(tls_dir=None):
+    """SSL-Kontext mit dem Zertifikat von tools/tls_zertifikat.sh, oder None, wenn es (noch) keins gibt."""
+    tls_dir = TLS_DIR if tls_dir is None else tls_dir
+    zertifikat, schluessel = os.path.join(tls_dir, "server.crt"), os.path.join(tls_dir, "server.key")
+    if not (os.path.exists(zertifikat) and os.path.exists(schluessel)):
+        return None
+    kontext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    kontext.minimum_version = ssl.TLSVersion.TLSv1_2
+    kontext.load_cert_chain(zertifikat, schluessel)
+    return kontext
+
+
+def ca_fingerabdruck(tls_dir=None):
+    """SHA-1-Fingerabdruck des Stammzertifikats, wie Windows ihn unter Details zeigt (AB:CD:...), oder None."""
+    try:
+        with open(os.path.join(TLS_DIR if tls_dir is None else tls_dir, "ca.crt"), encoding="ascii") as f:
+            der = ssl.PEM_cert_to_DER_cert(f.read())
+    except (OSError, ValueError):
+        return None
+    return ":".join("%02X" % b for b in hashlib.sha1(der).digest())
+
+
+def seite_umstieg():
+    return (seite(UMSTIEG).replace("%%FINGERABDRUCK%%", ca_fingerabdruck() or "?")
+            .replace("%%NAME%%", html.escape(socket.gethostname()))
+            .replace("%%TLS_PORT%%", "" if TLS_PORT == 443 else ":%d" % TLS_PORT))
+
 
 KEINE_BENUTZER = """<div class="leise">Es gibt noch kein Konto. Den ersten Admin legt man im Container an:
 <code>sudo -u rebelsim python3 /opt/rebel-sim/tools/lehrer.py admin &lt;name&gt;</code>, oder von einem Lehrer-PC aus
@@ -1714,54 +1796,65 @@ def zerlege_rahmen(puffer):
     return puffer[:pos + laenge], opcode, bool(fin), nutzlast
 
 
-def _pumpe_browser_zu_webots(browser, webots):
-    """Wie _pumpe, wertet aber die Text-Nachrichten aus:
+class BrowserRahmen:
+    """Wertet die WebSocket-Nachrichten Browser -> Webots aus:
     - Nach der Anmeldung ("w3d" / "w3d;broadcast") pausiert Webots die Simulation und
       wartet, dass der Viewer "real-time" schickt. Die Nur-Zuschauen-Ansicht tut das
       nie, also schicken wir es selbst - sonst bleibt die Simulation stehen.
     - Nur-Zuschauen-Ansichten duerfen keine Steuerbefehle schicken."""
-    puffer = b""
-    nur_zuschauen = False
+
+    def __init__(self):
+        self.puffer = b""
+        self.nur_zuschauen = False
+
+    def weiter(self, daten):
+        """Empfangene Bytes rein, Bytes fuer Webots raus (unvollstaendige Rahmen bleiben im Puffer)."""
+        self.puffer += daten
+        raus = []
+        while True:
+            rahmen = zerlege_rahmen(self.puffer)
+            if rahmen is None:
+                break
+            roh, opcode, fin, nutzlast = rahmen
+            self.puffer = self.puffer[len(roh):]
+            text = nutzlast.decode("utf-8", "replace") if opcode == 0x1 and fin else None
+            if text is not None and self.nur_zuschauen and text.startswith(STEUERBEFEHLE):
+                continue
+            raus.append(roh)
+            if text is not None and text.split(";")[0].split(":")[0].strip() in ("w3d", "mjpeg"):
+                self.nur_zuschauen = "broadcast" in text
+                raus.append(baue_rahmen("real-time:-1"))
+        return b"".join(raus)
+
+
+def verbinden(browser, webots, websocket):
+    """Leitet in beide Richtungen weiter, bis eine Seite schliesst - in EINEM Thread: eine TLS-Verbindung (https)
+    darf nicht aus zwei Threads gleichzeitig gelesen und beschrieben werden; ausserdem spart es einen Thread je Ansicht."""
+    rahmen = BrowserRahmen() if websocket else None
+    wahl = selectors.DefaultSelector()
+    wahl.register(browser, selectors.EVENT_READ, "browser")
+    wahl.register(webots, selectors.EVENT_READ, "webots")
     try:
         while True:
-            daten = browser.recv(65536)
-            if not daten:
-                break
-            puffer += daten
-            while True:
-                rahmen = zerlege_rahmen(puffer)
-                if rahmen is None:
-                    break
-                roh, opcode, fin, nutzlast = rahmen
-                puffer = puffer[len(roh):]
-                text = nutzlast.decode("utf-8", "replace") if opcode == 0x1 and fin else None
-                if text is not None and nur_zuschauen and text.startswith(STEUERBEFEHLE):
-                    continue
-                webots.sendall(roh)
-                if text is not None and text.split(";")[0].split(":")[0].strip() in ("w3d", "mjpeg"):
-                    nur_zuschauen = "broadcast" in text
-                    webots.sendall(baue_rahmen("real-time:-1"))
+            # TLS: schon entschluesselte Daten warten im Puffer, ohne dass der Socket lesbar ist
+            if isinstance(browser, ssl.SSLSocket) and browser.pending():
+                bereit = ["browser"]
+            else:
+                bereit = [schluessel.data for schluessel, _ in wahl.select()]
+            for wer in bereit:
+                quelle, ziel = (browser, webots) if wer == "browser" else (webots, browser)
+                daten = quelle.recv(65536)
+                if not daten:
+                    return
+                if wer == "browser" and rahmen is not None:
+                    daten = rahmen.weiter(daten)
+                if daten:
+                    ziel.sendall(daten)
     except OSError:
         pass
     finally:
+        wahl.close()
         for s in (browser, webots):
-            try:
-                s.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-
-
-def _pumpe(quelle, ziel):
-    try:
-        while True:
-            daten = quelle.recv(65536)
-            if not daten:
-                break
-            ziel.sendall(daten)
-    except OSError:
-        pass
-    finally:
-        for s in (quelle, ziel):
             try:
                 s.shutdown(socket.SHUT_RDWR)
             except OSError:
@@ -2652,11 +2745,8 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
         browser = self.connection
         browser.settimeout(None)
-        hin = threading.Thread(target=_pumpe_browser_zu_webots if websocket else _pumpe,
-                               args=(browser, webots), daemon=True)
-        hin.start()
-        _pumpe(webots, browser)
-        hin.join(timeout=2)
+        verbinden(browser, webots, websocket)
+        webots.close()
 
     def _json(self, code, daten, kopf=()):
         self._antwort(code, json.dumps(daten, ensure_ascii=False), "application/json; charset=utf-8", kopf)
@@ -2677,6 +2767,11 @@ class Handler(BaseHTTPRequestHandler):
     def _lehrer(self):
         return ist_lehrer(self._pc(), self._token())
 
+    def _nur_https(self, pfad):
+        """Lehrerseite ueber unverschluesseltes http, obwohl https laeuft? (Im Container selbst bleibt http erlaubt.)"""
+        return (TLS_AKTIV and not isinstance(self.connection, ssl.SSLSocket) and lehrer_pfad(pfad)
+                and self._pc() not in ("127.0.0.1", "::1"))
+
     def _wer(self):
         return wer(self._pc(), self._token())
 
@@ -2687,7 +2782,21 @@ class Handler(BaseHTTPRequestHandler):
         pfad, _, abfrage = self.path.partition("?")
         pc = self._pc()
         sim = re.fullmatch(r"/sim/(\d{1,2})(/.*)?", pfad)
-        if sim:
+        if self._nur_https(pfad):
+            if pfad.startswith(("/api/", "/status.json", "/lehrer/teil_vorschau.js")):
+                self._json(403, {"fehler": "Den Lehrerbereich bitte über https:// öffnen."})
+            else:
+                self._antwort(200, seite_umstieg())
+        elif pfad == "/ca.crt":   # Stammzertifikat fuer die Lehrer-PCs (oeffentlich, enthaelt nichts Geheimes)
+            try:
+                with open(os.path.join(TLS_DIR, "ca.crt"), "rb") as f:
+                    self._antwort(200, f.read(), "application/x-x509-ca-cert",
+                                  kopf=[("Content-Disposition", 'attachment; filename="ReBeL-Simulation-CA.crt"')])
+            except OSError:
+                self._text(404, "Kein Zertifikat (HTTPS ist nicht eingerichtet).")
+        elif pfad == "/tls-test":   # die Umstiegsseite prueft damit, ob der Browser dem Zertifikat vertraut
+            self._antwort(200, "ok", "text/plain; charset=utf-8")
+        elif sim:
             platz = self._platz(sim.group(1))
             if platz is None:
                 self._text(404, "Platz ist nicht angelegt.")
@@ -2868,6 +2977,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(413, {"fehler": "Anfrage zu gross."})
             return
         roh = self.rfile.read(laenge)   # immer ganz lesen, sonst bricht die Verbindung ab
+        if self._nur_https(pfad):   # Passwort und Anmelde-Cookie nie unverschluesselt
+            self._json(403, {"fehler": "Den Lehrerbereich bitte über https:// öffnen."})
+            return
         # nur JSON annehmen: ein fremdes Formular kann so keine Simulation starten oder beenden
         if not self.headers.get("Content-Type", "").startswith("application/json"):
             self._json(415, {"fehler": "Bitte als JSON senden."})
@@ -2894,8 +3006,7 @@ class Handler(BaseHTTPRequestHandler):
                     zusatz = self._lehrer_aktion(pfad.rsplit("/", 1)[1], daten) or {}
                     kopf = []
                     if self._neues_cookie:
-                        kopf.append(("Set-Cookie", "%s=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Strict"
-                                     % (COOKIE, self._neues_cookie, lehrer.SITZUNG_S)))
+                        kopf.append(self._cookie(self._neues_cookie))
                     self._json(200, dict({"ok": True}, **zusatz), kopf)
             elif pfad == "/api/starten":
                 platz = VERWALTER.starten(self._pc(), str(daten.get("welt", "")))
@@ -2921,8 +3032,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(409, {"fehler": str(fehler)})
 
     def _cookie(self, token):
-        return ("Set-Cookie", "%s=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Strict"
-                % (COOKIE, token, lehrer.SITZUNG_S if token else 0))
+        # mit HTTPS schickt der Browser das Cookie nur noch verschluesselt (Secure)
+        return ("Set-Cookie", "%s=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Strict%s"
+                % (COOKIE, token, lehrer.SITZUNG_S if token else 0, "; Secure" if TLS_AKTIV else ""))
 
     def _anmeldung(self, pfad, daten):
         pc = self._pc()
@@ -3101,6 +3213,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.close_connection = True
             self._json(code, {"fehler": fehler})
+        if self._nur_https(self.path.partition("?")[0]):
+            ablehnen(403, "Den Lehrerbereich bitte über https:// öffnen.")
+            return
         if ich is None or self.headers.get("X-Lehrer") != "1":
             ablehnen(403, "Nur für die Lehrkraft.")
             return
@@ -3203,7 +3318,54 @@ class Umleitung(BaseHTTPRequestHandler):
         pass
 
 
+class TLSServer(ThreadingHTTPServer):
+    """HTTPS mit denselben Seiten. Der TLS-Handschlag laeuft im Thread der Anfrage, nicht in der Annahmeschleife:
+    ein Client, der die Verbindung oeffnet und dann nichts schickt, haelt so niemanden auf."""
+
+    def __init__(self, adresse, handler, kontext):
+        super().__init__(adresse, handler)
+        self.kontext = kontext
+
+    def finish_request(self, request, client_address):
+        request.settimeout(Handler.timeout)
+        try:
+            tls = self.kontext.wrap_socket(request, server_side=True)
+        except (ssl.SSLError, OSError):   # z.B. Browser lehnt das Zertifikat ab (noch nicht installiert)
+            return
+        try:
+            self.RequestHandlerClass(tls, client_address, self)
+        finally:
+            try:
+                tls.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            tls.close()
+
+
+def https_starten():
+    """HTTPS-Server im Hintergrund, falls es ein Zertifikat gibt. Rueckgabe: Server oder None."""
+    global TLS_AKTIV
+    try:
+        kontext = tls_kontext()
+    except (OSError, ssl.SSLError) as e:
+        print("HTTPS aus: Zertifikat nicht lesbar (%s)" % e, flush=True)
+        return None
+    if kontext is None:
+        print("HTTPS aus: kein Zertifikat in %s (tools/tls_zertifikat.sh)" % TLS_DIR, flush=True)
+        return None
+    try:
+        server = TLSServer(("0.0.0.0", TLS_PORT), Handler, kontext)
+    except OSError as e:
+        print("HTTPS auf Port %d geht nicht: %s" % (TLS_PORT, e), flush=True)
+        return None
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    TLS_AKTIV = True
+    print("HTTPS auf Port %d (Lehrerbereich nur noch verschluesselt)" % TLS_PORT, flush=True)
+    return server
+
+
 def main():
+    https_starten()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print("Uebersicht auf Port %d (Konfiguration %s, Status %s, Welten %s)"
           % (PORT, KONFIG_DIR, STATUS_DIR, os.path.abspath(WELTEN_DIR)), flush=True)

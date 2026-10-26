@@ -23,7 +23,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 schritt "Pakete (Xvfb, Python, gmsh, gRPC, Git)"
 apt-get update -q
-apt-get install -y -q git curl ca-certificates sudo rsync xvfb tzdata \
+apt-get install -y -q git curl ca-certificates sudo rsync xvfb tzdata openssl nftables \
   python3 python3-gmsh python3-grpcio >/dev/null
 timedatectl set-timezone Europe/Berlin 2>/dev/null || ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
 
@@ -104,6 +104,7 @@ fi
 schritt "Neustart der Webseite"
 systemctl restart rebel-sim-web
 ip=$(hostname -I | awk '{print $1}')
-gruen "Fertig. Startseite fuer Schueler und Lehrkraefte: http://$ip"
+gruen "Fertig. Startseite fuer Schueler: http://$ip   Lehrerbereich (verschluesselt): https://$ip/lehrer"
+echo "Lehrer-PCs installieren einmal das Stammzertifikat http://$ip/ca.crt (die Lehrerseite fuehrt dorthin)."
 [ -s /var/lib/rebel-sim/benutzer.json ] || gelb "Noch kein Lehrerkonto: rebel-sim-admin <name>   (fragt nach dem Passwort)"
 echo "Laufende Simulationen nutzen neuen Programmcode erst nach 'Neu starten'."

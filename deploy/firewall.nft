@@ -1,0 +1,19 @@
+#!/usr/sbin/nft -f
+# ReBeL-Simulation: Firewall im Container (install.sh legt sie als /etc/rebel-sim/firewall.nft ab,
+# rebel-sim-firewall.service laedt sie beim Start).
+# Von aussen nur die Webseite (80, 443, 8080 = alte Adresse) und SSH. Die Webots-Streams (Port 1240 + Platz) sind
+# nur noch ueber die Uebersichtsseite im Container erreichbar, die prueft, wer welche Simulation sehen darf.
+# Ausgehende Verbindungen (iRC am Schueler-PC, App-Schnittstelle, SPS) und ihre Antworten bleiben frei.
+# Eigene Tabelle: andere Regeln im Container (z.B. /etc/nftables.conf) bleiben unberuehrt.
+table inet rebel_sim
+delete table inet rebel_sim
+table inet rebel_sim {
+	chain eingang {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state established,related accept
+		ct state invalid drop
+		meta l4proto { icmp, ipv6-icmp } accept
+		tcp dport { 22, 80, 443, 8080 } accept
+	}
+}
