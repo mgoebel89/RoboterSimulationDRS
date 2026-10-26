@@ -6,7 +6,8 @@ Ein Entwurf (worlds/<welt>.baukasten.json) beschreibt eine Welt:
               "farbe": [r, g, b], "masse_kg": 0.05,
               "verbindung": {"punkt": <Punkt am Teil>, "an": "tisch" | "roboterfuss" | <id>,
                              "an_punkt": <Punkt am Gegenstueck>,
-                             "versatz_mm": [x, y, z], "drehung_grad": 0, "umdrehen": false}}]}
+                             "versatz_mm": [x, y, z], "drehung_grad": 0, "kippen_grad": [0, 0],
+                             "umdrehen": false}}]}
 
 Punkte: {"art": "flaeche", "id": 12}, {"art": "bohrung", "id": 5, "ende": 0},
         {"art": "kante", "id": 7, "flaeche": 12}, {"art": "ecke", "id": 3, "flaeche": 12}
@@ -17,7 +18,8 @@ Jeder Punkt ist ein Koordinatensystem: z zeigt aus der Flaeche heraus (bei Bohru
 Achse aus der Oeffnung), bei Kanten und Ecken zeigen x/y entlang der Kanten in die Flaeche hinein.
 Eine Verbindung legt die beiden Punkte aufeinander, die z-Achsen gegeneinander (Flaeche auf Flaeche),
 und verschiebt bzw. dreht dann im Punkt des Gegenstuecks: versatz x/y in der Flaeche (bei Kanten und
-Ecken = Abstand von der Kante), z = Abstand von der Flaeche, drehung um z. "umdrehen": z gleichsinnig.
+Ecken = Abstand von der Kante), z = Abstand von der Flaeche, drehung um z, danach "kippen_grad" um x und um y
+(z.B. ein Teil auf die Seite legen). "umdrehen": z gleichsinnig.
 
 Alle Masse in mm wie in iRC; Ursprung = Roboterfuss, Tischplatte bei z = 0.
 Nur Python-Standardbibliothek, laeuft auch ohne gmsh.
@@ -114,6 +116,16 @@ def _t(a):
 def _rot_z(grad):
     c, s = math.cos(math.radians(grad)), math.sin(math.radians(grad))
     return [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
+
+
+def _rot_x(grad):
+    c, s = math.cos(math.radians(grad)), math.sin(math.radians(grad))
+    return [[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]]
+
+
+def _rot_y(grad):
+    c, s = math.cos(math.radians(grad)), math.sin(math.radians(grad))
+    return [[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]]
 
 
 def _rot_180(achse):
@@ -793,6 +805,10 @@ def pruefe_entwurf(entwurf):
             raise BaukastenFehler("%s: versatz_mm braucht drei Zahlen." % t["id"])
         if not isinstance(v.get("drehung_grad", 0), (int, float)):
             raise BaukastenFehler("%s: drehung_grad ist eine Zahl." % t["id"])
+        kippen = v.get("kippen_grad", [0, 0])
+        if not isinstance(kippen, list) or len(kippen) != 2 or not all(
+                isinstance(x, (int, float)) and not isinstance(x, bool) for x in kippen):
+            raise BaukastenFehler("%s: kippen_grad braucht zwei Zahlen (um x und um y)." % t["id"])
 
 
 def loese(entwurf, merkmale_von):
@@ -835,7 +851,8 @@ def loese(entwurf, merkmale_von):
         ziel = ziel_welt.mal(punkt_lage(ziel_merkmale, an_punkt))
         teil_punkt = punkt_lage(merkmale(t), v.get("punkt") or {})
         versatz = Lage(None, [float(x) for x in v.get("versatz_mm", [0, 0, 0])])
-        drehung = Lage(_rot_z(float(v.get("drehung_grad", 0))))
+        kx, ky = (float(x) for x in v.get("kippen_grad", [0, 0]))
+        drehung = Lage(_mm(_mm(_rot_z(float(v.get("drehung_grad", 0))), _rot_x(kx)), _rot_y(ky)))
         klapp = Lage() if v.get("umdrehen") else Lage(_umklappen((v.get("punkt") or {}).get("art"), an_punkt.get("art")))
         lagen[ident] = ziel.mal(versatz).mal(drehung).mal(klapp).mal(teil_punkt.invers())
         in_arbeit.discard(ident)

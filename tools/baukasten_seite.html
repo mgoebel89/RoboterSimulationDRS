@@ -273,7 +273,11 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
       </div>
       <div class="zeile"><label>Drehung (°) <input id="v-dreh" type="number" step="15" value="0" style="width:80px"></label>
         <button id="dreh-minus" title="−90°">↺ 90°</button><button id="dreh-plus" title="+90°">↻ 90°</button></div>
-      <label class="zeile"><input id="v-um" type="checkbox"> umdrehen</label>
+      <div class="zeile"><label>Kippen X (°) <input id="v-kx" type="number" step="15" value="0" style="width:70px"></label>
+        <button id="kx-plus" title="um die rote Achse kippen">+90°</button>
+        <label>Y (°) <input id="v-ky" type="number" step="15" value="0" style="width:70px"></label>
+        <button id="ky-plus" title="um die grüne Achse kippen">+90°</button></div>
+      <label class="zeile"><input id="v-um" type="checkbox"> umdrehen (auf den Kopf)</label>
       <div class="hilfe" id="e-lage"></div>
     </div>
     <div class="abschnitt"><div class="zeile"><button id="e-loesen">Verbindung lösen</button>
@@ -1043,6 +1047,7 @@ window.addEventListener('keydown', ev => { if (ev.key === 'Escape' && wahl) { wa
 // Kamera: auf ein Teil zoomen (Blickrichtung bleibt) oder den ganzen Tisch zeigen
 function blickAuf(id) {
   const g = id && objekte[id]; if (!g) return;
+  g.updateMatrixWorld(true);   // gerade erst platziert: sonst gilt noch die alte Lage
   const box = new THREE.Box3().setFromObject(g.userData.mesh), mitte = box.getCenter(new THREE.Vector3());
   const abstand = Math.max(120, box.getSize(new THREE.Vector3()).length() * 2.2);
   const richtung = kamera.position.clone().sub(steuerung.target).normalize();
@@ -1106,6 +1111,8 @@ function formularZeigen() {
   const vs = v.versatz_mm || [0, 0, 0];
   feld('v-x', vs[0]); feld('v-y', vs[1]); feld('v-z', vs[2]);
   feld('v-dreh', v.drehung_grad || 0); $('v-um').checked = !!v.umdrehen;
+  const kipp = v.kippen_grad || [0, 0];
+  feld('v-kx', kipp[0]); feld('v-ky', kipp[1]);
   $('versatz-hilfe').textContent = VERSATZ_HILFE[(v.an_punkt || {}).art] || 'Erst Punkt am Teil und Gegenstück anklicken.';
   const l = lagen[t.id];
   $('e-lage').textContent = l ? 'Lage des CAD-Ursprungs: x ' + l.ursprung_mm.map(v => v.toFixed(1)).join(', ') + ' mm (iRC)'
@@ -1139,9 +1146,13 @@ function verbindungAusFormular() {
   t.verbindung.versatz_mm = ['v-x', 'v-y', 'v-z'].map(i => Number($(i).value) || 0);
   t.verbindung.drehung_grad = Number($('v-dreh').value) || 0;
   t.verbindung.umdrehen = $('v-um').checked;
+  const kipp = ['v-kx', 'v-ky'].map(i => Number($(i).value) || 0);
+  if (kipp[0] || kipp[1]) t.verbindung.kippen_grad = kipp; else delete t.verbindung.kippen_grad;
   rechnenSpaeter();
 }
-['v-x', 'v-y', 'v-z', 'v-dreh', 'v-um'].forEach(i => $(i).addEventListener('input', verbindungAusFormular));
+['v-x', 'v-y', 'v-z', 'v-dreh', 'v-kx', 'v-ky', 'v-um'].forEach(i => $(i).addEventListener('input', verbindungAusFormular));
+$('kx-plus').onclick = () => { $('v-kx').value = ((Number($('v-kx').value) || 0) + 90) % 360; verbindungAusFormular(); };
+$('ky-plus').onclick = () => { $('v-ky').value = ((Number($('v-ky').value) || 0) + 90) % 360; verbindungAusFormular(); };
 $('dreh-minus').onclick = () => { $('v-dreh').value = ((Number($('v-dreh').value) || 0) - 90 + 360) % 360; verbindungAusFormular(); };
 $('dreh-plus').onclick = () => { $('v-dreh').value = ((Number($('v-dreh').value) || 0) + 90) % 360; verbindungAusFormular(); };
 $('e-art').onchange = () => { const t = teil(auswahl); t.art = $('e-art').value; delete t.farbe; formularZeigen(); lagenAnwenden(); };
@@ -1389,8 +1400,9 @@ $('ni-ok').onclick = async () => {
   }
   entwurf.teile.push(t); merken();
   await objektBauen(t);
-  waehlen(halter ? halter.id : t.id); await rechnen(); wahlStarten('ziel');
-  status(halter ? 'Jetzt die Nut anklicken, in der der Halter sitzt (Versatz X = Lage entlang der Nut, Drehung 180° am Halter: Sensor schaut in die Gegenrichtung).'
+  waehlen(halter ? halter.id : t.id); await rechnen(); if (halter) blickAuf(halter.id); wahlStarten('ziel');
+  status(halter ? 'Halter mit Sensor steht auf ' + punktText('tisch', halter.verbindung.an_punkt) + '. Andere Nut anklicken oder Versatz X '
+                  + '(entlang der Nut) ändern; Drehung 180° am Halter: Sensor schaut in die Gegenrichtung.'
                 : 'Jetzt das Gegenstück anklicken (Tisch, Nut, Fläche oder Bohrung eines Teils).');
 };
 // Halter fuer Naeherungssensoren (cad/halter, tools/halter_naeherung.py): Unterseite = die nach unten zeigende Flaeche
@@ -1409,8 +1421,13 @@ async function halterAnlegen(bauform, richtung, sensor) {
   const name = halterName(bauform, richtung), m = await halterMerkmale(name);
   let n = 1;
   while (teil('halter_' + sensor.id + (n > 1 ? '_' + n : ''))) n++;
+  // gleich auf den Tisch, damit Halter und Sensor zusammen zu sehen sind: Profiltisch = Mitte der Nut, die gut 250 mm
+  // vor dem Roboterfuss liegt, sonst 250 mm vor dem Fuss auf der Platte; eine andere Nut klickt man danach an
+  const nuten = TISCH.kanten.filter(k => /^nut-\d+$/.test(k.id)).sort((a, b) => Math.abs(a.a[0] - 250) - Math.abs(b.a[0] - 250));
+  const an_punkt = nuten.length ? {art: 'kante', id: nuten[0].id, flaeche: 'oben'} : {art: 'flaeche', id: 'oben'};
+  const versatz = nuten.length ? [0, 0, 0] : [250 - TISCH.mitte[0], -TISCH.mitte[1], 0];
   const h = {id: 'halter_' + sensor.id + (n > 1 ? '_' + n : ''), teil: name, art: 'aufbau',
-             verbindung: {punkt: {art: 'flaeche', id: m.unten}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+             verbindung: {punkt: {art: 'flaeche', id: m.unten}, an: 'tisch', an_punkt, versatz_mm: versatz, drehung_grad: 0}};
   entwurf.teile.push(h);
   await objektBauen(h);
   // Sensor mit dem Kabelende 20 mm durch die Wand gesteckt, aktive Flaeche zeigt vom Halter weg

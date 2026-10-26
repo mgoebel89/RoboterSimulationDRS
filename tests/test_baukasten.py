@@ -117,6 +117,20 @@ class TestVerbindungen(unittest.TestCase):
         v["verbindung"]["umdrehen"] = True   # Oberseite zeigt mit dem Tisch nach oben: Teil haengt unter der Platte
         self.assertEqual(huelle(self.loese(v)["a"], TEILE["wuerfel"]), [240, -10, -20, 260, 10, 0])
 
+    def test_kippen(self):
+        # um x bzw. y des Gegenstuecks (im Verbindungspunkt, nach der Drehung um z): Wuerfel auf die Seite gelegt
+        v = teil("a", "wuerfel", UNTEN, "tisch", TISCH)
+        v["verbindung"]["kippen_grad"] = [90, 0]
+        self.assertEqual(huelle(self.loese(v)["a"], TEILE["wuerfel"]), [240, -20, -10, 260, 0, 10])
+        v["verbindung"]["kippen_grad"] = [0, 90]
+        self.assertEqual(huelle(self.loese(v)["a"], TEILE["wuerfel"]), [250, -10, -10, 270, 10, 10])
+        v["verbindung"].update(kippen_grad=[90, 0], drehung_grad=90)   # Drehung zuerst: gekippt wird um Welt-y
+        self.assertEqual(huelle(self.loese(v)["a"], TEILE["wuerfel"]), [250, -10, -10, 270, 10, 10])
+        for falsch in ([90], [0, "90"], 90, [True, 0]):
+            v["verbindung"]["kippen_grad"] = falsch
+            with self.assertRaises(bk.BaukastenFehler, msg=falsch):
+                self.loese(v)
+
     def test_fehler(self):
         faelle = [
             entwurf(teil("a", "wuerfel", UNTEN, "b", UNTEN), teil("b", "wuerfel", UNTEN, "a", UNTEN)),   # Schleife
