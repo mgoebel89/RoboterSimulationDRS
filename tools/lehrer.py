@@ -30,7 +30,8 @@ ZUSTAND_DIR = os.environ.get("ZUSTAND_DIR", "/var/lib/rebel-sim")
 SITZUNG_S = 8 * 3600
 ITERATIONEN = 200_000
 FEHLVERSUCHE = 5          # danach ist die Anmeldung von diesem PC eine Weile gesperrt
-SPERRE_S = 60
+SPERRE_S = 60             # jede weitere Sperre doppelt so lang ...
+SPERRE_MAX_S = 15 * 60    # ... aber hoechstens so lang
 UHRZEIT = re.compile(r"([01]?\d|2[0-3]):[0-5]\d")
 MAX_DATEI = 20 * 1024 * 1024
 # Dateiart am Inhalt erkennen, nicht an Namen oder Content-Type
@@ -227,51 +228,93 @@ def sitzung_pruefen(zustand_dir, token, jetzt=None):
             return None
         if not hmac.compare_digest(signatur, _signatur(daten["geheimnis"], "%s.%s.%s" % (name, ablauf, stand))):
             return None
+        if signatur in daten.get("abgemeldet", {}):
+            return None
     except ValueError:
         return None
     return _oeffentlich(name, b)
 
 
+def abmelden(zustand_dir, token, jetzt=None):
+    """Diese Anmeldung beenden, auch wenn jemand das Cookie kopiert hat (andere Anmeldungen bleiben).
+    Gemerkt wird nur die Signatur, bis die Anmeldung ohnehin abgelaufen waere. Rueckgabe: Benutzername oder None."""
+    benutzer = sitzung_pruefen(zustand_dir, token, jetzt)
+    if benutzer is None:
+        return None
+    _name, ablauf, _stand, signatur = token.split(".")
+    jetzt = time.time() if jetzt is None else jetzt
+    daten = _lade(zustand_dir)
+    abgemeldet = {s: a for s, a in daten.get("abgemeldet", {}).items() if a >= jetzt}
+    abgemeldet[signatur] = int(ablauf)
+    daten["abgemeldet"] = abgemeldet
+    _speichere(zustand_dir, daten)
+    return benutzer["name"]
+
+
 # --- Protokoll: wer hat wann was gemacht ---
+
+PROTOKOLL_MAX = 2 * 1024 * 1024   # dann wird protokoll.log zu protokoll.log.1 (eine alte Datei bleibt)
+
 
 def protokolliere(zustand_dir, wer, was, jetzt=None):
     os.makedirs(zustand_dir, exist_ok=True)
     zeit = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() if jetzt is None else jetzt))
     zeile = "%s\t%s\t%s\n" % (zeit, wer.replace("\t", " "), was.replace("\t", " ").replace("\n", " "))
-    with open(os.path.join(zustand_dir, "protokoll.log"), "a", encoding="utf-8") as f:
+    pfad = os.path.join(zustand_dir, "protokoll.log")
+    try:
+        if os.path.getsize(pfad) > PROTOKOLL_MAX:
+            os.replace(pfad, pfad + ".1")
+    except OSError:
+        pass
+    with open(pfad, "a", encoding="utf-8") as f:
         f.write(zeile)
 
 
 def lies_protokoll(zustand_dir, anzahl=200):
-    """Die letzten Eintraege, neueste zuerst: [{"zeit", "wer", "was"}]."""
+    """Die letzten Eintraege, neueste zuerst: [{"zeit", "wer", "was"}]. Liest nur das Ende der Datei."""
     try:
-        with open(os.path.join(zustand_dir, "protokoll.log"), encoding="utf-8") as f:
-            zeilen = f.readlines()[-anzahl:]
+        with open(os.path.join(zustand_dir, "protokoll.log"), "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 400 * anzahl))
+            zeilen = f.read().decode("utf-8", "replace").splitlines(True)
+            if f.tell() > 400 * anzahl:   # erste Zeile ist angeschnitten
+                zeilen = zeilen[1:]
+            zeilen = zeilen[-anzahl:]
     except OSError:
         return []
     eintraege = []
     for z in reversed(zeilen):
-        teile = z.rstrip("\n").split("\t")
+        teile = z.rstrip("\r\n").split("\t")
         if len(teile) == 3:
             eintraege.append({"zeit": teile[0], "wer": teile[1], "was": teile[2]})
     return eintraege
 
 
 class Sperre:
-    """Bremst Passwort-Raten: nach FEHLVERSUCHE Fehlern von einem PC SPERRE_S Pause."""
+    """Bremst Passwort-Raten: nach FEHLVERSUCHE Fehlern von einem PC SPERRE_S Pause, jede weitere Sperre doppelt so
+    lang (hoechstens SPERRE_MAX_S), bis eine Anmeldung von dort klappt."""
 
     def __init__(self, uhr=time.time):
         self.uhr = uhr
-        self.pcs = {}   # PC -> (Fehlversuche, gesperrt bis)
+        self.pcs = {}   # PC -> (Fehlversuche, gesperrt bis, Anzahl Sperren bisher)
 
     def wartezeit(self, pc):
-        _fehler, bis = self.pcs.get(pc, (0, 0.0))
+        bis = self.pcs.get(pc, (0, 0.0, 0))[1]
         return max(0.0, bis - self.uhr())
 
     def fehlversuch(self, pc):
-        fehler, _bis = self.pcs.get(pc, (0, 0.0))
+        """Zaehlt einen Fehlversuch. Rueckgabe: Dauer der jetzt beginnenden Sperre in s, sonst 0."""
+        fehler, _bis, stufe = self.pcs.get(pc, (0, 0.0, 0))
         fehler += 1
-        self.pcs[pc] = (0, self.uhr() + SPERRE_S) if fehler >= FEHLVERSUCHE else (fehler, 0.0)
+        if len(self.pcs) > 1000:   # alte Eintraege vergessen (nichts gesperrt, lange her)
+            jetzt = self.uhr()
+            self.pcs = {p: e for p, e in self.pcs.items() if e[1] > jetzt - SPERRE_MAX_S}
+        if fehler < FEHLVERSUCHE:
+            self.pcs[pc] = (fehler, 0.0, stufe)
+            return 0
+        dauer = min(SPERRE_MAX_S, SPERRE_S * 2 ** stufe)
+        self.pcs[pc] = (0, self.uhr() + dauer, stufe + 1)
+        return dauer
 
     def erfolg(self, pc):
         self.pcs.pop(pc, None)

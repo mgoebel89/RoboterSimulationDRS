@@ -75,11 +75,28 @@ class TestAmpel(Grundlage):
 
 
 class TestServer(Grundlage):
+    def test_dienste_aktiv_mit_einem_aufruf(self):
+        aufrufe = []
+
+        class Antwort:
+            stdout = "active\nfailed\n"
+
+        alt = uebersicht.subprocess.run
+        uebersicht.subprocess.run = lambda befehl, **_k: aufrufe.append(befehl) or Antwort()
+        try:
+            self.assertEqual(uebersicht.dienste_aktiv([{"platz": "01"}, {"platz": "07"}]), {"01": True, "07": False})
+            self.assertEqual(aufrufe, [["systemctl", "is-active", "rebel-sim@01", "rebel-sim@07"]])
+            self.assertEqual(uebersicht.dienste_aktiv([{"platz": "01"}]), {"01": False})   # Antwort passt nicht: aus
+            self.assertEqual(uebersicht.dienste_aktiv([]), {})
+        finally:
+            uebersicht.subprocess.run = alt
+
     def test_seiten_ueber_http(self):
         self.status("01")
-        alt = (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.dienst_aktiv)
+        alt = (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.dienst_aktiv, uebersicht.dienste_aktiv)
         uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR = self.konf, self.stat
         uebersicht.dienst_aktiv = lambda p: True
+        uebersicht.dienste_aktiv = lambda plaetze: {p["platz"]: True for p in plaetze}
         server = uebersicht.ThreadingHTTPServer(("127.0.0.1", 0), uebersicht.Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         basis = "http://127.0.0.1:%d" % server.server_address[1]
@@ -103,7 +120,7 @@ class TestServer(Grundlage):
         finally:
             server.shutdown()
             server.server_close()
-            uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.dienst_aktiv = alt
+            uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.dienst_aktiv, uebersicht.dienste_aktiv = alt
 
 
 class FalschesWebots:

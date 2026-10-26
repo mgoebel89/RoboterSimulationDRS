@@ -4,6 +4,6 @@
   "leerlauf_minuten": 15,
   "_ende_uhrzeiten": "Zu diesen Uhrzeiten werden alle Simulationen beendet (Stundenende), z.B. [\"09:30\", \"11:15\", \"13:00\"]",
   "ende_uhrzeiten": [],
-  "_lehrer_ips": "Diese PCs sehen die Lehrer-Uebersicht und alle Simulationen (bis zum Lehrerbereich mit PIN)",
+  "_lehrer_ips": "Diese PCs gelten ohne Anmeldung als Admin, aber nur solange es noch kein Konto gibt (zum Anlegen des ersten)",
   "lehrer_ips": []
 }

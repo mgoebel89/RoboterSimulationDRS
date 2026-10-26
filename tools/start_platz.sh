@@ -21,6 +21,8 @@ export STATUS_DIR="${STATUS_DIR:-/run/rebel-sim}"
 mkdir -p "$LOG_DIR" "$STATUS_DIR"
 
 echo "Platz $PLATZ: iRC $IRC_HOST (Ports $IRC_PORTS), Welt $WELT, Stream-Port $STREAM_PORT"
-exec xvfb-run --auto-servernum webots --stream --port="$STREAM_PORT" \
+# Kleiner unsichtbarer Bildschirm: Webots zeichnet nichts (--no-rendering), die 3D-Ansicht rechnet der Browser;
+# xvfb-run nimmt sonst 1280x1024, das kostet je Platz unnoetig Speicher
+exec xvfb-run --auto-servernum -s "-screen 0 640x480x24" webots --stream --port="$STREAM_PORT" \
      --batch --minimize --no-rendering --mode=realtime --stdout --stderr \
      "$BASIS/worlds/$WELT"

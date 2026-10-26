@@ -26,7 +26,7 @@ STANDARD = {
     "max_simulationen": 10,
     "leerlauf_minuten": 15,
     "ende_uhrzeiten": [],   # z.B. ["09:30", "11:15", "13:00"]
-    "lehrer_ips": [],       # gelten ohne Anmeldung als Admin (nur zum Einrichten, danach leeren)
+    "lehrer_ips": [],       # ohne Anmeldung Admin, nur solange es kein Konto gibt (Einrichten)
 }
 HELFER = os.environ.get("PLATZ_HELFER", "sudo -n /usr/local/sbin/rebel-sim-platz").split()
 WELT_DATEI = re.compile(r"[A-Za-z0-9_-]{1,60}\.wbt")

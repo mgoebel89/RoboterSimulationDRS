@@ -106,6 +106,33 @@ class TestBenutzer(unittest.TestCase):
         self.assertEqual(s.wartezeit("anderer"), 0)
         jetzt[0] += lehrer.SPERRE_S
         self.assertEqual(s.wartezeit("pc"), 0)
+        # jede weitere Sperre doppelt so lang, hoechstens SPERRE_MAX_S; eine gelungene Anmeldung setzt zurueck
+        for erwartet in (2 * lehrer.SPERRE_S, 4 * lehrer.SPERRE_S, 8 * lehrer.SPERRE_S, lehrer.SPERRE_MAX_S, lehrer.SPERRE_MAX_S):
+            dauern = [s.fehlversuch("pc") for _ in range(lehrer.FEHLVERSUCHE)]
+            self.assertEqual(dauern, [0] * (lehrer.FEHLVERSUCHE - 1) + [erwartet])
+            jetzt[0] += erwartet
+        s.erfolg("pc")
+        self.assertEqual([s.fehlversuch("pc") for _ in range(lehrer.FEHLVERSUCHE)][-1], lehrer.SPERRE_S)
+
+    def test_abmelden_beendet_nur_diese_anmeldung(self):
+        lehrer.benutzer_anlegen(self.d, "goebel", "", "admin", "geheim123", muss_aendern=False)
+        a, _b = lehrer.anmelden(self.d, "goebel", "geheim123", jetzt=1000)
+        b, _b = lehrer.anmelden(self.d, "goebel", "geheim123", jetzt=1001)   # zweiter PC
+        self.assertEqual(lehrer.abmelden(self.d, a, jetzt=1002), "goebel")
+        self.assertIsNone(lehrer.sitzung_pruefen(self.d, a, jetzt=1003))      # kopiertes Cookie hilft nicht mehr
+        self.assertEqual(lehrer.sitzung_pruefen(self.d, b, jetzt=1003)["name"], "goebel")
+        self.assertIsNone(lehrer.abmelden(self.d, "kaputt.1.1.x"))
+        # abgelaufene Eintraege werden beim naechsten Abmelden vergessen
+        lehrer.abmelden(self.d, b, jetzt=1000 + lehrer.SITZUNG_S + 0.5)
+        with open(os.path.join(self.d, "benutzer.json"), encoding="utf-8") as f:
+            self.assertEqual(list(json.load(f)["abgemeldet"]), [b.split(".")[3]])
+
+    def test_protokoll_nur_das_ende(self):
+        for i in range(500):
+            lehrer.protokolliere(self.d, "goebel", "Eintrag %d" % i, jetzt=0)
+        e = lehrer.lies_protokoll(self.d, anzahl=20)
+        self.assertEqual([x["was"] for x in e[:2]], ["Eintrag 499", "Eintrag 498"])
+        self.assertEqual(len(e), 20)
 
 
 class TestSeitenvorlagen(unittest.TestCase):
@@ -171,11 +198,12 @@ class TestLehrerSeiten(Grundlage):
         self.zustand = os.path.join(self.tmp.name, "lib")
         self.alt = (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.WELTEN_DIR, uebersicht.ZUSTAND_DIR,
                     uebersicht.dienst_aktiv, uebersicht.vertraute_ip, uebersicht.VERWALTER, uebersicht.SPERRE,
-                    uebersicht.vorschau_erzeugen, uebersicht.TEILE_DIR)
+                    uebersicht.vorschau_erzeugen, uebersicht.TEILE_DIR, uebersicht.dienste_aktiv)
         uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.WELTEN_DIR = self.konf, self.stat, self.welten
         uebersicht.TEILE_DIR = os.path.join(self.tmp.name, "teile")
         uebersicht.ZUSTAND_DIR = self.zustand
         uebersicht.dienst_aktiv = lambda p: True
+        uebersicht.dienste_aktiv = lambda plaetze: {p["platz"]: True for p in plaetze}
         self.vertraut = False
         uebersicht.vertraute_ip = lambda pc: self.vertraut
         uebersicht.VERWALTER = self.v
@@ -192,7 +220,7 @@ class TestLehrerSeiten(Grundlage):
         self.server.server_close()
         (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.WELTEN_DIR, uebersicht.ZUSTAND_DIR,
          uebersicht.dienst_aktiv, uebersicht.vertraute_ip, uebersicht.VERWALTER, uebersicht.SPERRE,
-         uebersicht.vorschau_erzeugen, uebersicht.TEILE_DIR) = self.alt
+         uebersicht.vorschau_erzeugen, uebersicht.TEILE_DIR, uebersicht.dienste_aktiv) = self.alt
         super().tearDown()
 
     def anfrage(self, methode, pfad, daten=None, roh=None, typ="application/json", lehrer_kopf=True):
@@ -231,6 +259,33 @@ class TestLehrerSeiten(Grundlage):
         for pfad in ("/status.json", "/api/lehrer/welten", "/api/lehrer/ich", "/api/lehrer/protokoll"):
             self.assertEqual(self.anfrage("GET", pfad)[0], 403, pfad)
         self.assertEqual(self.anfrage("POST", "/api/lehrer/alle_beenden", {})[0], 403)
+
+    def test_lehrer_ips_nur_ohne_konto(self):
+        # eine IP-Adresse laesst sich vortaeuschen: lehrer_ips gilt nur bis zum ersten Konto, der Container immer
+        echt, alt = self.alt[5], uebersicht._einstellungen
+        uebersicht._einstellungen = lambda: {"lehrer_ips": ["10.0.0.9"]}
+        try:
+            self.assertTrue(echt("10.0.0.9"))
+            self.assertFalse(echt("10.0.0.8"))
+            self.konto()
+            self.assertFalse(echt("10.0.0.9"))
+            self.assertTrue(echt("127.0.0.1"))
+        finally:
+            uebersicht._einstellungen = alt
+
+    def test_fehlanmeldung_im_protokoll_und_abmelden(self):
+        self.konto()
+        self.assertEqual(self.anmelden(name="Goebel	x", passwort="falsch123")[0], 403)
+        eintrag = lehrer.lies_protokoll(self.zustand)[0]
+        self.assertEqual(eintrag["wer"], "-")
+        self.assertIn("Anmeldung als goebel?x fehlgeschlagen (PC 127.0.0.1)", eintrag["was"])
+        self.assertEqual(self.anmelden()[0], 200)
+        token = self.cookie
+        self.assertEqual(self.anfrage("POST", "/lehrer/abmelden", {})[0], 200)
+        self.cookie = token   # kopiertes Cookie: gilt nach dem Abmelden nicht mehr
+        self.vertraut = False
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/ich")[0], 403)
+        self.assertIn("abgemeldet", lehrer.lies_protokoll(self.zustand)[0]["was"])
 
     def test_erstes_konto_vom_lehrer_pc(self):
         self.vertraut = True

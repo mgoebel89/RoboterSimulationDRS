@@ -11,7 +11,7 @@ Schueler (erkannt an der IP ihres PCs, siehe verwalter.py):
                   /api/kollision_quittieren, /api/zuruecksetzen (Neustart), /api/beenden
   /welten/x.png   Vorschaubild bzw. Arbeitsblatt (x.pdf) einer Welt
 
-Lehrkraft (lehrer_ips in verwalter.json, im Container selbst immer):
+Lehrkraft (angemeldet; ohne Anmeldung nur im Container selbst und, solange es kein Konto gibt, lehrer_ips):
   /lehrer         Liste aller Simulationen mit Ampel, aktualisiert sich selbst
   /status.json    Zustand aller Simulationen (fuer die Seite und fuer Skripte)
   /platz/07       3D-Ansicht von Platz 07 mit Teile zurueck, Neu starten, Beenden (nur zuschauen:
@@ -130,6 +130,22 @@ def dienst_aktiv(platz):
         return False
 
 
+def dienste_aktiv(plaetze):
+    """{platz: aktiv} fuer mehrere Plaetze mit EINEM systemctl-Aufruf (die Lehrerseite fragt alle 2 s)."""
+    nummern = [p["platz"] for p in plaetze]
+    if not nummern:
+        return {}
+    try:
+        r = subprocess.run(["systemctl", "is-active"] + ["rebel-sim@%s" % n for n in nummern],
+                           capture_output=True, text=True, timeout=5)
+        zeilen = r.stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        zeilen = []
+    if len(zeilen) != len(nummern):
+        return {n: False for n in nummern}
+    return {n: z == "active" for n, z in zip(nummern, zeilen)}
+
+
 def ampel(status, aktiv):
     """(Farbe, Text) fuer einen Platz."""
     if not aktiv:
@@ -146,9 +162,11 @@ def ampel(status, aktiv):
 
 
 def gesamtstatus(plaetze=None, aktiv_fn=None, status_dir=None):
-    aktiv_fn = dienst_aktiv if aktiv_fn is None else aktiv_fn
+    plaetze = lese_plaetze() if plaetze is None else plaetze
+    if aktiv_fn is None:   # ein systemctl-Aufruf fuer alle Plaetze
+        aktiv_fn = dienste_aktiv(plaetze).get
     ergebnis = []
-    for p in (lese_plaetze() if plaetze is None else plaetze):
+    for p in plaetze:
         st = lese_status(p["platz"], status_dir)
         farbe, text = ampel(st, aktiv_fn(p["platz"]))
         eintrag = dict(p, farbe=farbe, text=text)
@@ -331,7 +349,7 @@ document.getElementById('form').onsubmit = async ev => {
 
 KEINE_BENUTZER = """<div class="leise">Es gibt noch kein Konto. Den ersten Admin legt man im Container an:
 <code>sudo -u rebelsim python3 /opt/rebel-sim/tools/lehrer.py admin &lt;name&gt;</code>, oder von einem Lehrer-PC aus
-(<code>lehrer_ips</code> in verwalter.json) im Reiter Benutzer.</div>"""
+(<code>lehrer_ips</code> in verwalter.json, gilt nur bis zum ersten Konto) im Reiter Benutzer.</div>"""
 
 LEHRER_SEITE = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1307,11 +1325,22 @@ function blick(pos, ziel, oben = [0, 0, 1]) {
   vp.updatePosition(); vp.updateOrientation();
   view._view.w3dScene.render();
 }
+// Ein gemeinsamer Abruf des Platzstands fuer Kollisionsanzeige und E/A (EA_JS haengt sich ueber window.platzHoerer
+// an) statt einer eigenen Abfrage je Anzeige; der Greiferblick nimmt den letzten Stand, solange abgerufen wird
+const platzHoerer = window.platzHoerer = window.platzHoerer || [];
+let platzStand = null;
+async function platzHolen() {
+  const d = await fetch('/api/platz/%(platz)s', {cache: 'no-store'}).then(r => r.json()).catch(() => null);
+  if (!d) return;
+  platzStand = d;
+  for (const f of platzHoerer) f(d);
+}
 let folgen = null;
 async function greiferBlick() {
   // von der Seite auf den TCP, quer zur Bewegung der Backen: so sieht man den Spalt
   const auftrag = folgen;
-  const d = await fetch('/api/platz/%(platz)s', {cache: 'no-store'}).then(r => r.json()).catch(() => ({}));
+  const d = platzHoerer.length && platzStand ? platzStand
+    : await fetch('/api/platz/%(platz)s', {cache: 'no-store'}).then(r => r.json()).catch(() => ({}));
   // inzwischen eine andere Ansicht gewaehlt: diese Antwort nicht mehr anwenden
   if (auftrag !== folgen || !d.tcp || !WbWorld.instance) return;
   let q = [d.tcp_y[0], d.tcp_y[1]];
@@ -1453,8 +1482,7 @@ function ortText(k) {
   const mm = k.punkt_mm || [0, 0, 0];
   return k.a + ' mit ' + k.b + ' · X ' + Math.round(mm[0]) + ' Y ' + Math.round(mm[1]) + ' Z ' + Math.round(mm[2]) + ' mm';
 }
-async function kollisionHolen() {   // Stand aus der Statusdatei des Platzes
-  const d = await fetch('/api/platz/%(platz)s', {cache: 'no-store'}).then(r => r.json()).catch(() => null);
+function kollisionAnzeigen(d) {   // Stand aus der Statusdatei des Platzes (platzHolen)
   const kz = d && d.kollision, cr = d && d.crash, zustand = cr ? cr.zustand : 'frei';
   let text = null, zusatz = cr && cr.meldung, art = '';
   if (zustand === 'crash') {
@@ -1484,9 +1512,10 @@ quittierKnopf.onclick = async () => {
   const r = await fetch('/api/kollision_quittieren', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
     .catch(() => null);
   if (!r || !r.ok) alert(((r && await r.json().catch(() => ({}))) || {}).fehler || 'Das hat nicht geklappt.');
-  quittierKnopf.disabled = false; kollisionHolen();
+  quittierKnopf.disabled = false; platzHolen();
 };
-if (KOLLISION_ZEIGEN) setInterval(kollisionHolen, 400);
+if (KOLLISION_ZEIGEN) platzHoerer.push(kollisionAnzeigen);
+if (platzHoerer.length) { platzHolen(); setInterval(platzHolen, 350); }
 function schilderZeichnen() {
   requestAnimationFrame(schilderZeichnen);
   const welt = WbWorld.instance, vp = welt && welt.viewpoint, bild = view.querySelector('canvas');
@@ -1844,9 +1873,7 @@ document.querySelectorAll('.ea .taster').forEach(b => {
   const los = () => { if (!unten) return; unten = false; b.classList.remove('druck'); tasterSenden(nr, false); };
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(n => b.addEventListener(n, los));
 });
-async function eaZustand() {
-  const d = await fetch('/api/platz/%%PLATZ%%', {cache: 'no-store'}).then(r => r.json()).catch(() => null);
-  if (!d) return;
+function eaZustand(d) {   // abgerufen von platzHolen in der Ansicht (gemeinsam mit der Kollisionsanzeige)
   (d.taster || []).forEach((an, i) => document.querySelector('.ea .taster[data-nr="' + i + '"]')?.classList.toggle('an', !!an));
   (d.leuchten || []).forEach((an, i) => document.querySelector('.ea .leuchte[data-nr="' + i + '"]')?.classList.toggle('an', !!an));
   (d.sensoren || []).forEach((wert, i) => {   // true/false (belegt) oder Farbname (Farbsensor)
@@ -1866,7 +1893,7 @@ async function eaZustand() {
   const m = document.getElementById('ea-meldung');
   if (m) { m.hidden = d.ea_ok !== false; m.textContent = d.ea_meldung || ''; }
 }
-eaZustand(); setInterval(eaZustand, 300);
+(window.platzHoerer = window.platzHoerer || []).push(eaZustand);
 </script>"""
 
 
@@ -2014,9 +2041,11 @@ SPERRE = lehrer.Sperre()
 
 
 def vertraute_ip(pc):
-    """Im Container selbst oder ein PC aus lehrer_ips: Admin auch ohne Anmeldung
-    (zum Anlegen des ersten Kontos; danach lehrer_ips leeren)."""
-    return pc in ("127.0.0.1", "::1") or pc in _einstellungen().get("lehrer_ips", [])
+    """Im Container selbst oder ein PC aus lehrer_ips: Admin auch ohne Anmeldung. lehrer_ips gilt nur, solange es
+    noch kein Konto gibt (zum Anlegen des ersten): eine IP-Adresse laesst sich im Schulnetz vortaeuschen."""
+    if pc in ("127.0.0.1", "::1"):
+        return True
+    return pc in _einstellungen().get("lehrer_ips", []) and not lehrer.hat_benutzer(ZUSTAND_DIR)
 
 
 def wer(pc, token=None):
@@ -2594,11 +2623,17 @@ def baukasten_speichern(welt, entwurf, wer_name):
 
 
 class Handler(BaseHTTPRequestHandler):
+    # haengende oder absichtlich langsame Verbindungen belegen keinen Thread fuer immer (gilt je Lesevorgang;
+    # die Durchleitung zu Webots schaltet die Grenze fuer ihre Verbindung ab)
+    timeout = 30
+
     def _antwort(self, code, inhalt, typ="text/html; charset=utf-8", kopf=()):
         daten = inhalt if isinstance(inhalt, bytes) else inhalt.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", typ)
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Options", "DENY")   # keine Seite in fremden Rahmen (Klick-Fallen)
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(daten)))
         for name, wert in kopf:
             self.send_header(name, wert)
@@ -2892,17 +2927,24 @@ class Handler(BaseHTTPRequestHandler):
     def _anmeldung(self, pfad, daten):
         pc = self._pc()
         if pfad == "/lehrer/abmelden":
+            name = lehrer.abmelden(ZUSTAND_DIR, self._token())   # auch auf dem Server beenden
+            if name:
+                lehrer.protokolliere(ZUSTAND_DIR, name, "abgemeldet (PC %s)" % pc)
             self._json(200, {"ok": True}, [self._cookie("")])
         elif pfad == "/lehrer/anmelden":
             warten = SPERRE.wartezeit(pc)
             if warten > 0:
                 self._json(429, {"fehler": "Zu viele falsche Versuche. Bitte %d s warten." % (warten + 1)})
                 return
+            versuch = re.sub(r"[^a-z0-9_-]", "?", str(daten.get("name", "")).strip().lower()[:32])
             try:
                 token, benutzer = lehrer.anmelden(ZUSTAND_DIR, str(daten.get("name", "")),
                                                   str(daten.get("passwort", "")))
             except lehrer.LehrerFehler as fehler:
-                SPERRE.fehlversuch(pc)
+                dauer = SPERRE.fehlversuch(pc)
+                # im Protokoll sichtbar: wer es von wo versucht (Passwort-Raten faellt so auf)
+                lehrer.protokolliere(ZUSTAND_DIR, "-", "Anmeldung als %s fehlgeschlagen (PC %s)%s" % (
+                    versuch or "?", pc, ", PC fuer %d s gesperrt" % dauer if dauer else ""))
                 self._json(403, {"fehler": str(fehler)})
                 return
             SPERRE.erfolg(pc)

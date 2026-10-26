@@ -235,10 +235,11 @@ class TestSchuelerseiten(Grundlage):
     def setUp(self):
         super().setUp()
         self.alt = (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.WELTEN_DIR, uebersicht.dienst_aktiv,
-                    uebersicht.ist_lehrer, uebersicht.VERWALTER, uebersicht.ZUSTAND_DIR)
+                    uebersicht.ist_lehrer, uebersicht.VERWALTER, uebersicht.ZUSTAND_DIR, uebersicht.dienste_aktiv)
         uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.WELTEN_DIR = self.konf, self.stat, self.welten
         uebersicht.ZUSTAND_DIR = os.path.join(self.tmp.name, "lib")
         uebersicht.dienst_aktiv = lambda p: True
+        uebersicht.dienste_aktiv = lambda plaetze: {p["platz"]: True for p in plaetze}
         self.lehrer = False
         uebersicht.ist_lehrer = lambda pc, token=None: self.lehrer
         uebersicht.VERWALTER = self.v
@@ -250,7 +251,7 @@ class TestSchuelerseiten(Grundlage):
         self.server.shutdown()
         self.server.server_close()
         (uebersicht.KONFIG_DIR, uebersicht.STATUS_DIR, uebersicht.WELTEN_DIR, uebersicht.dienst_aktiv,
-         uebersicht.ist_lehrer, uebersicht.VERWALTER, uebersicht.ZUSTAND_DIR) = self.alt
+         uebersicht.ist_lehrer, uebersicht.VERWALTER, uebersicht.ZUSTAND_DIR, uebersicht.dienste_aktiv) = self.alt
         super().tearDown()
 
     def holen(self, pfad):
