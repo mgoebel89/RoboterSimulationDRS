@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Testablauf Schule</title>
+<style>
+  :root { --text: #1d2228; --leise: #5b6570; --linie: #c9d0d7; --akzent: #0b5394; --warn: #9a3412; --grund: #ffffff; }
+  @page { size: A4; margin: 14mm 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--grund); color: var(--text);
+         font: 10.5pt/1.4 "Segoe UI", Arial, sans-serif; }
+  .blatt { max-width: 182mm; margin: 0 auto; }
+  h1 { font-size: 17pt; margin: 0 0 2px; color: var(--akzent); }
+  .unter { color: var(--leise); margin-bottom: 10px; }
+  h2 { font-size: 12pt; margin: 14px 0 4px; padding-bottom: 2px; border-bottom: 1.5px solid var(--akzent);
+       color: var(--akzent); break-after: avoid; }
+  ol, ul { margin: 4px 0; padding-left: 20px; }
+  li { margin: 2px 0; }
+  code { font: 9.5pt Consolas, "Courier New", monospace; background: #eef1f4; padding: 0 3px; border-radius: 2px;
+         overflow-wrap: anywhere; }
+  .befehl { font: 9.5pt Consolas, "Courier New", monospace; background: #eef1f4; padding: 4px 6px; margin: 3px 0;
+            border-left: 3px solid var(--akzent); overflow-wrap: anywhere; }
+  .kasten { border: 1px solid var(--linie); border-radius: 4px; padding: 6px 9px; margin: 6px 0; break-inside: avoid; }
+  .warn { border-color: var(--warn); }
+  .warn b:first-child { color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 4px 0; break-inside: avoid; }
+  th, td { border: 1px solid var(--linie); padding: 3px 5px; text-align: left; vertical-align: top; }
+  th { background: #eef1f4; font-weight: 600; }
+  td.zahl { text-align: center; font-variant-numeric: tabular-nums; }
+  .hak { display: inline-block; width: 11px; height: 11px; border: 1.2px solid var(--text); margin-right: 6px;
+         vertical-align: -1px; }
+  .feld { display: inline-block; min-width: 46mm; border-bottom: 1px solid var(--text); height: 1.2em; }
+  .notiz { border: 1px solid var(--linie); height: 34mm; border-radius: 4px; margin-top: 4px; }
+  .leise { color: var(--leise); }
+  .umbruch { break-before: page; }
+  @media print { body { padding: 0; } }
+  @media (max-width: 600px) { body { padding: 16px; font-size: 10pt; } table { font-size: 9pt; } }
+</style>
+</head>
+<body>
+<div class="blatt">
+
+<h1>Testablauf Schule – Di 27.10.2026</h1>
+<div class="unter">Frischer Container, SPS-Probetest (OPC UA), App-Schnittstelle, A/B/C-Messung am echten ReBeL.
+  Alles Gemessene landet in <b>einer ZIP</b> (Messkoffer), die per USB-Stick nach Hause geht.</div>
+
+<h2>0. Mitnehmen</h2>
+<ul>
+  <li><span class="hak"></span><code>irc-daten.zip</code> (Robotermodell aus iRC, <code>tools/irc_daten_export.ps1</code>) – oder in der
+    Schule an einem PC mit iRC neu erzeugen</li>
+  <li><span class="hak"></span>USB-Stick für die Messung</li>
+  <li><span class="hak"></span>Zugangsdaten der SPS (OPC UA) und IP-Adressen: SPS, Schüler-PC, echter ReBeL (zuletzt 192.168.3.11)</li>
+  <li><span class="hak"></span>Diesen Zettel</li>
+</ul>
+
+<h2>1. Container anlegen</h2>
+<ol>
+  <li><span class="hak"></span>GitHub: Repository <code>RoboterSimulationDRS</code> auf <b>öffentlich</b> stellen
+    (Settings → General → Danger Zone → Change visibility).</li>
+  <li><span class="hak"></span>Proxmox → Knoten → <b>Shell</b>:
+    <div class="befehl">bash -c "$(curl -fsSL https://raw.githubusercontent.com/mgoebel89/RoboterSimulationDRS/main/proxmox/rebel-sim.sh)"</div>
+    „Neuen Container anlegen“ – 4 Kerne, 6144 MB, 20 GB, feste IP mit Netzmaske, Gateway, Root-Passwort,
+    am Ende das erste Lehrerkonto.</li>
+  <li><span class="hak"></span>Sobald die Installation durch ist: Repository wieder auf <b>privat</b>.
+    <span class="leise">(<code>rebel-sim-update</code> geht danach erst wieder, wenn es öffentlich ist.)</span></li>
+  <li><span class="hak"></span><code>irc-daten.zip</code> nach <code>/root/</code> kopieren (WinSCP oder scp), dann im Container:
+    <div class="befehl">rebel-sim-modell /root/irc-daten.zip</div></li>
+  <li><span class="hak"></span>Am Lehrer-PC <code>http://&lt;Container-IP&gt;/lehrer</code> öffnen, Stammzertifikat installieren
+    (die Seite führt hin), anmelden. Neue Zertifizierungsstelle → <b>neuer Fingerabdruck</b>, alte Zertifikate gelten nicht.</li>
+</ol>
+<div class="kasten">Container-IP: <span class="feld"></span> &nbsp; Proxmox-CT-ID: <span class="feld" style="min-width:20mm"></span></div>
+
+<h2>2. Kurzer Test der Simulation</h2>
+<ol>
+  <li><span class="hak"></span>Schüler-PC: iRC starten, CRI-Server an, im Browser <code>http://&lt;Container-IP&gt;</code> → Simulation starten.</li>
+  <li><span class="hak"></span>In iRC verfahren: der Roboter in der 3D-Ansicht folgt, oben „iRC verbunden“.</li>
+</ol>
+
+<h2>3. Messkoffer starten</h2>
+<p>In der Proxmox-Konsole des Containers (als root):</p>
+<div class="befehl">rebel-sim-messung</div>
+<p>Beim ersten Mal fragt er, ob die OPC-UA-Bibliothek eingerichtet werden soll → <b>j</b> (braucht Internet, 1–2 Minuten).
+Danach erscheint das Menü. Jeder Punkt lässt sich einzeln und mehrfach aufrufen; Strg+C bricht nur den Punkt ab.
+„0“ beendet, beim nächsten Start „Letzte Messung fortsetzen? j“.</p>
+
+<table>
+  <tr><th style="width:7mm">Nr.</th><th>Schritt</th><th>Worauf achten</th><th style="width:9mm">ok</th></tr>
+  <tr><td class="zahl">1</td><td>Container prüfen</td><td>Fragt nach SPS, Schüler-PC, ReBeL: jeweils <b>j</b> und IP eingeben.
+    Zeigt Ping und offene Ports (SPS 4840, PC 5000/3921, ReBeL 5000/3920).</td><td></td></tr>
+  <tr><td class="zahl">2</td><td>SPS lesen</td><td>Benutzer eingeben (oder <code>-</code> für anonym), Passwort wird abgefragt und
+    <b>nicht</b> gespeichert. Zertifikatsfehler → im Web-Based-Management der SPS das Zertifikat
+    „rebel-sim sps-kopplung“ vertrauen, Schritt 2 wiederholen.</td><td></td></tr>
+  <tr><td class="zahl">3</td><td>SPS schreiben</td><td>In PLCnext Engineer online <code>ROB_OUT</code> beobachten: 20 s lang
+    <b>165</b> (2#1010_0101), danach wieder der alte Wert.</td><td></td></tr>
+  <tr><td class="zahl">4</td><td>App-Schnittstelle Schüler-PC</td><td>App „WebotsSim“ in iRC aktiv. Schreibtest <b>j</b>:
+    in iRC kurz globales Signal sichtbar? Welche Nummer zeigt iRC?</td><td></td></tr>
+  <tr><td class="zahl">5</td><td>App-Schnittstelle echter ReBeL</td><td>Vorher die App „WebotsSim“ auf dem ReBeL installieren und
+    freischalten (Meldung notieren, falls nicht möglich). Erst Lesen, dann GSig-Test <b>j</b>.
+    Der Roboter bewegt sich dabei <b>nicht</b>.</td><td></td></tr>
+  <tr><td class="zahl">6</td><td>CRI-Aufzeichnung</td><td>Auswahl <b>1</b> = echter ReBeL. Tabelle unten. Wenn am ReBeL keine CRI-Daten
+    kommen: mit <b>2</b> über iRC am Schüler-PC, verbunden mit dem echten ReBeL.</td><td></td></tr>
+  <tr><td class="zahl">7</td><td>Notiz</td><td>Beobachtungen eintippen, z.B. Backenrichtung bei A6 = 0, Meldungen von iRC.</td><td></td></tr>
+  <tr><td class="zahl">8</td><td>Fertig</td><td>Schreibt die ZIP und zeigt ihren Inhalt.</td><td></td></tr>
+</table>
+
+<h2 class="umbruch">4. A/B/C-Messung am echten ReBeL (Schritt 6)</h2>
+<div class="kasten warn"><b>Sicherheit:</b> Arbeitsbereich frei, Not-Halt in Reichweite, Override niedrig.
+  Der Messkoffer hört nur mit; verfahren wird <b>von Hand per Joint-Jog</b>. Eine Stellung, die am Aufbau nicht frei ist,
+  mit <b>s</b> überspringen – drei Stellungen reichen.</div>
+<p>Jede Stellung anfahren, dann Enter. Weicht ein Gelenk mehr als 2° ab, fragt der Messkoffer nach.
+Nach jeder Aufnahme steht da „A/B/C-Reihenfolge … passt“ und die Werkzeuglänge.</p>
+<table>
+  <tr><th>Nr.</th><th>Zweck</th><th>A1</th><th>A2</th><th>A3</th><th>A4</th><th>A5</th><th>A6</th><th>passt?</th><th>Werkzeug mm</th></tr>
+  <tr><td class="zahl">1</td><td>Home als Bezug</td><td class="zahl">0</td><td class="zahl">0</td><td class="zahl">90</td><td class="zahl">0</td><td class="zahl">90</td><td class="zahl">0</td><td></td><td></td></tr>
+  <tr><td class="zahl">2</td><td>nur A4</td><td class="zahl">0</td><td class="zahl">0</td><td class="zahl">90</td><td class="zahl">30</td><td class="zahl">90</td><td class="zahl">0</td><td></td><td></td></tr>
+  <tr><td class="zahl">3</td><td>Kippen und Drehen</td><td class="zahl">0</td><td class="zahl">0</td><td class="zahl">90</td><td class="zahl">0</td><td class="zahl">60</td><td class="zahl">45</td><td></td><td></td></tr>
+  <tr><td class="zahl">4</td><td>alles gemischt</td><td class="zahl">20</td><td class="zahl">0</td><td class="zahl">90</td><td class="zahl">30</td><td class="zahl">60</td><td class="zahl">45</td><td></td><td></td></tr>
+  <tr><td class="zahl">5</td><td>Gegenrichtung</td><td class="zahl">0</td><td class="zahl">0</td><td class="zahl">90</td><td class="zahl">−40</td><td class="zahl">110</td><td class="zahl">−60</td><td></td><td></td></tr>
+</table>
+<p class="leise">Erwartet (wie am Laptop-iRC gemessen): „passt“ bei allen Stellungen, Werkzeug 0 / 0 / Länge des in iRC
+gewählten Werkzeugs (EGP 40 mit Standardbacken: 143,7 mm).</p>
+<p><span class="hak"></span>Zusätzlich: <b>Foto von oben</b> bei A6 = 0 – in welche Richtung öffnen die Backen?</p>
+
+<h2>5. Messung mitnehmen</h2>
+<ol>
+  <li><span class="hak"></span>Lehrerbereich → <b>Einstellungen</b> → <b>Messungen</b> → „Herunterladen“ → auf den USB-Stick.</li>
+  <li><span class="hak"></span>Kurz hineinschauen: nur JSON- und Textdateien, keine Passwörter.</li>
+  <li><span class="hak"></span>Repository auf GitHub ist wieder <b>privat</b>.</li>
+</ol>
+<p class="leise">In der ZIP: Container-Zustand, Journal der Simulationsplätze, Berichte und Bildschirmausgabe der Tests,
+CRI-Aufzeichnung mit den Rohdaten, Notizen, IP-Adressen. Nicht drin: Passwörter, Lehrerkonten, Welten,
+Protokoll des Lehrerbereichs.</p>
+
+<h2>Notizen</h2>
+<div class="notiz"></div>
+
+</div>
+</body>
+</html>

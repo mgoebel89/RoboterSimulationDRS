@@ -823,6 +823,30 @@ class TestLehrerSeiten(Grundlage):
             server.shutdown()
             server.server_close()
 
+    def test_messungen_nur_fuer_admins(self):
+        ordner = os.path.join(self.zustand, "messungen")
+        os.makedirs(os.path.join(ordner, "2026-10-27_0800"))
+        for name in ("messung_2026-10-27_0800.zip", "messung_2026-10-27_0930.zip", "fremd.zip"):
+            with open(os.path.join(ordner, name), "wb") as f:
+                f.write(b"PK")
+        self.konto("mueller", "lehrkraft")
+        self.anmelden("mueller")
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/messungen")[0], 403)
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/messung?datei=messung_2026-10-27_0800.zip")[0], 403)
+        self.konto()
+        self.anmelden()
+        liste = self.anfrage("GET", "/api/lehrer/messungen")[1]
+        self.assertEqual([(m["datei"], m["zeit"]) for m in liste],
+                         [("messung_2026-10-27_0930.zip", "2026-10-27 09:30"), ("messung_2026-10-27_0800.zip", "2026-10-27 08:00")])
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        c.request("GET", "/api/lehrer/messung?datei=messung_2026-10-27_0800.zip", headers={"Cookie": self.cookie})
+        r = c.getresponse()
+        self.assertEqual((r.status, r.getheader("Content-Disposition"), r.read()),
+                         (200, 'attachment; filename="messung_2026-10-27_0800.zip"', b"PK"))
+        c.close()
+        for datei in ("fremd.zip", "../benutzer.json", "messung_2026-10-27_0801.zip"):
+            self.assertEqual(self.anfrage("GET", "/api/lehrer/messung?datei=" + datei)[0], 404, datei)
+
     def test_einstellungen(self):
         self.konto()
         self.anmelden()

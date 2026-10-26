@@ -8,6 +8,15 @@ Vor dem Bau der SPS-Kopplung (Stufe G4) wird geprüft, ob beide Enden so funktio
 Das Skript `tools/probetest_sps.py` liest nur, solange man nicht `--schreiben` bzw. `--bewegen` angibt. Jeder Lauf
 kann mit `--bericht datei.json` einen Bericht ablegen; die Berichte bitte aufheben (zur Auswertung).
 
+## Einfacher: Messkoffer (ab 26.10.2026)
+
+Im Container als root `rebel-sim-messung` starten: ein Menü führt durch Container-Check, SPS lesen/schreiben,
+App-Schnittstelle am Schüler-PC und am echten ReBeL (lesen, ein GSig) und die CRI-Aufzeichnung fester Stellungen
+nahe Home (A/B/C-Reihenfolge, Werkzeuglänge). „Fertig“ schreibt `messung_<Zeit>.zip` nach
+`/var/lib/rebel-sim/messungen`; Download im Lehrerbereich unter Einstellungen → Messungen (nur Admins). Passwörter,
+Konten und Welten kommen nicht in die ZIP. Ablauf zum Ausdrucken: [`testablauf_schule.html`](testablauf_schule.html).
+Die Einzelbefehle unten bleiben für Sonderfälle (z.B. `--din`, Programmstart mit `--bewegen`).
+
 ## Was vorab schon geprüft ist (25.10.2026)
 
 - iRC V15.0.2 (Simulation, Steuerung ohne Oberfläche): App-Schnittstelle erreichbar, Systeminfo, Lizenzen,

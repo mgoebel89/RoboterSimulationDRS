@@ -711,6 +711,10 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
       <div class="zeile" style="align-items:flex-end"><label>Name <input id="l-name" placeholder="z.B. drs_quer" autocapitalize="none"></label>
         <label class="knopf-datei" style="flex:0">Logo hochladen<input type="file" id="l-datei" accept="image/png,image/jpeg,image/svg+xml,.svg"></label></div>
     </div>
+    <div class="feld"><h2>Messungen</h2>
+      <div class="hilfe">Ergebnisse des Messkoffers (im Container <code>rebel-sim-messung</code>: SPS, App-Schnittstelle,
+        CRI am echten ReBeL). Ohne Passwörter und Konten, IP-Adressen sind enthalten.</div>
+      <table><thead><tr><th>Messung</th><th>Größe</th><th></th></tr></thead><tbody id="messungen"></tbody></table></div>
   </div>
 </section>
 
@@ -1196,6 +1200,13 @@ async function einstellungen() {
   $('e-leer').value = e.leerlauf_minuten;
   $('e-uhr').value = (e.ende_uhrzeiten || []).join(', ');
   logosZeigen();
+  messungenZeigen();
+}
+async function messungenZeigen() {
+  const l = await (await fetch('/api/lehrer/messungen', {cache: 'no-store'})).json();
+  $('messungen').innerHTML = l.length ? l.map(m => '<tr><td>' + esc(m.zeit) + '</td><td>' + Math.ceil(m.groesse / 1024)
+    + ' KB</td><td><a class="btn" href="/api/lehrer/messung?datei=' + encodeURIComponent(m.datei) + '">Herunterladen</a></td></tr>').join('')
+    : '<tr><td colspan="3" class="hilfe">Noch keine Messung.</td></tr>';
 }
 async function logosZeigen() {
   const d = await (await fetch('/api/lehrer/logos', {cache: 'no-store'})).json(), t = Date.now();
@@ -2452,6 +2463,27 @@ def greifer_in_welten():
     return welten
 
 
+MESSUNG_MUSTER = re.compile(r"messung_\d{4}-\d{2}-\d{2}_\d{4}\.zip")
+
+
+def messungen_ordner():
+    return os.path.join(ZUSTAND_DIR, "messungen")
+
+
+def messungen_liste():
+    """ZIPs des Messkoffers (tools/messkoffer.py), neueste zuerst."""
+    try:
+        namen = os.listdir(messungen_ordner())
+    except OSError:
+        return []
+    liste = []
+    for n in sorted(namen, reverse=True):
+        if MESSUNG_MUSTER.fullmatch(n):
+            st = os.stat(os.path.join(messungen_ordner(), n))
+            liste.append({"datei": n, "groesse": st.st_size, "zeit": n[8:18] + " " + n[19:21] + ":" + n[21:23]})
+    return liste
+
+
 def backensaetze_liste():
     """Alle Backensaetze: mitgelieferte (fest) und im Baukasten gebaute, mit Verwendung in Welten."""
     welten = greifer_in_welten()
@@ -2997,13 +3029,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, dict(self._wer(), benutzer_vorhanden=lehrer.hat_benutzer(ZUSTAND_DIR)))
             elif pfad == "/api/lehrer/protokoll":
                 self._json(200, lehrer.lies_protokoll(ZUSTAND_DIR))
-            elif pfad in ("/api/lehrer/einstellungen", "/api/lehrer/benutzer") and self._wer()["rolle"] != "admin":
+            elif (pfad in ("/api/lehrer/einstellungen", "/api/lehrer/benutzer", "/api/lehrer/messungen", "/api/lehrer/messung")
+                  and self._wer()["rolle"] != "admin"):
                 self._json(403, {"fehler": "Nur für Admins."})
             elif pfad == "/api/lehrer/einstellungen":
                 e = _einstellungen()
                 self._json(200, {k: e[k] for k in ("max_simulationen", "leerlauf_minuten", "ende_uhrzeiten")})
             elif pfad == "/api/lehrer/benutzer":
                 self._json(200, lehrer.benutzer_liste(ZUSTAND_DIR))
+            elif pfad == "/api/lehrer/messungen":
+                self._json(200, messungen_liste())
+            elif pfad == "/api/lehrer/messung":   # ZIP aus dem Messkoffer
+                name = urllib.parse.parse_qs(abfrage).get("datei", [""])[0]
+                if not MESSUNG_MUSTER.fullmatch(name) or not os.path.isfile(os.path.join(messungen_ordner(), name)):
+                    self._json(404, {"fehler": "Messung nicht gefunden."})
+                else:
+                    with open(os.path.join(messungen_ordner(), name), "rb") as f:
+                        self._antwort(200, f.read(), "application/zip", kopf=[("Content-Disposition", 'attachment; filename="%s"' % name)])
             elif pfad == "/api/lehrer/teile":
                 self._json(200, teile_liste())
             elif pfad == "/api/lehrer/teil_vorschau":

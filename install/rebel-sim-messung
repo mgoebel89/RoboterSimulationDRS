@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Messkoffer fuer Tests in der Schule (SPS, App-Schnittstelle, CRI am echten ReBeL), Ergebnis als ZIP.
+# Download im Lehrerbereich unter "Messungen".
+#
+#   rebel-sim-messung
+set -euo pipefail
+BASIS="${BASIS:-/opt/rebel-sim}"
+PROBE=/opt/rebel-sim-probe
+[ "$(id -u)" = 0 ] || { echo "Bitte als root starten."; exit 1; }
+if [ ! -x "$PROBE/bin/python3" ]; then
+  echo "Fuer den SPS-Test fehlt noch die OPC-UA-Bibliothek (asyncua, braucht Internet)."
+  read -r -p "Jetzt einrichten? (j/n) " a
+  if [ "$a" = j ]; then bash "$BASIS/tools/probetest_vorbereiten.sh"; fi
+fi
+PY=python3
+[ -x "$PROBE/bin/python3" ] && PY="$PROBE/bin/python3"
+cd "$BASIS"
+exec "$PY" "$BASIS/tools/messkoffer.py" "$@"

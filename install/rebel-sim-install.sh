@@ -67,6 +67,7 @@ bash "$BASIS/deploy/install.sh" >/dev/null
 install -m 755 "$BASIS/install/rebel-sim-update" /usr/local/sbin/rebel-sim-update
 install -m 755 "$BASIS/install/rebel-sim-modell" /usr/local/sbin/rebel-sim-modell
 install -m 755 "$BASIS/install/rebel-sim-admin" /usr/local/sbin/rebel-sim-admin
+install -m 755 "$BASIS/install/rebel-sim-messung" /usr/local/sbin/rebel-sim-messung
 
 schritt "Beispielwelten (nur fehlende)"
 mkdir -p "$BASIS/worlds" "$BASIS/teile"
@@ -108,3 +109,4 @@ gruen "Fertig. Startseite fuer Schueler: http://$ip   Lehrerbereich (verschluess
 echo "Lehrer-PCs installieren einmal das Stammzertifikat http://$ip/ca.crt (die Lehrerseite fuehrt dorthin)."
 [ -s /var/lib/rebel-sim/benutzer.json ] || gelb "Noch kein Lehrerkonto: rebel-sim-admin <name>   (fragt nach dem Passwort)"
 echo "Laufende Simulationen nutzen neuen Programmcode erst nach 'Neu starten'."
+echo "Tests in der Schule (SPS, echter ReBeL): rebel-sim-messung, Ergebnis im Lehrerbereich unter Messungen."
