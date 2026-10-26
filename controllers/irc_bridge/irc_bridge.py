@@ -1115,7 +1115,7 @@ def main():
         return feine_wolken[node.getId()]
     naeherung = ea.Naeherungssensoren(ea_cfg["naeherung"], robot, cfg["din_versatz"], log=print, wolke_fn=feine_wolke)
     # dieselben Sensoren als Hindernis fuer die Kollisionspruefung (Webots kennt sie nur als Bild)
-    sensoren = [("Näherungssensor %s" % n["name"], k, n.get("durchmesser_mm", 12.0) / 1000.0, n.get("laenge_mm", 50.0) / 1000.0)
+    sensor_hindernisse = [("Näherungssensor %s" % n["name"], k, n.get("durchmesser_mm", 12.0) / 1000.0, n.get("laenge_mm", 50.0) / 1000.0)
                 for n, k in zip(naeherung.liste, naeherung.knoten)]
     app = None
     if (ea_cfg["taster"] or sensorfelder.liste or naeherung.liste) and not os.environ.get("VORSCHAU_BILD"):
@@ -1246,7 +1246,7 @@ def main():
         kollision_takt = 0.1 if waechter.dauer_ms < 8 else 0.2 if waechter.dauer_ms < 20 else 0.3
         if (waechter.an or grenzen.an) and not vorschau and jetzt - kollision_zeit >= kollision_takt and not erster_schritt:
             kollision_zeit = jetzt
-            treffer = [dict(t, art="roboter") for t in waechter.pruefen(teile, aufbauten(robot), tischhoehe(), sensoren)]
+            treffer = [dict(t, art="roboter") for t in waechter.pruefen(teile, aufbauten(robot), tischhoehe(), sensor_hindernisse)]
             if grenzen.an:   # Arbeitsraum, Sperrzonen, Achsgrenzen (K4)
                 gelenke = None if letzter is None else letzter.joints(cfg["gelenkwerte"])
                 for t in grenzen.pruefe(waechter.hand(), (me.getPosition(), me.getOrientation()), gelenke, tcp.getPosition()):

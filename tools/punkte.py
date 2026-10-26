@@ -194,9 +194,15 @@ def loesungen(lage, tool_mm):
     return ergebnis
 
 
+def grundhaltung(lage):
+    """Bezugsstellung fuer die Wahl unter den Loesungen: wie die Home-Stellung von iRC (0 0 90 0 90 0), aber mit
+    Achse 1 zum Ziel hin. So steht der Roboter vorne mit dem Ellbogen oben und dreht nicht ueber hinten."""
+    return [math.degrees(math.atan2(lage.o[1], lage.o[0])), 0.0, 90.0, 0.0, 90.0, 0.0]
+
+
 def rueckwaerts(lage, tool_mm, grenzen_grad, start=None):
     """Gelenkwinkel (Grad) fuer die TCP-Lage innerhalb der Achsgrenzen, sonst None. Unter mehreren Loesungen die
-    naechste an `start` (z.B. dem vorigen Punkt), sonst die mit der kleinsten Auslenkung."""
+    naechste an `start`, sonst an der Grundhaltung (iRC faehrt mit Joint-Befehlen genau diese Gelenkwinkel an)."""
     passend = []
     for q in loesungen(lage, tool_mm):
         if all(lo - 1e-6 <= v <= hi + 1e-6 for v, (lo, hi) in zip(q, grenzen_grad)):
@@ -205,8 +211,8 @@ def rueckwaerts(lage, tool_mm, grenzen_grad, start=None):
                 passend.append(q)
     if not passend:
         return None
-    bezug = start or [0.0] * 6
-    return min(passend, key=lambda q: sum((a - b) ** 2 for a, b in zip(q, bezug)))
+    bezug = start or grundhaltung(lage)
+    return min(passend, key=lambda q: _abstand(q, bezug))
 
 
 # --- Alle Punkte einer Roboterumgebung ---
@@ -227,12 +233,18 @@ def gedreht180(lage):
     return bk.Lage([[-lage.r[i][0], -lage.r[i][1], lage.r[i][2]] for i in range(3)], lage.o)
 
 
-def _drehung_waehlen(lage, tool, grenzen, start):
-    """True, wenn der um 180 Grad gedrehte Griff besser erreichbar ist (erreichbar bzw. kleineres A6)."""
-    q, q_gedreht = rueckwaerts(lage, tool, grenzen, start), rueckwaerts(gedreht180(lage), tool, grenzen, start)
+def _abstand(q, bezug):
+    return sum(_normiere(a - b) ** 2 for a, b in zip(q, bezug))
+
+
+def _drehung_waehlen(lage, tool, grenzen):
+    """True, wenn der um 180 Grad gedrehte Griff besser ist: nur so erreichbar oder naeher an der Grundhaltung
+    (vorne, Ellbogen oben, wenig A6)."""
+    q, q_gedreht = rueckwaerts(lage, tool, grenzen), rueckwaerts(gedreht180(lage), tool, grenzen)
     if q_gedreht is None:
         return False
-    return q is None or abs(q_gedreht[5]) < abs(q[5]) - 1e-6
+    bezug = grundhaltung(lage)
+    return q is None or _abstand(q_gedreht, bezug) < _abstand(q, bezug) - 1e-6
 
 
 def matrix_lage(a, b, c, i, j, spalten, zeilen):
@@ -376,22 +388,20 @@ def berechne(entwurf, merkmale_von, greifer, netz_von=None, huelle=None):
     # Zwei gleiche Backen: je Punkt die gleichwertige, um 180 Grad gedrehte Lage nehmen, wenn A6 dann weniger dreht
     # (bzw. nur so erreichbar ist); Vorposition wie ihr Punkt, ein Magazin einheitlich wie seine Position A
     grenzen = bk.grenzen_werte(entwurf)["achsen"] or bk.IRC_ACHSGRENZEN   # None = Grenzen von iRC
-    tool, letzte, magazin_gedreht = greifer["tcp_mm"], None, {}
+    tool, magazin_gedreht = greifer["tcp_mm"], {}
     for vor_p, p in zip(punkte[0::2], punkte[1::2]):
         if p["magazin"] and p["magazin"] in magazin_gedreht:
             drehen = magazin_gedreht[p["magazin"]]
         else:
-            drehen = _drehung_waehlen(p["lage"], tool, grenzen, letzte)
+            drehen = _drehung_waehlen(p["lage"], tool, grenzen)
             if p["magazin"]:
                 magazin_gedreht[p["magazin"]] = drehen
         for q in (vor_p, p):
             if drehen:
                 q["lage"] = gedreht180(q["lage"])
-            q["gelenke"] = rueckwaerts(q["lage"], tool, grenzen, letzte)
+            q["gelenke"] = rueckwaerts(q["lage"], tool, grenzen)
             if q["gelenke"] is None:
                 q["warnungen"].append("nicht erreichbar (Reichweite oder Achsgrenzen)")
-            else:
-                letzte = q["gelenke"]
     # Magazine: jede Tasche mit Vorposition, wie der Matrix-Befehl sie aus A, B und C rechnet
     lagen_nach_name = {p["name"]: p["lage"] for p in punkte}
     for m in mags:

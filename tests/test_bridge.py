@@ -871,5 +871,22 @@ class TestModell(unittest.TestCase):
             self.assertEqual(text.count("["), text.count("]"), datei)
 
 
+class HauptschleifeNamen(unittest.TestCase):
+    def test_gelenksensoren_nicht_ueberschrieben(self):
+        """motoren/sensoren der Gelenke duerfen in main() nur einmal belegt werden (sonst steht der Roboter still)."""
+        import ast
+        with open(os.path.join(ROOT, "controllers", "irc_bridge", "irc_bridge.py"), encoding="utf-8") as f:
+            baum = ast.parse(f.read())
+        main = next(n for n in baum.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        zuweisungen = {}
+        for n in ast.walk(main):
+            if isinstance(n, ast.Assign):
+                for z in n.targets:
+                    if isinstance(z, ast.Name):
+                        zuweisungen[z.id] = zuweisungen.get(z.id, 0) + 1
+        self.assertEqual(zuweisungen.get("motoren"), 1)
+        self.assertEqual(zuweisungen.get("sensoren"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

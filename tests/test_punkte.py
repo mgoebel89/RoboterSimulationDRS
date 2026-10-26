@@ -71,6 +71,33 @@ class TestGeometrie(unittest.TestCase):
         enge[0] = [-10, 10]                                                              # Achse 1 eingeschraenkt
         self.assertIsNone(punkte.rueckwaerts(bk.Lage(punkte.matrix_aus_abc(180, 0, 0), [0, 350, 50]), 103, enge))
 
+    def test_vorne_mit_ellbogen_oben(self):
+        """Griff von oben: Achse 1 zeigt zum Ziel, Ellbogen oben, nicht ueber hinten (Fehler: Basis drehte 180 Grad)."""
+        g = bk.IRC_ACHSGRENZEN
+        lage = bk.Lage(punkte.matrix_aus_abc(180, 0, 2.39), [480, 20, 74.2])
+        if punkte._drehung_waehlen(lage, 143.68, g):
+            lage = punkte.gedreht180(lage)
+        q = punkte.rueckwaerts(lage, 143.68, g)
+        self.assertAlmostEqual(q[0], math.degrees(math.atan2(20, 480)), places=3)
+        self.assertGreater(q[2], 0)
+        self.assertGreater(q[4], 0)
+        self.assertLess(abs(q[5]), 10)
+        zufall, erreicht = random.Random(7), 0
+        for _ in range(200):
+            w = zufall.uniform(-150, 150)
+            r = zufall.uniform(250, 550)
+            lage = bk.Lage(punkte.matrix_aus_abc(180, 0, zufall.uniform(-180, 180)),
+                           [r * math.cos(math.radians(w)), r * math.sin(math.radians(w)), zufall.uniform(0, 200)])
+            if punkte._drehung_waehlen(lage, 103, g):
+                lage = punkte.gedreht180(lage)
+            q = punkte.rueckwaerts(lage, 103, g)
+            if q is None:   # zu nah am Fuss bzw. ausser Reichweite
+                continue
+            erreicht += 1
+            self.assertLess(abs(punkte._normiere(q[0] - w)), 1e-6)
+            self.assertGreater(q[2], 0)
+        self.assertGreater(erreicht, 150)
+
     def test_greiferdaten(self):
         self.assertEqual((EGP40["tcp_mm"], EGP40["offen_mm"], EGP40["zu_mm"]), (103, 28, 16))
         self.assertIsNone(punkte.greifer_daten("typ=vakuum tcp=0.07"))
