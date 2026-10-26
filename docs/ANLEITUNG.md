@@ -241,7 +241,8 @@ rechts schwebend die **Eigenschaften** des gewählten Teils. Eingefügt und eing
    Es steht zuerst neben dem Tisch. **Sensorfläche** fragt im Dialog nach Art, Beschriftung, DIn und Größe.
 2. **Punkt am Teil** anklicken (Fläche, Bohrung, Kante oder Ecke), dann das **Gegenstück** (Tisch, Nut,
    Roboterfuß oder ein anderes Teil). Die beiden Punkte werden aufeinandergelegt.
-3. Mit **X/Y/Z** verschieben (Pfeile rot/grün am Gegenstück), drehen, ggf. umdrehen.
+3. Mit **X/Y/Z** verschieben (Pfeile rot/grün am Gegenstück), drehen (um die blaue Achse), **kippen** um die rote
+   bzw. grüne Achse (z.B. ein Teil auf die Seite legen, Knöpfe +90°), ggf. umdrehen (auf den Kopf).
 4. **Name** (so heißt das Teil in der Simulation, in der Einteach-Hilfe und auf dem Schild im 3D-Bild; Enter oder
    Klick daneben übernimmt ihn), **Aufbau** (fest) oder **Werkstück** (greifbar, Farbe, Masse).
 5. **Speichern**: Die Roboterumgebung wird erzeugt, Webots rendert ein Vorschaubild. Danach im Lehrerbereich freigeben.
@@ -351,7 +352,8 @@ bündig eingebaut. Der Sensor ist ein Zylinder mit der aktiven Fläche oben (Kap
 Im Dialog wählt man die **Befestigung**:
 
 - **Halter in der Nut, quer** bzw. **entlang der Nut** (Standard beim Profiltisch): Halter und Sensor werden
-  zusammen eingefügt, danach die Nut anklicken. Der Halter sitzt mit seiner Feder verdrehsicher in der Nut, der Sensor
+  zusammen auf die Nut vor dem Roboter gesetzt; eine andere Nut einfach anklicken. Der Halter sitzt mit seiner Feder
+  verdrehsicher in der Nut, der Sensor
   liegt waagerecht (Achse 25 mm über dem Tisch bei M12, 30 mm bei M18), die aktive Fläche 30 mm vor der Wand.
   Versatz X des Halters = Lage entlang der Nut, Drehung 180° = Sensor schaut in die Gegenrichtung. Wechselt man
   beim Sensor die Bauform, wechselt der Halter mit.
