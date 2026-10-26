@@ -348,8 +348,20 @@ Näherungssensoren das Teil erkennen.
 
 **Näherungssensoren** (Werkzeugleiste „Näherung“): induktiv oder kapazitiv, Bauform M12 oder M18, bündig oder nicht
 bündig eingebaut. Der Sensor ist ein Zylinder mit der aktiven Fläche oben (Kappe: induktiv blau, kapazitiv orange).
-Man setzt ihn wie ein Teil: auf Tisch oder Fläche (steht senkrecht) oder mit der Achse in die Bohrung eines Halters
-(„Was anklicken: Bohrung“), dann z.B. waagerecht, sodass der Roboter ein Werkstück davor halten kann. Er schaltet,
+Im Dialog wählt man die **Befestigung**:
+
+- **Halter in der Nut, quer** bzw. **entlang der Nut** (Standard beim Profiltisch): Halter und Sensor werden
+  zusammen eingefügt, danach die Nut anklicken. Der Halter sitzt mit seiner Feder verdrehsicher in der Nut, der Sensor
+  liegt waagerecht (Achse 25 mm über dem Tisch bei M12, 30 mm bei M18), die aktive Fläche 30 mm vor der Wand.
+  Versatz X des Halters = Lage entlang der Nut, Drehung 180° = Sensor schaut in die Gegenrichtung. Wechselt man
+  beim Sensor die Bauform, wechselt der Halter mit.
+- **ohne Halter**: auf Tisch oder Fläche (steht senkrecht) oder mit der Achse in die Bohrung eines eigenen Teils
+  („Was anklicken: Bohrung“).
+
+Die Halter (`naeherung_halter_m12_quer` usw.) liegen in der Teilebibliothek; im Lehrerbereich unter **Teile** →
+Halter anklicken → **STEP herunterladen** gibt die Datei zum Drucken (auch in `cad/halter/`). Befestigt wird der
+Halter mit zwei M5-Schrauben und Nutensteinen für Nut 10, der Sensor mit seinen beiden Muttern an der 6 mm dicken
+Wand. Maße ändern: `tools/halter_naeherung.py` (braucht gmsh) anpassen und neu erzeugen. Der Sensor schaltet,
 wenn eine Werkstück-Oberfläche im Sensordurchmesser näher als **Sn × Materialfaktor** vor der aktiven Fläche liegt, auch
 ein gegriffenes Teil; einmal geschaltet, fällt er erst bei 10 % mehr Abstand ab.
 

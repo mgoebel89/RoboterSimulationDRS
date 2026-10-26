@@ -443,6 +443,16 @@ class TestLehrerSeiten(Grundlage):
         self.assertEqual([t["name"] for t in self.anfrage("GET", "/api/lehrer/teile")[1]], ["vorrichtung", "wuerfel"])
         self.assertEqual(self.anfrage("GET", "/api/lehrer/teil?name=wuerfel")[1]["flaechen"][0]["id"], 1)
         self.assertEqual(self.anfrage("GET", "/api/lehrer/teil?name=../x")[0], 404)
+        # STEP herunterladen (z.B. Sensorhalter zum Drucken), unter dem urspruenglichen Dateinamen
+        with open(os.path.join(uebersicht.TEILE_DIR, "wuerfel", "quelle.step"), "wb") as f:
+            f.write(b"ISO-10303-21;")
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        c.request("GET", "/api/lehrer/teil_step?name=wuerfel", headers={"Cookie": self.cookie})
+        r = c.getresponse()
+        self.assertEqual((r.status, r.getheader("Content-Disposition"), r.read()),
+                         (200, 'attachment; filename="wuerfel.step"', b"ISO-10303-21;"))
+        c.close()
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/teil_step?name=vorrichtung")[0], 404)   # ohne quelle.step
         # keine STEP-Datei: wird abgelehnt, bevor gmsh startet
         self.assertEqual(self.anfrage("POST", "/api/lehrer/teil_hochladen?name=x", roh=b"MZ", typ="application/octet-stream"),
                          (409, {"fehler": "Das ist keine STEP-Datei (.step/.stp)."}))

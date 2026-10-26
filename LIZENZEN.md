@@ -3,8 +3,8 @@
 ## Eigene Dateien
 
 Programmcode, Welten, Anleitung sowie die STEP-Dateien `cad/tisch/basisplatte.step`,
-`cad/backen/robi2/robi2_greiferbacke.step`, `cad/teile/target.step` und `cad/teile/magazin4x4.step`
-stammen von der David-Roentgen-Schule Neuwied. Eine Lizenz für die Weitergabe ist noch nicht festgelegt.
+`cad/backen/robi2/robi2_greiferbacke.step`, `cad/teile/target.step`, `cad/teile/magazin4x4.step` und die
+Sensorhalter in `cad/halter/` (erzeugt mit `tools/halter_naeherung.py`) stammen von der David-Roentgen-Schule Neuwied. Eine Lizenz für die Weitergabe ist noch nicht festgelegt.
 Das Logo der Schule steht nicht im Repository; es wird im Lehrerbereich unter Einstellungen hochgeladen.
 
 ## Nicht enthalten: igus Robot Control

@@ -539,7 +539,7 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
     accept=".step,.stp,.STEP,.STP"></label>
     <button class="warnen" id="ti-trotzdem" hidden>Trotzdem ersetzen</button></div>
   <div class="hilfe" id="ti-stand"></div>
-  <div class="fuss"><button id="ti-zu">Schließen</button>
+  <div class="fuss"><button id="ti-zu">Schließen</button><a class="btn" id="ti-step" download>STEP herunterladen</a>
     <button class="warnen" id="ti-loeschen" style="margin-left:auto">Teil löschen</button></div>
   <div class="hilfe" id="ti-loeschen-hilfe" style="text-align:right"></div>
 </div></div>
@@ -982,6 +982,7 @@ function teilDialog(t, stand) {
   teilOffen = t.name;
   $('ti-titel').textContent = t.name;
   $('ti-quelle').textContent = 'aus ' + (t.quelle || '?') + (t.mitgeliefert ? ' · mitgeliefert' : '');
+  $('ti-step').href = '/api/lehrer/teil_step?name=' + encodeURIComponent(t.name);
   $('ti-daten').innerHTML = '<b>' + (t.groesse_mm || []).map(v => v.toFixed(1)).join(' × ') + ' mm</b><div class="hilfe">'
     + t.anzahl.flaechen + ' Flächen, ' + t.anzahl.bohrungen + ' Bohrungen, ' + t.anzahl.kanten + ' Kanten, '
     + t.anzahl.ecken + ' Ecken</div>';
@@ -2104,6 +2105,17 @@ def mitgelieferte_teile():
         return set()
 
 
+def teil_step_name(name):
+    """Dateiname zum Herunterladen: der urspruengliche (teil.json "quelle"), nur mit sicheren Zeichen."""
+    try:
+        with open(os.path.join(TEILE_DIR, name, "teil.json"), encoding="utf-8") as f:
+            quelle = str(json.load(f).get("quelle") or "")
+    except (OSError, ValueError, AttributeError):
+        quelle = ""
+    quelle = re.sub(r"[^A-Za-z0-9._-]", "_", quelle)[:120]
+    return quelle if re.search(r"\.(step|stp)$", quelle, re.I) else name + ".step"
+
+
 def teil_in_papierkorb(name):
     """teile/<name>/ nach teile/papierkorb/<name>-<zeit>/ verschieben. Rueckgabe: Ordner im Papierkorb."""
     ziel = os.path.join(TEILE_DIR, TEILE_PAPIERKORB, "%s-%s" % (name, time.strftime("%Y%m%d-%H%M%S")))
@@ -2735,6 +2747,15 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     with open(datei, "rb") as f:
                         self._antwort(200, f.read(), "image/png")
+            elif pfad == "/api/lehrer/teil_step":   # STEP-Datei eines Teils, z.B. zum Drucken eines Halters
+                name = urllib.parse.parse_qs(abfrage).get("name", [""])[0]
+                datei = os.path.join(TEILE_DIR, name, "quelle.step")
+                if not TEIL_NAME.fullmatch(name) or not os.path.exists(datei):
+                    self._json(404, {"fehler": "Teil nicht gefunden."})
+                else:
+                    with open(datei, "rb") as f:
+                        self._antwort(200, f.read(), "application/step",
+                                      kopf=[("Content-Disposition", 'attachment; filename="%s"' % teil_step_name(name))])
             elif pfad == "/api/lehrer/teil" or pfad == "/api/lehrer/netz":
                 name = urllib.parse.parse_qs(abfrage).get("name", [""])[0]
                 datei = os.path.join(TEILE_DIR, name, "teil.json" if pfad.endswith("teil") else "netz.json")

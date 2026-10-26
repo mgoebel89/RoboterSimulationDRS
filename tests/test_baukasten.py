@@ -648,6 +648,34 @@ class TestTeilePipeline(unittest.TestCase):
             self.assertEqual((h[2], h[5]), (0, 20))
             self.assertEqual(sorted([round(h[0] + 250, 6), round(h[1] + 400, 6)]), [10, 10])   # je 10 mm von beiden Kanten
 
+    def test_naeherung_halter(self):
+        # mitgelieferte Halter (tools/halter_naeherung.py): Unterseite auf die Nut, Sensor waagerecht in die Bohrung
+        import teile
+        with tempfile.TemporaryDirectory() as tmp:
+            for bauform, d, hoehe in (("m12", 12, 25), ("m18", 18, 30)):
+                for richtung in ("quer", "laengs"):
+                    name = "naeherung_halter_%s_%s" % (bauform, richtung)
+                    t = teile.einlesen(os.path.join(ROOT, "cad", "halter", name + ".step"), tmp, name)
+                    unten = [f for f in t["flaechen"] if f["normale"] == [0, 0, -1] and f["mitte"][2] == 0]
+                    self.assertEqual(len(unten), 1, name)   # eine Flaeche, Mitte auf der Nut
+                    self.assertEqual([round(v, 3) for v in unten[0]["mitte"]], [0, 0, 0])
+                    loch = max(t["bohrungen"], key=lambda b: b["durchmesser"])
+                    self.assertAlmostEqual(loch["durchmesser"], d + 0.4, places=2)
+                    self.assertEqual(sorted(round(b["durchmesser"], 2) for b in t["bohrungen"])[:2], [5.5, 5.5])
+                    sensor = {"id": "ini1", "art": "naeherung", "naeherung": {"bauform": bauform.upper()},
+                              "verbindung": {"punkt": {"art": "flaeche", "id": "unten"}, "an": "h",
+                                             "an_punkt": {"art": "bohrung", "id": loch["id"], "ende": 0}, "versatz_mm": [0, 0, -20]}}
+                    e = entwurf(teil("h", name, {"art": "flaeche", "id": unten[0]["id"]}, "tisch",
+                                     {"art": "kante", "id": "nut-5", "flaeche": "oben"}), sensor)
+                    e["tisch"] = {"art": "profil", "anschlag_hinten_mm": 50, "anschlag_links_mm": 200}
+                    lagen = bk.loese(e, bk.teile_lader(tmp))
+                    h = huelle(lagen["h"], t)
+                    self.assertEqual((h[2], round((h[0] + h[3]) / 2, 6)), (-5, 40))   # Feder 3 mm in Nut 5 (x = 40)
+                    achse = [round(v, 6) for v in bk._t(lagen["ini1"].r)[2]]
+                    self.assertEqual(achse[2], 0, name)                                # Sensor liegt waagerecht
+                    self.assertEqual(abs(achse[0 if richtung == "quer" else 1]), 1, name)   # quer bzw. entlang der Nut (y)
+                    self.assertEqual(round(lagen["ini1"].o[2], 6), hoehe - 2)          # Achshoehe ueber der Tischplatte
+
     def test_falscher_name_und_keine_step_datei(self):
         import teile
         with tempfile.TemporaryDirectory() as tmp:

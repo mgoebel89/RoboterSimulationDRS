@@ -320,9 +320,13 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
       <label class="feldspalte">Bauform <select id="ni-bauform"><option>M12</option><option>M18</option></select></label>
       <label class="feldspalte">Einbau <select id="ni-einbau"><option value="buendig">bündig</option><option value="nicht_buendig">nicht bündig</option></select></label>
       <label class="feldspalte">DIn <input id="ni-din" type="number" min="1" max="64" style="width:80px"></label></div>
-    <div class="hilfe">Zylinder mit der aktiven Fläche oben. Nach dem Einfügen das Gegenstück anklicken: Tisch oder Fläche
-      (steht senkrecht) oder die Bohrung eines Halters – dafür in den Eigenschaften „Was anklicken: Bohrung“ wählen und
-      die Achse des Sensors in die Bohrung stecken. Schaltabstand und Öffner/Schließer stehen danach rechts.</div></div>
+    <div class="zeile"><label class="feldspalte" style="flex:1">Befestigung <select id="ni-halter">
+      <option value="quer">Halter in der Nut, Sensor waagerecht quer zur Nut</option>
+      <option value="laengs">Halter in der Nut, Sensor waagerecht entlang der Nut</option>
+      <option value="">ohne Halter (senkrecht auf Tisch oder Fläche)</option></select></label></div>
+    <div class="hilfe">Mit Halter: Halter und Sensor werden zusammen eingefügt, danach die Nut anklicken (Versatz X = Lage
+      entlang der Nut). Den Halter gibt es als STEP-Datei zum Drucken (M5-Schrauben mit Nutenstein). Ohne Halter steht der
+      Sensor mit der aktiven Fläche nach oben. Schaltabstand und Öffner/Schließer stehen danach rechts.</div></div>
   <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="ni-ok">Einfügen</button></div>
 </div></div>
 
@@ -1350,7 +1354,10 @@ function iniAusFormular(ev) {
   const sn = Number($('n-sn').value);
   if (!neuesDatenblatt && Number.isFinite(sn) && sn > 0 && sn !== NAEHERUNG_SN[n.typ][n.bauform][n.einbau]) n.sn_mm = Math.min(40, Math.max(0.5, sn));
   t.naeherung = n;
-  if (alt.bauform !== n.bauform) { objektEntfernen(t.id); objektBauen(t).then(() => { waehlen(t.id); rechnen(); }); }
+  if (alt.bauform !== n.bauform) {
+    objektEntfernen(t.id);
+    objektBauen(t).then(() => halterTauschen(t)).catch(e => status(e.message, true)).then(() => { waehlen(t.id); rechnen(); });
+  }
   else { iniFormular(t); listeZeigen(); lagenAnwenden(); rechnenSpaeter(); }
 }
 ['n-name', 'n-typ', 'n-bauform', 'n-einbau', 'n-sn', 'n-din', 'n-art'].forEach(i => $(i).addEventListener('change', iniAusFormular));
@@ -1361,6 +1368,7 @@ $('plus-ini').onclick = () => {
   let din = NAEHERUNG_STANDARD.din;
   while (belegt.includes(din)) din++;
   $('ni-name').value = 'Sensor ' + n; $('ni-din').value = din; $('ni-bauform').value = 'M12'; $('ni-einbau').value = 'buendig';
+  $('ni-halter').value = tischWerte().art === 'profil' ? 'quer' : '';
   $('ni-typ').querySelectorAll('button').forEach((b, i) => b.classList.toggle('an', i === 0));
   dialogAuf('ini-dialog');
 };
@@ -1374,11 +1382,54 @@ $('ni-ok').onclick = async () => {
                      bauform: $('ni-bauform').value, einbau: $('ni-einbau').value,
                      din: Math.min(64, Math.max(1, Math.round(Number($('ni-din').value) || 22))), art: 'schliesser'};
   const t = {id: 'ini' + n, art: 'naeherung', naeherung, verbindung: {punkt: {art: 'flaeche', id: 'unten'}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+  let halter = null;
+  if ($('ni-halter').value) {
+    try { halter = await halterAnlegen(naeherung.bauform, $('ni-halter').value, t); }
+    catch (e) { status(e.message, true); return; }
+  }
   entwurf.teile.push(t); merken();
   await objektBauen(t);
-  waehlen(t.id); await rechnen(); wahlStarten('ziel');
-  status('Jetzt das Gegenstück anklicken (Tisch, Nut, Fläche oder Bohrung eines Teils).');
+  waehlen(halter ? halter.id : t.id); await rechnen(); wahlStarten('ziel');
+  status(halter ? 'Jetzt die Nut anklicken, in der der Halter sitzt (Versatz X = Lage entlang der Nut, Drehung 180° am Halter: Sensor schaut in die Gegenrichtung).'
+                : 'Jetzt das Gegenstück anklicken (Tisch, Nut, Fläche oder Bohrung eines Teils).');
 };
+// Halter fuer Naeherungssensoren (cad/halter, tools/halter_naeherung.py): Unterseite = die nach unten zeigende Flaeche
+// auf Hoehe 0 (Mitte auf der Nut), Sensorloch = groesste Bohrung. Die Nummern stehen erst in teil.json fest.
+const halterName = (bauform, richtung) => 'naeherung_halter_' + bauform.toLowerCase() + '_' + richtung;
+async function halterMerkmale(name) {
+  let d;
+  try { d = await teilLaden(name); }
+  catch (e) { throw new Error('Der Halter ' + name + ' fehlt in der Teilebibliothek (Update einspielen).'); }
+  const unten = d.teil.flaechen.find(f => f.normale[2] < -0.999 && Math.abs(f.mitte[2]) < 0.01);
+  const loch = d.teil.bohrungen.filter(b => b.innen).sort((a, b) => b.durchmesser - a.durchmesser)[0];
+  if (!unten || !loch) throw new Error('Der Halter ' + name + ' hat keine passende Unterseite oder Bohrung.');
+  return {unten: unten.id, loch: loch.id};
+}
+async function halterAnlegen(bauform, richtung, sensor) {
+  const name = halterName(bauform, richtung), m = await halterMerkmale(name);
+  let n = 1;
+  while (teil('halter_' + sensor.id + (n > 1 ? '_' + n : ''))) n++;
+  const h = {id: 'halter_' + sensor.id + (n > 1 ? '_' + n : ''), teil: name, art: 'aufbau',
+             verbindung: {punkt: {art: 'flaeche', id: m.unten}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+  entwurf.teile.push(h);
+  await objektBauen(h);
+  // Sensor mit dem Kabelende 20 mm durch die Wand gesteckt, aktive Flaeche zeigt vom Halter weg
+  sensor.verbindung = {punkt: {art: 'flaeche', id: 'unten'}, an: h.id, an_punkt: {art: 'bohrung', id: m.loch, ende: 0},
+                       versatz_mm: [0, 0, -20], drehung_grad: 0};
+  return h;
+}
+// Bauform gewechselt: sitzt der Sensor in einem Halter, kommt der passende Halter (gleiche Richtung) an seine Stelle
+async function halterTauschen(sensor) {
+  const h = teil(sensor.verbindung && sensor.verbindung.an), alt = h && /^naeherung_halter_m(12|18)_(quer|laengs)$/.exec(h.teil || '');
+  if (!alt) return;
+  const name = halterName(iniWerte(sensor).bauform, alt[2]);
+  if (name === h.teil) return;
+  const m = await halterMerkmale(name);
+  h.teil = name;
+  if (h.verbindung) h.verbindung.punkt = {art: 'flaeche', id: m.unten};
+  sensor.verbindung.an_punkt = {art: 'bohrung', id: m.loch, ende: sensor.verbindung.an_punkt ? sensor.verbindung.an_punkt.ende || 0 : 0};
+  objektEntfernen(h.id); await objektBauen(h);
+}
 function zoneFormular(t) {
   const z = zoneWerte(t);
   $('z-name').value = z.name || t.id; $('z-reaktion').value = z.reaktion;

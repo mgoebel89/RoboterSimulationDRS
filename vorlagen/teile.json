@@ -6,6 +6,10 @@
     {"name": "schunk_egp40", "step": "cad/greifer/egp40/schunk_egp40_n_n_b.stp", "koerper": "1,5,10"},
     {"name": "schunk_egp25", "step": "cad/greifer/egp25/schunk_egp25_n_s_b.stp", "koerper": "1,3,8"},
     {"name": "target", "step": "cad/teile/target.step"},
-    {"name": "magazin4x4", "step": "cad/teile/magazin4x4.step"}
+    {"name": "magazin4x4", "step": "cad/teile/magazin4x4.step"},
+    {"name": "naeherung_halter_m12_quer", "step": "cad/halter/naeherung_halter_m12_quer.step"},
+    {"name": "naeherung_halter_m12_laengs", "step": "cad/halter/naeherung_halter_m12_laengs.step"},
+    {"name": "naeherung_halter_m18_quer", "step": "cad/halter/naeherung_halter_m18_quer.step"},
+    {"name": "naeherung_halter_m18_laengs", "step": "cad/halter/naeherung_halter_m18_laengs.step"}
   ]
 }
