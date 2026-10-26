@@ -168,6 +168,46 @@ class TestGriff(unittest.TestCase):
         self.assertEqual(bk.variablen_name("3-er Magazin"), "P_3_er_Magazin")
 
 
+def wuerfel_netz(kante):
+    """Dreiecksnetz eines Wuerfels mit Ecke im Ursprung (wie test_baukasten.wuerfel), mm."""
+    p = [[x, y, z] for x in (0, kante) for y in (0, kante) for z in (0, kante)]
+    flaechen = [(0, 1, 3, 2), (4, 5, 7, 6), (0, 1, 5, 4), (2, 3, 7, 6), (0, 2, 6, 4), (1, 3, 7, 5)]
+    return p, [d for a, b, c, e in flaechen for d in ((a, b, c), (a, c, e))]
+
+
+# EGP 40 wie in protos/meshes/huellen.json: Grundkoerper und offene Backen im Flanschsystem (m)
+HUELLE = {"grund": {"mitte": [0.0, 0.0, 0.04817], "halb": [0.0275, 0.0275, 0.04818]},
+          "links": {"mitte": [-0.017, 0.0, 0.1025], "halb": [0.003, 0.008, 0.00615]},
+          "rechts": {"mitte": [0.017, 0.0, 0.1025], "halb": [0.003, 0.008, 0.00615]}}
+
+
+class TestKollision(unittest.TestCase):
+    def test_greifer_gegen_nachbar_und_tisch(self):
+        netze = {"wuerfel": wuerfel_netz(20), "vorrichtung": wuerfel_netz(40)}
+        griff = {"flaechen": [3, 4], "anfahrt": 2}
+        # w1 in der Tischmitte (x 240..260); w2 5 mm daneben in Schliessrichtung (x 265..285); w3 weit weg, zu tief gegriffen
+        e = {"titel": "T", "teile": [werkstueck("w1", "wuerfel", griff), werkstueck("w2", "wuerfel", griff, versatz=(25, 0, 0)),
+                                     werkstueck("w3", "wuerfel", dict(griff, tiefe_mm=19), versatz=(0, 200, 0))]}
+        erg = punkte.berechne(e, ALLE.__getitem__, EGP40, netze.__getitem__, HUELLE)
+        warn = {p["name"]: " ".join(p["warnungen"]) for p in erg["punkte"]}
+        self.assertIn("stoesst an: w2", warn["w1_greifen"])
+        self.assertIn("w1", warn["w2_greifen"])
+        self.assertIn("Tisch", warn["w3_greifen"])
+        self.assertNotIn("stoesst", warn["w3_greifen_vor"])
+        self.assertNotIn("w3", warn["w1_greifen"])   # das eigene Teil zwischen den Backen zaehlt nicht
+        # ohne Netze und Huelle keine Kollisionspruefung
+        ohne = punkte.berechne(e, ALLE.__getitem__, EGP40)
+        self.assertFalse(any("stoesst" in w for p in ohne["punkte"] for w in p["warnungen"]))
+
+    def test_obj_lesen(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            pfad = os.path.join(tmp, "netz.obj")
+            with open(pfad, "w") as f:
+                f.write("# Test\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvn 0 0 1\nf 1//1 2//1 3//1 4//1\n")
+            self.assertEqual(punkte.lies_obj(pfad), ([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], [(0, 1, 2), (0, 2, 3)]))
+
+
 class TestProgramme(unittest.TestCase):
     def setUp(self):
         teile = [teil("v", "vorrichtung", UNTEN, "tisch", TISCH, versatz=(100, 0, 0)),

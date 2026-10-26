@@ -43,7 +43,9 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
 .liste .art { color:var(--leise); font-size:.8em; white-space:nowrap; }
 .symbol { width:22px; height:22px; border-radius:6px; flex:none; display:flex; align-items:center; justify-content:center;
   font-size:.7em; font-weight:800; color:#fff; }
-.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; } .symbol.sperrzone { background:var(--pink); } .symbol.naeherung { background:#5d6779; }
+.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; } .symbol.sperrzone { background:var(--pink); } .symbol.naeherung { background:#5d6779; } .symbol.ablage { background:#2a9d6a; }
+#md-liste .magazin { border:1px solid var(--linie); border-radius:8px; padding:8px 10px; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; }
+#md-liste .magazin input[type=number] { width:64px; }
 .achsgrenzen { display:grid; grid-template-columns:auto 1fr 1fr auto; gap:6px 10px; align-items:center; font-size:.9em; }
 .achsgrenzen input { width:100%; } .achsgrenzen .irc { color:var(--leise); font-size:.85em; white-space:nowrap; }
 .dialog-inhalt h3 { margin:10px 0 0; font-size:.95em; color:var(--blau); }
@@ -196,6 +198,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <button class="baum-eintrag" id="baum-ea" title="Taster und Leuchtmelder">%%ICON_TASTER%%Taster &amp; Leuchten<span class="kurz" id="ea-kurz"></span></button>
   <button class="baum-eintrag" id="baum-kollision" title="Kollisionsprüfung">%%ICON_KOLLISION%%Kollisionen<span class="kurz" id="kollision-kurz"></span></button>
   <button class="baum-eintrag" id="baum-grenzen" title="Arbeitsraum und Achsgrenzen (Sperrzonen stehen bei den Teilen)">%%ICON_SPERRZONE%%Grenzen<span class="kurz" id="grenzen-kurz"></span></button>
+  <button class="baum-eintrag" id="baum-magazine" title="Magazine für den Matrix-Befehl von iRC (aus je drei Ablagen)">%%ICON_PLAN%%Magazine<span class="kurz" id="magazine-kurz"></span></button>
   <div class="baum-kopf">Teile <span id="teile-anzahl"></span></div>
   <div class="liste" id="teileliste"></div>
   <div class="hilfe">Neue Teile stehen erst neben dem Tisch; mit einer Verbindung kommen sie an ihren Platz.
@@ -258,6 +261,26 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
       </div>
       <div class="hilfe">Greifer, Backen und das gegriffene Teil dürfen nicht in den Quader. Stopp hält das Programm an
         wie eine Kollision, Warnung zeigt nur einen Hinweis. In Webots unsichtbar; Schüler sehen sie mit „Grenzen“.</div>
+    </div>
+    <div class="abschnitt" id="e-griff" hidden><h3>Greifpunkt für iRC</h3>
+      <div class="zeile"><span class="wahlpunkt" id="g-flaechen">Greifflächen: –</span><button id="g-wahl">anklicken</button></div>
+      <div class="zeile"><span class="wahlpunkt" id="g-anfahrt">Anfahrseite: –</span><button id="g-wahl-anfahrt">anklicken</button></div>
+      <div class="zahlen">
+        <label title="TCP so tief unter der Anfahrseite; leer = Backen möglichst ganz am Teil">Tiefe (mm) <input id="g-tiefe" type="number" step="0.5" placeholder="auto"></label>
+        <label title="Vorposition: so weit entlang der Werkzeugachse zurück">Vorpos. (mm) <input id="g-vor" type="number" min="0" max="300" step="5" placeholder="40"></label>
+        <label id="g-dreh-zeile" title="Rundes Teil von der Stirnseite: Backen um die Achse drehen (0 = A6 dreht kaum)">Drehung (°) <input id="g-dreh" type="number" step="15" value="0"></label>
+      </div>
+      <label class="feldspalte">Name der Variablen <input id="g-name" placeholder="wie das Werkstück" maxlength="31"></label>
+      <div class="hilfe" id="g-hilfe"></div>
+      <div class="zeile"><button id="g-ablage" title="Abbild dieses Werkstücks an eine Zielstelle setzen (z.B. in eine Magazintasche)">+ Ablage</button>
+        <button id="g-weg" class="warnen" style="margin-left:auto">Greifpunkt entfernen</button></div>
+    </div>
+    <div class="abschnitt" id="e-ablage" hidden><h3>Ablage für iRC</h3>
+      <div class="hilfe" id="a-von"></div>
+      <div class="zahlen"><label>Vorpos. (mm) <input id="a-vor" type="number" min="0" max="300" step="5" placeholder="wie Greifpunkt"></label></div>
+      <label class="feldspalte">Name der Variablen <input id="a-name" placeholder="wie die Ablage" maxlength="31"></label>
+      <div class="hilfe" id="a-hilfe"></div>
+      <div class="zeile"><button id="a-magazin" title="Drei Ablagen als Magazin für den Matrix-Befehl von iRC">Magazin …</button></div>
     </div>
     <div class="abschnitt"><h3>Verbindung</h3>
       <label class="feldspalte">Was anklicken
@@ -348,6 +371,19 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
     <div class="hilfe">Ein Quader, in den Greifer, Backen und gegriffenes Teil nicht dürfen, z.B. über einem Magazin
       oder vor einer Wand. Nach dem Einfügen das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).</div></div>
   <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="zd-ok">Einfügen</button></div>
+</div></div>
+
+<!-- Dialog: Magazine fuer den Matrix-Befehl von iRC -->
+<div id="magazin-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Magazine">
+  <div class="dialog-kopf"><h2>Magazine für iRC</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt">
+    <div class="hilfe">Ein Magazin besteht aus drei Ablagen desselben Werkstücks: <b>A</b> erste Tasche, <b>B</b> letzte Tasche
+      der ersten Reihe, <b>C</b> erste Tasche der letzten Reihe. iRC fährt mit dem Matrix-Befehl von A nach B
+      (Spalten), dann in Richtung C versetzt (Zeilen). Im 3D-Bild erscheinen alle Taschen als blaue Punkte.</div>
+    <div id="md-liste" style="display:flex;flex-direction:column;gap:10px"></div>
+    <div class="zeile"><button id="md-neu">+ Magazin</button></div>
+    <div class="hilfe" id="md-hilfe"></div></div>
+  <div class="dialog-fuss"><button class="haupt" data-zu>Fertig</button></div>
 </div></div>
 
 <!-- Dialog: Tisch -->
@@ -859,15 +895,16 @@ function datenVon(t) {
   return sensorDaten[schluessel];
 }
 function standardFarbe(t) {
-  return t.art === 'sensor' ? [0.15, 0.75, 0.35] : t.art === 'sperrzone' ? [0.83, 0.0, 0.37]
+  return t.art === 'sensor' ? [0.15, 0.75, 0.35] : t.art === 'sperrzone' ? [0.83, 0.0, 0.37] : t.art === 'ablage' ? [0.16, 0.62, 0.42]
     : t.art === 'naeherung' ? (iniWerte(t).typ === 'kapazitiv' ? [0.9, 0.45, 0.1] : [0.2, 0.45, 0.75]) : t.farbe || (t.art === 'werkstueck' ? [0.1, 0.4, 0.9] : [0.7, 0.7, 0.72]);
 }
 async function objektBauen(t) {
   const d = ohneTeil(t) ? datenVon(t) : await teilLaden(t.teil);
   const g = new THREE.Group();
+  const durchsichtig = quaderArt(t) || t.art === 'ablage';   // Ablage: nur ein Abbild des Werkstuecks (fuer iRC)
   const mesh = new THREE.Mesh(d.geo, new THREE.MeshStandardMaterial({color: new THREE.Color(...standardFarbe(t)), roughness: 0.65, metalness: 0.1,
-                                                                    transparent: quaderArt(t), opacity: t.art === 'sensor' ? 0.45 : t.art === 'sperrzone' ? 0.28 : 1,
-                                                                    depthWrite: !quaderArt(t)}));
+                                                                    transparent: durchsichtig, opacity: t.art === 'sensor' ? 0.45 : t.art === 'sperrzone' ? 0.28 : t.art === 'ablage' ? 0.38 : 1,
+                                                                    depthWrite: !durchsichtig}));
   mesh.userData = {teilId: t.id};
   g.add(mesh, new THREE.LineSegments(d.kanten, new THREE.LineBasicMaterial({color: 0x1d2330, transparent: true, opacity: 0.35})));
   g.userData = {mesh};
@@ -1016,7 +1053,7 @@ function merkmalBei(hit, nurTeil) {
 
 let zeigerRahmen = null;
 renderer.domElement.addEventListener('pointermove', ev => {
-  if (!wahl || zeigerRahmen) return;
+  if (!wahl || zeigerRahmen || wahl === 'griff' || wahl === 'griff2' || wahl === 'anfahrt') return;   // Greifpunkt: eigener Hinweis
   zeigerRahmen = requestAnimationFrame(() => {
     zeigerRahmen = null;
     leeren(vorschauGruppe);
@@ -1035,6 +1072,7 @@ renderer.domElement.addEventListener('pointerup', ev => {
     if (hit && hit.object.userData.teilId && hit.object.userData.teilId !== 'greifer') waehlen(hit.object.userData.teilId);
     return;
   }
+  if (wahl === 'griff' || wahl === 'griff2' || wahl === 'anfahrt') { griffKlick(hit); return; }   // Greifpunkt fuer iRC
   const mk = merkmalBei(hit, wahl === 'teil' ? auswahl : null);
   if (!mk) return;
   const t = teil(auswahl);
@@ -1093,18 +1131,21 @@ function formularZeigen() {
   listeZeigen();
   if (!t) return;
   const v = t.verbindung || {};
-  const sensor = t.art === 'sensor', zone = t.art === 'sperrzone', ini = t.art === 'naeherung';
-  $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : zone ? 'Sperrzone' : ini ? 'Näherungssensor' : t.teil) + ')';
+  const sensor = t.art === 'sensor', zone = t.art === 'sperrzone', ini = t.art === 'naeherung', ablage = t.art === 'ablage';
+  $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : zone ? 'Sperrzone' : ini ? 'Näherungssensor' : ablage ? 'Ablage' : t.teil) + ')';
   $('e-symbol').className = 'symbol ' + (t.art || 'aufbau'); $('e-symbol').textContent = ART_KURZ[t.art || 'aufbau'];
   feld('e-id', t.id); $('e-art').value = t.art || 'aufbau';
   $('e-farbe').value = hex(standardFarbe(t));
-  $('e-art').hidden = $('e-farbe').hidden = sensor || zone || ini;
+  $('e-art').hidden = $('e-farbe').hidden = sensor || zone || ini || ablage;
   $('e-masse-zeile').hidden = t.art !== 'werkstueck';
-  $('e-material-zeile').hidden = ohneTeil(t) || BACKEN; $('e-material').value = t.material || 'pla';
+  $('e-material-zeile').hidden = ohneTeil(t) || BACKEN || ablage; $('e-material').value = t.material || 'pla';
   $('e-sensor').hidden = !sensor; $('e-zone').hidden = !zone; $('e-ini').hidden = !ini;
+  $('e-griff').hidden = t.art !== 'werkstueck' || BACKEN; $('e-ablage').hidden = !ablage;
   if (sensor) sensorFormular(t);
   if (zone) zoneFormular(t);
   if (ini) iniFormular(t);
+  if (t.art === 'werkstueck' && !BACKEN) griffFormular(t);
+  if (ablage) ablageFormular(t);
   feld('e-masse', t.masse_kg ? Math.round(t.masse_kg * 1000) : '');
   $('p-teil').textContent = 'Punkt am Teil: ' + punktText(t.id, v.punkt);
   $('p-ziel').textContent = 'Gegenstück: ' + punktText(v.an, v.an_punkt);
@@ -1119,14 +1160,17 @@ function formularZeigen() {
                               : 'Noch nicht platziert (steht neben dem Tisch).';
   punkteZeigen();
 }
-const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S', sperrzone: 'Z', naeherung: 'N'};
+const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S', sperrzone: 'Z', naeherung: 'N', ablage: 'L'};
 function listeZeigen() {
   $('teile-anzahl').textContent = entwurf.teile.length || '';
+  $('magazine-kurz').textContent = (entwurf.magazine || []).length || '';
   $('teileliste').innerHTML = entwurf.teile.map(t => '<div data-id="' + t.id + '" class="' + (t.id === auswahl ? 'an' : '') + '" title="'
     + (t.art === 'werkstueck' ? 'Werkstück' : t.art === 'sensor' ? 'Sensorfläche' : t.art === 'sperrzone' ? 'Sperrzone'
-       : t.art === 'naeherung' ? 'Näherungssensor' : 'Aufbau') + ' · Rechtsklick für das Menü">'
+       : t.art === 'naeherung' ? 'Näherungssensor' : t.art === 'ablage' ? 'Ablage (Abbild für iRC)' : 'Aufbau') + ' · Rechtsklick für das Menü">'
     + '<span class="symbol ' + (t.art || 'aufbau') + '">' + ART_KURZ[t.art || 'aufbau'] + '</span><span class="name">' + t.id + '</span>'
     + '<span class="art">' + (t.art === 'sensor' ? (sensorWerte(t).typ === 'farbe' ? 'Farbsensor' : 'DIn' + sensorWerte(t).din)
+       : t.art === 'ablage' ? 'Ablage für ' + t.von
+       : t.art === 'werkstueck' && t.griff ? t.teil + ', Greifpunkt'
        : t.art === 'sperrzone' ? (zoneWerte(t).reaktion === 'stopp' ? 'Sperrzone, Stopp' : 'Sperrzone, Warnung')
        : t.art === 'naeherung' ? (iniWerte(t).typ === 'induktiv' ? 'induktiv ' : 'kapazitiv ') + iniWerte(t).bauform + ', DIn' + iniWerte(t).din
        : t.teil + (t.material && t.material !== 'pla' ? ', ' + MATERIALIEN[t.material].name : '')) + '</span>'
@@ -1166,17 +1210,24 @@ $('e-id').onchange = () => {
   }
   teil(alt).id = neu;
   for (const t of entwurf.teile) if (t.verbindung && t.verbindung.an === alt) t.verbindung.an = neu;
+  for (const t of entwurf.teile) if (t.art === 'ablage' && t.von === alt) t.von = neu;   // Ablagen und Magazine verweisen darauf
+  for (const m of entwurf.magazine || []) for (const k of ['a', 'b', 'c']) if (m[k] === alt) m[k] = neu;
   objekte[neu] = objekte[alt]; delete objekte[alt]; objekte[neu].userData.mesh.userData.teilId = neu;
   if (lagen[alt]) { lagen[neu] = lagen[alt]; delete lagen[alt]; }
   auswahl = neu; formularZeigen();
 };
 $('e-loesen').onclick = () => { const t = teil(auswahl); t.verbindung = null; merken(); formularZeigen(); rechnen(); };
 $('e-entfernen').onclick = () => {
-  if (!confirm('Teil ' + auswahl + ' aus der Welt entfernen?')) return;
-  const weg = auswahl;
-  entwurf.teile = entwurf.teile.filter(t => t.id !== weg);
-  for (const t of entwurf.teile) if (t.verbindung && t.verbindung.an === weg) { t.verbindung.an = null; t.verbindung.an_punkt = null; }
-  objektEntfernen(weg); auswahl = null; merken(); formularZeigen(); rechnen();
+  const ablagen = entwurf.teile.filter(t => t.art === 'ablage' && t.von === auswahl).map(t => t.id);
+  if (!confirm('Teil ' + auswahl + ' aus der Welt entfernen?' + (ablagen.length ? ' Seine Ablagen (' + ablagen.join(', ') + ') kommen mit weg.' : ''))) return;
+  const weg = new Set([auswahl, ...ablagen]);
+  entwurf.teile = entwurf.teile.filter(t => !weg.has(t.id));
+  for (const t of entwurf.teile) if (t.verbindung && weg.has(t.verbindung.an)) { t.verbindung.an = null; t.verbindung.an_punkt = null; }
+  const vorher = (entwurf.magazine || []).length;
+  entwurf.magazine = (entwurf.magazine || []).filter(m => !['a', 'b', 'c'].some(k => weg.has(m[k])));
+  if (entwurf.magazine.length < vorher) status('Magazin entfernt: eine seiner Ablagen ist weg.');
+  for (const id of weg) objektEntfernen(id);
+  auswahl = null; merken(); formularZeigen(); rechnen();
 };
 
 // ---------- Rechnen und Speichern ----------
@@ -1205,7 +1256,181 @@ async function rechnen() {
     const offen = entwurf.teile.length - teile.length;
     status(offen ? offen + ' Teil(e) noch ohne vollständige Verbindung.' : '');
   } catch (e) { status(e.message, true); }
-  lagenAnwenden(); formularZeigen(); if (BACKEN) tcpZeigen();
+  lagenAnwenden(); formularZeigen(); if (BACKEN) tcpZeigen(); else punkteRechnenSpaeter();
+}
+
+// ---------- Greifpunkte, Ablagen und Magazine fuer den iRC-Export (tools/punkte.py) ----------
+// Greifpunkt: zwei gegenueberliegende ebene Flaechen oder eine runde (die Gegenseite ergibt sich), dann die
+// Anfahrseite. Ablage: durchsichtiges Abbild eines Werkstuecks an der Zielstelle. Magazin: drei Ablagen A/B/C.
+const plus = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+let griffErste = null, irc = null, ircFehler = '', ircZeit = null;
+const griffGruppe = new THREE.Group();
+szene.add(griffGruppe);
+const GRIFF_MAT = new THREE.MeshBasicMaterial({color: 0x0A7A3E, transparent: true, opacity: 0.9, depthTest: false});
+const WARN_MAT = new THREE.MeshBasicMaterial({color: 0xD4005E, transparent: true, opacity: 0.9, depthTest: false});
+const TASCHE_MAT = new THREE.MeshBasicMaterial({color: 0x1F6FD1, transparent: true, opacity: 0.75, depthTest: false});
+const GRIFF_HINWEIS = {griff: 'Greiffläche am Werkstück anklicken (eben oder rund)', griff2: 'Gegenüberliegende Greiffläche anklicken',
+                       anfahrt: 'Anfahrseite anklicken: die ebene Fläche, von der der Greifer kommt'};
+function griffWahl(modus) {
+  wahlBeenden();
+  wahl = modus;
+  $('hinweis3d').hidden = false; $('hinweis3d').textContent = GRIFF_HINWEIS[modus] + ' (Esc bricht ab)';
+}
+function griffKlick(hit) {
+  const t = teil(auswahl);
+  if (!t || !hit || hit.object.userData.teilId !== auswahl) { status('Bitte am gewählten Werkstück klicken.', true); return; }
+  const d = datenVonId(auswahl), tag = String(d.dreieckFlaeche[hit.faceIndex]);
+  const eben = d.teil.flaechen.find(f => String(f.id) === tag);
+  const rund = d.teil.bohrungen.find(b => !b.innen && b.flaechen.map(String).includes(tag));
+  const g = Object.assign({}, t.griff || {});
+  let weiter = null;
+  if (wahl === 'anfahrt') {
+    if (!eben) { status('Die Anfahrseite muss eine ebene Fläche sein.', true); return; }
+    g.anfahrt = eben.id;
+  } else if (wahl === 'griff' && rund) {
+    delete g.flaechen; g.zylinder = rund.id; weiter = 'anfahrt';
+  } else if (wahl === 'griff' && eben) {
+    griffErste = eben.id; weiter = 'griff2';
+  } else if (wahl === 'griff2' && eben && String(eben.id) !== String(griffErste)) {
+    delete g.zylinder; g.flaechen = [griffErste, eben.id]; weiter = 'anfahrt';
+  } else { status(wahl === 'griff2' ? 'Bitte eine andere, ebene Fläche anklicken.' : 'Hier ist keine ebene oder runde Fläche.', true); return; }
+  if (weiter !== 'griff2') t.griff = g;
+  status('');
+  merken(); formularZeigen();
+  if (weiter) griffWahl(weiter); else { wahlBeenden(); punkteRechnen(); }
+}
+const griffFertig = g => g && g.anfahrt != null && (g.zylinder != null || (g.flaechen || []).length === 2);
+function ircPunkte(f) { return irc ? irc.punkte.filter(f) : []; }
+function punktText2(p) { return p.mm.map(v => Math.round(v)).join(' / ') + ' mm' + (p.erreichbar ? '' : ' (nicht erreichbar)'); }
+function warnHtml(liste) { return liste.length ? '<div style="color:var(--pink)">' + liste.map(esc).join('<br>') + '</div>' : ''; }
+function griffFormular(t) {
+  const g = t.griff || {};
+  $('g-flaechen').textContent = 'Greifflächen: ' + (g.zylinder != null ? 'rund (' + g.zylinder + ')'
+    : g.flaechen ? 'Flächen ' + g.flaechen.join(' und ') : '–');
+  $('g-anfahrt').textContent = 'Anfahrseite: ' + (g.anfahrt != null ? 'Fläche ' + g.anfahrt : '–');
+  feld('g-tiefe', g.tiefe_mm ?? ''); feld('g-vor', g.vor_mm ?? ''); feld('g-dreh', g.drehung_grad || 0); feld('g-name', g.name || '');
+  $('g-dreh-zeile').hidden = g.zylinder == null;
+  $('g-weg').hidden = !t.griff; $('g-ablage').disabled = !griffFertig(g);
+  const eigene = ircPunkte(p => p.werkstueck === t.id && !p.magazin && p.name.endsWith('_greifen'));
+  $('g-hilfe').innerHTML = !t.griff ? 'Für die Punkte in iRC: Greifflächen und Anfahrseite anklicken (Lehrerbereich → Punkte für iRC).'
+    : !griffFertig(g) ? 'Noch die Anfahrseite anklicken.'
+    : ircFehler ? warnHtml([ircFehler])
+    : eigene.map(p => 'Variable <code>' + esc(p.name) + '</code> (und <code>_vor</code>): ' + punktText2(p) + warnHtml(p.warnungen)).join('')
+      || 'Wird gerechnet …';
+}
+function ablageFormular(t) {
+  const a = t.ablage || {};
+  $('a-von').textContent = 'Abbild von ' + t.von + ': hier legt der Greifer es ab (Greifpunkt wie am Werkstück).';
+  feld('a-vor', a.vor_mm ?? ''); feld('a-name', a.name || '');
+  const eigene = ircPunkte(p => p.titel.includes('(' + t.id + ')') && p.name.endsWith('_ablegen'));
+  const mag = (entwurf.magazine || []).find(m => [m.a, m.b, m.c].includes(t.id));
+  $('a-hilfe').innerHTML = mag ? 'Gehört zum Magazin ' + esc(mag.name) + ' (Position ' + ['a', 'b', 'c'].find(k => mag[k] === t.id).toUpperCase() + ').'
+    : ircFehler ? warnHtml([ircFehler])
+    : eigene.map(p => 'Variable <code>' + esc(p.name) + '</code>: ' + punktText2(p) + warnHtml(p.warnungen)).join('');
+}
+$('g-wahl').onclick = () => griffWahl('griff');
+$('g-wahl-anfahrt').onclick = () => griffWahl('anfahrt');
+for (const [id, schluessel, zahl] of [['g-tiefe', 'tiefe_mm', true], ['g-vor', 'vor_mm', true], ['g-dreh', 'drehung_grad', true], ['g-name', 'name', false]]) {
+  $(id).addEventListener('change', () => {
+    const t = teil(auswahl); if (!t || !t.griff) return;
+    const v = $(id).value.trim();
+    if (v === '') delete t.griff[schluessel]; else t.griff[schluessel] = zahl ? Number(v) : v;
+    merken(); punkteRechnenSpaeter();
+  });
+}
+for (const [id, schluessel, zahl] of [['a-vor', 'vor_mm', true], ['a-name', 'name', false]]) {
+  $(id).addEventListener('change', () => {
+    const t = teil(auswahl); if (!t || t.art !== 'ablage') return;
+    const v = $(id).value.trim();
+    t.ablage = Object.assign({}, t.ablage);
+    if (v === '') delete t.ablage[schluessel]; else t.ablage[schluessel] = zahl ? Number(v) : v;
+    merken(); punkteRechnenSpaeter();
+  });
+}
+$('g-weg').onclick = () => { const t = teil(auswahl); delete t.griff; merken(); formularZeigen(); punkteRechnen(); };
+$('g-ablage').onclick = async () => {   // Abbild des Werkstuecks, gleich gestellt (gleicher Punkt am Teil); Zielstelle anklicken
+  const w = teil(auswahl); if (!w) return;
+  let n = 1;
+  while (teil('ablage_' + w.id + (n > 1 ? '_' + n : ''))) n++;
+  const t = {id: 'ablage_' + w.id + (n > 1 ? '_' + n : ''), teil: w.teil, art: 'ablage', von: w.id,
+             verbindung: {punkt: (w.verbindung || {}).punkt || null, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+  entwurf.teile.push(t); merken();
+  await objektBauen(t);
+  waehlen(t.id); await rechnen(); wahlStarten('ziel');
+  status('Jetzt die Zielstelle anklicken (z.B. den Boden einer Magazintasche).');
+};
+$('a-magazin').onclick = () => magazinDialog(auswahl);
+$('baum-magazine').onclick = () => magazinDialog(null);
+function magazinDialog(ablageId) {
+  if (ablageId && !(entwurf.magazine || []).some(m => [m.a, m.b, m.c].includes(ablageId))) magazinNeu(ablageId);
+  magazinListe(); dialogAuf('magazin-dialog');
+}
+function magazinNeu(a) {
+  entwurf.magazine = entwurf.magazine || [];
+  let n = 1;
+  while (entwurf.magazine.some(m => m.name === 'Magazin' + (n > 1 ? n : ''))) n++;
+  entwurf.magazine.push({name: 'Magazin' + (n > 1 ? n : ''), a: a || '', b: '', c: '', spalten: 2, zeilen: 2});
+  merken();
+}
+function magazinListe() {
+  const ablagen = entwurf.teile.filter(t => t.art === 'ablage');
+  const wahl = (wert) => '<option value="">–</option>' + ablagen.map(t => '<option value="' + esc(t.id) + '"' + (t.id === wert ? ' selected' : '')
+    + '>' + esc(t.id) + ' (' + esc(t.von) + ')</option>').join('');
+  $('md-liste').innerHTML = (entwurf.magazine || []).map((m, i) => '<div class="magazin" data-nr="' + i + '">'
+    + '<label class="feldspalte">Name <input data-feld="name" value="' + esc(m.name) + '" maxlength="31"></label>'
+    + ['a', 'b', 'c'].map(k => '<label class="feldspalte">' + k.toUpperCase() + ' <select data-feld="' + k + '">' + wahl(m[k]) + '</select></label>').join('')
+    + '<label class="feldspalte">Spalten <input data-feld="spalten" type="number" min="1" max="50" value="' + m.spalten + '"></label>'
+    + '<label class="feldspalte">Zeilen <input data-feld="zeilen" type="number" min="1" max="50" value="' + m.zeilen + '"></label>'
+    + '<button data-weg class="warnen">Entfernen</button></div>').join('')
+    || '<div class="hilfe">Noch kein Magazin. Erst drei Ablagen setzen (Werkstück wählen → „+ Ablage“).</div>';
+  const fehler = irc ? irc.magazine.flatMap(m => m.warnungen.map(w => m.name + ': ' + w)) : [];
+  $('md-hilfe').innerHTML = (ablagen.length < 2 ? 'Für ein Magazin braucht es mindestens zwei Ablagen. ' : '') + warnHtml(fehler.concat(ircFehler ? [ircFehler] : []));
+}
+$('md-neu').onclick = () => { magazinNeu(''); magazinListe(); };
+$('md-liste').addEventListener('change', ev => {
+  const kasten = ev.target.closest('[data-nr]'), f = ev.target.dataset.feld; if (!kasten || !f) return;
+  const m = entwurf.magazine[Number(kasten.dataset.nr)];
+  m[f] = f === 'spalten' || f === 'zeilen' ? Math.max(1, Math.min(50, Math.round(Number(ev.target.value) || 1))) : ev.target.value.trim();
+  merken(); listeZeigen(); punkteRechnenSpaeter();
+});
+$('md-liste').addEventListener('click', ev => {
+  if (!ev.target.closest('[data-weg]')) return;
+  entwurf.magazine.splice(Number(ev.target.closest('[data-nr]').dataset.nr), 1);
+  merken(); magazinListe(); listeZeigen(); punkteRechnen();
+});
+// Punkte rechnen (Server, wie beim Export) und im 3D-Bild zeigen: Kugel am TCP, Strich zur Vorposition, offene Backen
+function punkteRechnenSpaeter() { clearTimeout(ircZeit); ircZeit = setTimeout(punkteRechnen, 300); }
+async function punkteRechnen() {
+  if (BACKEN) return;
+  const teile = rechenbar(), ids = new Set(teile.map(t => t.id));
+  const sende = teile.filter(t => t.art !== 'ablage' || ids.has(t.von))
+    .map(t => t.griff && !griffFertig(t.griff) ? Object.assign({}, t, {griff: undefined}) : t);
+  const gesendet = new Set(sende.map(t => t.id));
+  const magazine = (entwurf.magazine || []).filter(m => m.a && ['a', 'b', 'c'].every(k => !m[k] || gesendet.has(m[k])));
+  if (!sende.some(t => t.griff)) { irc = null; ircFehler = ''; griffeZeichnen(); return; }
+  try {
+    irc = await api('baukasten_punkte', {entwurf: {teile: sende, tisch: tischWerte(), greifer: entwurf.greifer,
+                                                   grenzen: entwurf.grenzen, magazine}});
+    ircFehler = (irc.meldungen || []).join(' ');
+  } catch (e) { irc = null; ircFehler = e.message; }
+  griffeZeichnen(); formularZeigen();
+  if (!$('magazin-dialog').hidden) magazinListe();
+}
+function griffeZeichnen() {
+  leeren(griffGruppe);
+  if (!irc) return;
+  const nach = Object.fromEntries(irc.punkte.map(p => [p.name, p])), halb = (irc.offen_mm || 28) / 2;
+  for (const p of irc.punkte) {
+    if (p.name.endsWith('_vor')) continue;
+    const vor = nach[p.name + '_vor'], mat = p.warnungen.length ? WARN_MAT : GRIFF_MAT;
+    griffGruppe.add(kugel(p.mm, 2.5, mat));
+    if (vor) griffGruppe.add(stab(vor.mm, p.mm, 0.7, mat));
+    for (const s of [-1, 1]) {   // offene Backen: kurze Striche entlang der Werkzeugachse
+      const b = plus(p.mm, mul(p.x, s * halb));
+      griffGruppe.add(stab(plus(b, mul(p.z, -12)), plus(b, mul(p.z, 4)), 1.3, mat));
+    }
+  }
+  for (const m of irc.magazine) for (const o of m.taschen) griffGruppe.add(kugel(o, 1.8, TASCHE_MAT));
 }
 // TCP wie tcp_von_backen in erzeuge_rebel_modell.py: auf der Werkzeugachse, Hoehe aus den Backen
 function tcpZeigen() {
@@ -1862,7 +2087,7 @@ function planZeigen() {
   // Blick von oben, hinten oben; links (Robotersicht, +y) liegt rechts im Bild
   const X = y => y - ry, Y = x => x - hx, B = tw.breite_mm, L = tw.laenge_mm, rand = 70;
   const nutX = k => hx + PROFIL.raster / 2 + k * PROFIL.raster;   // Quernut k+1 (Tisch-x)
-  const zeilen = [], teile = entwurf.teile.filter(t => lagen[t.id]);
+  const zeilen = [], teile = entwurf.teile.filter(t => lagen[t.id] && t.art !== 'ablage');   // Ablagen sind nur Abbilder
   let svg = '<svg viewBox="' + (-rand) + ' ' + (-rand) + ' ' + (B + 2 * rand) + ' ' + (L + 2 * rand) + '" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">'
     + '<defs><marker id="pf" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
     + '<path d="M0 0L10 5L0 10z" fill="#00639C"/></marker></defs>'

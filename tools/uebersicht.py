@@ -50,6 +50,7 @@ import lehrer
 import verwalter
 import welt_paket
 import aufgabe_md
+import punkte
 
 KONFIG_DIR = os.environ.get("KONFIG_DIR", "/etc/rebel-sim")
 STATUS_DIR = os.environ.get("STATUS_DIR", "/run/rebel-sim")
@@ -611,6 +612,16 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
     <button class="warnen" id="wd-loeschen" style="margin-left:auto">Löschen</button></div>
 </div></div>
 
+<div id="punkte-dialog" class="dialog" hidden><div class="feld gross">
+  <h2>Punkte für iRC</h2><div class="welt-datei" id="pd-welt"></div>
+  <div class="hilfe">Greif-, Ablage- und Magazinpunkte dieser Roboterumgebung als Unterprogramm mit Positionsvariablen,
+    dazu ein Beispielprogramm und <code>installieren.cmd</code> (kopiert beides in den Programmordner von iRC).
+    Festgelegt werden die Punkte im Baukasten (Greifpunkt am Werkstück, Ablage, Magazin).</div>
+  <div class="hilfe" id="pd-greifer"></div>
+  <div id="pd-inhalt">Wird geprüft …</div>
+  <div class="fuss"><a class="btn haupt" id="pd-laden" download hidden>Herunterladen (ZIP)</a><button id="pd-zu">Schließen</button></div>
+</div></div>
+
 <div id="teil-dialog" class="dialog" hidden><div class="feld">
   <h2>Neues Teil aus STEP-Datei</h2>
   <label>Name in der Bibliothek <input id="t-name" placeholder="z.B. magazin_v2" autocapitalize="none"></label>
@@ -936,9 +947,38 @@ function weltDialog(w, nurDateien) {
   $('wd-laeuft').textContent = w.laeuft.length ? 'Läuft gerade auf Platz ' + w.laeuft.join(', ') + ' – Löschen geht erst nach dem Beenden.' : '';
   $('wd-loeschen').disabled = w.laeuft.length > 0;
   $('wd-export').href = '/api/lehrer/welt_export?datei=' + encodeURIComponent(w.datei);
-  $('wd-baukasten').innerHTML = w.baukasten ? '<a class="btn" href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, '')) + '">Im Baukasten öffnen</a>' : '';
+  $('wd-baukasten').innerHTML = w.baukasten ? '<a class="btn" href="/lehrer/baukasten?welt=' + encodeURIComponent(w.datei.replace(/[.]wbt$/, '')) + '">Im Baukasten öffnen</a>'
+    + '<button id="wd-punkte" title="Greif- und Ablagepunkte als iRC-Programm">Punkte für iRC …</button>' : '';
+  if (w.baukasten) $('wd-punkte').onclick = () => punkteDialog(w);
   $('welt-dialog').hidden = false;
 }
+// Punkte fuer iRC: Pruefbericht (Erreichbarkeit, Kollision am Punkt) und Download des Pakets (tools/punkte.py)
+async function punkteDialog(w) {
+  const welt = w.datei.replace(/[.]wbt$/, '');
+  $('pd-welt').textContent = (w.titel || welt) + ' (' + w.datei + ')';
+  $('pd-greifer').textContent = ''; $('pd-inhalt').textContent = 'Wird geprüft …'; $('pd-laden').hidden = true;
+  $('punkte-dialog').hidden = false;
+  const r = await fetch('/api/lehrer/irc_punkte_pruefen?welt=' + encodeURIComponent(welt), {cache: 'no-store'}).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {fehler: 'Keine Verbindung.'};
+  if (!r || !r.ok) { $('pd-inhalt').textContent = d.fehler || 'Das hat nicht geklappt.'; return; }
+  $('pd-greifer').textContent = 'Werkzeug in iRC: ' + d.greifer_titel + ', TCP ' + d.tcp_mm.toFixed(1) + ' mm – in iRC dasselbe Werkzeug wählen.';
+  const zahl = v => v.toFixed(1).replace('.', ',');
+  const zeilen = d.punkte.map(p => '<tr><td><code>' + esc(p.name) + '</code></td><td>' + esc(p.titel) + '</td><td>'
+    + p.mm.map(zahl).join(' / ') + '</td><td>' + p.abc.map(zahl).join(' / ') + '</td><td>'
+    + (p.warnungen.length ? '<span style="color:var(--rot)">' + p.warnungen.map(esc).join('<br>') + '</span>' : 'ok') + '</td></tr>');
+  const weitere = d.magazine.flatMap(m => m.warnungen.map(t => 'Magazin ' + m.name + ': ' + t)).concat(d.meldungen);
+  $('pd-inhalt').innerHTML = (d.punkte.length ? '<div style="overflow:auto;max-height:50vh"><table><thead><tr><th>Variable</th><th>Punkt</th>'
+      + '<th>X / Y / Z (mm)</th><th>A / B / C (°)</th><th>Prüfung</th></tr></thead><tbody>' + zeilen.join('') + '</tbody></table></div>'
+      : '<p>Noch keine Punkte: im Baukasten bei einem Werkstück einen Greifpunkt festlegen.</p>')
+    + d.magazine.map(m => '<p>Magazin <b>' + esc(m.name) + '</b>: ' + m.spalten + ' Spalten × ' + m.zeilen + ' Zeilen (Matrix in iRC)</p>').join('')
+    + (weitere.length ? '<p style="color:var(--rot)">' + weitere.map(esc).join('<br>') + '</p>' : '')
+    + '<p class="hilfe">' + (d.warnungen ? d.warnungen + ' Hinweis(e). Herunterladen geht trotzdem; die betroffenen Punkte sind in der Datei markiert.'
+                                         : 'Alle Punkte erreichbar, Greifer stößt nirgends an.') + '</p>';
+  $('pd-laden').href = '/api/lehrer/irc_punkte?welt=' + encodeURIComponent(welt);
+  $('pd-laden').hidden = !d.punkte.length;
+}
+$('pd-zu').onclick = () => { $('punkte-dialog').hidden = true; };
+$('punkte-dialog').addEventListener('click', ev => { if (ev.target === $('punkte-dialog')) $('punkte-dialog').hidden = true; });
 function weltDialogZu() { $('welt-dialog').hidden = true; weltOffen = null; mdModus(false); }
 // Aufgabe: Text bearbeiten oder Vorschau (gerendert wie bei den Schuelern, tools/aufgabe_md.py)
 async function mdModus(vorschau) {
@@ -2670,6 +2710,72 @@ def entwuerfe():
     return ergebnis
 
 
+# --- Greif- und Ablagepunkte als iRC-Programm (tools/punkte.py) ---
+
+HUELLEN_DATEI = os.path.join(PROJEKT_DIR, "protos", "meshes", "huellen.json")
+
+
+def punkte_rechnen(entwurf, greifer):
+    """punkte.berechne mit den Kenndaten und Huellen des Greifers aus dem Robotermodell. Rueckgabe (ergebnis, Kenndaten)."""
+    try:
+        with open(PROTO_DATEI, encoding="utf-8") as f:
+            kenndaten = punkte.greifer_aus_proto(f.read()).get(greifer)
+    except OSError:
+        kenndaten = None
+    if kenndaten is None:
+        raise baukasten.BaukastenFehler("Fuer den Greifer %s gibt es keine Backen-Kenndaten (Robotermodell neu erzeugen?)." % greifer)
+    try:
+        with open(HUELLEN_DATEI, encoding="utf-8") as f:
+            huelle = json.load(f).get("greifer", {}).get(greifer)
+    except (OSError, ValueError):
+        huelle = None   # ohne Huellen keine Kollisionspruefung
+    ergebnis = punkte.berechne(entwurf, baukasten.teile_lader(TEILE_DIR), kenndaten,
+                               lambda name: punkte.lies_obj(os.path.join(TEILE_DIR, name, "netz.obj")), huelle)
+    return ergebnis, kenndaten
+
+
+def irc_punkte(welt):
+    """Punkte einer Baukasten-Welt mit Pruefung. Rueckgabe (ergebnis, entwurf, greifer, Kenndaten)."""
+    entwurf = entwuerfe().get(welt)
+    if entwurf is None:
+        raise baukasten.BaukastenFehler("Punkte gibt es nur fuer Roboterumgebungen aus dem Baukasten.")
+    greifer = lehrer.welt_greifer(WELTEN_DIR, welt + ".wbt") or entwurf.get("greifer") or "egp40"
+    ergebnis, kenndaten = punkte_rechnen(entwurf, greifer)
+    return ergebnis, entwurf, greifer, kenndaten
+
+
+def baukasten_punkte(entwurf):
+    """Punkte des Entwurfs fuer die Vorschau im Baukasten: Lage (mm), Werkzeugachse z, Schliessrichtung x, Warnungen;
+    Magazine mit allen Taschen."""
+    if not isinstance(entwurf, dict):
+        raise baukasten.BaukastenFehler("Kein Entwurf.")
+    ergebnis, kenndaten = punkte_rechnen(entwurf, entwurf.get("greifer") or "egp40")
+    achse = lambda l, k: [round(l.r[i][k], 5) for i in range(3)]   # noqa: E731
+    return {"punkte": [{"name": p["name"], "titel": p["titel"], "mm": [round(v, 2) for v in p["lage"].o],
+                        "x": achse(p["lage"], 0), "z": achse(p["lage"], 2), "warnungen": p["warnungen"],
+                        "werkstueck": p["werkstueck"], "magazin": p["magazin"], "erreichbar": p["gelenke"] is not None}
+                       for p in ergebnis["punkte"]],
+            "magazine": [{"name": m["name"], "warnungen": m["warnungen"],
+                          "taschen": [[round(v, 2) for v in lage.o] for _i, _j, lage in m["taschen"]]}
+                         for m in ergebnis["magazine"]],
+            "meldungen": ergebnis["meldungen"], "offen_mm": kenndaten["offen_mm"]}
+
+
+def irc_punkte_bericht(welt):
+    ergebnis, _entwurf, greifer, kenndaten = irc_punkte(welt)
+    titel = {g["name"]: g["titel"] for g in greifer_titel_liste()}.get(greifer, greifer)
+    return dict(punkte.bericht(ergebnis), greifer=greifer, greifer_titel=titel, tcp_mm=kenndaten["tcp_mm"])
+
+
+def irc_punkte_zip(welt):
+    """(dateiname, bytes) des Pakets fuer den Schueler-PC."""
+    ergebnis, entwurf, greifer, kenndaten = irc_punkte(welt)
+    titel = {g["name"]: g["titel"] for g in greifer_titel_liste()}.get(greifer, greifer)
+    angaben = next((w for w in _welten() if w["datei"] == welt + ".wbt"), {})
+    return punkte.paket(ergebnis, welt, angaben.get("titel") or entwurf.get("titel") or welt, titel, kenndaten,
+                        time.strftime("%d.%m.%Y %H:%M"))
+
+
 def baukasten_rechnen(entwurf):
     if not isinstance(entwurf, dict):
         raise baukasten.BaukastenFehler("Kein Entwurf.")
@@ -2932,6 +3038,18 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self._antwort(200, daten, "application/zip",
                                   kopf=[("Content-Disposition", 'attachment; filename="%s"' % name)])
+            elif pfad == "/api/lehrer/irc_punkte_pruefen":   # Pruefbericht der Greif- und Ablagepunkte
+                try:
+                    self._json(200, irc_punkte_bericht(urllib.parse.parse_qs(abfrage).get("welt", [""])[0]))
+                except baukasten.BaukastenFehler as e:
+                    self._json(409, {"fehler": str(e)})
+            elif pfad == "/api/lehrer/irc_punkte":   # Punkte als iRC-Programm (ZIP)
+                try:
+                    name, daten = irc_punkte_zip(urllib.parse.parse_qs(abfrage).get("welt", [""])[0])
+                except baukasten.BaukastenFehler as e:
+                    self._json(409, {"fehler": str(e)})
+                else:
+                    self._antwort(200, daten, "application/zip", kopf=[("Content-Disposition", 'attachment; filename="%s"' % name)])
             elif pfad == "/api/lehrer/werkzeugpaket":
                 paket = werkzeugpaket_zip(urllib.parse.parse_qs(abfrage).get("name", [""])[0])
                 if paket is None:
@@ -3069,7 +3187,7 @@ class Handler(BaseHTTPRequestHandler):
     # Was eine Lehrkraft darf; alles andere nur Admins
     FUER_LEHRKRAFT = {"zuruecksetzen", "teile_zuruecksetzen", "beenden", "alle_beenden", "welt", "welt_loeschen", "markdown",
                       "datei_loeschen", "vorschau", "passwort",
-                      "teil_loeschen", "baukasten_rechnen", "baukasten_speichern", "backensatz_speichern",
+                      "teil_loeschen", "baukasten_rechnen", "baukasten_punkte", "baukasten_speichern", "backensatz_speichern",
                       "backensatz_loeschen"}
 
     def _lehrer_aktion(self, aktion, daten):
@@ -3172,6 +3290,8 @@ class Handler(BaseHTTPRequestHandler):
             protokoll = "Teil %s geloescht (teile/%s)" % (name, zusatz["papierkorb"])
         elif aktion == "baukasten_rechnen":
             zusatz = {"lagen": self._baukasten(baukasten_rechnen, daten.get("entwurf"))}
+        elif aktion == "baukasten_punkte":
+            zusatz = self._baukasten(baukasten_punkte, daten.get("entwurf"))
         elif aktion == "baukasten_speichern":
             welt = str(daten.get("welt", ""))
             zusatz = {"lagen": self._baukasten(baukasten_speichern, welt, daten.get("entwurf"), ich["name"])}

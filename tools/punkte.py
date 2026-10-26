@@ -203,14 +203,15 @@ def rueckwaerts(lage, tool_mm, grenzen_grad, start=None):
 
 # --- Alle Punkte einer Roboterumgebung ---
 
-def _punkt(name, titel, lage, warnungen=(), magazin=None):
-    return {"name": name, "titel": titel, "lage": lage, "gelenke": None, "warnungen": list(warnungen), "magazin": magazin}
+def _punkt(name, titel, lage, warnungen=(), magazin=None, werkstueck=None):
+    return {"name": name, "titel": titel, "lage": lage, "gelenke": None, "warnungen": list(warnungen), "magazin": magazin,
+            "werkstueck": werkstueck}
 
 
-def _paar(liste, name, titel, lage, vor_mm, warnungen=(), magazin=None):
-    """Vorposition (entlang der Werkzeugachse zurueck) und Punkt anhaengen."""
-    liste.append(_punkt(name + "_vor", titel + ", Vorposition", vorposition(lage, vor_mm), warnungen, magazin))
-    liste.append(_punkt(name, titel, lage, warnungen, magazin))
+def _paar(liste, name, titel, lage, vor_mm, warnungen=(), magazin=None, werkstueck=None):
+    """Vorposition (entlang der Werkzeugachse zurueck) und Punkt anhaengen. werkstueck: das Teil zwischen den Backen."""
+    liste.append(_punkt(name + "_vor", titel + ", Vorposition", vorposition(lage, vor_mm), warnungen, magazin, werkstueck))
+    liste.append(_punkt(name, titel, lage, warnungen, magazin, werkstueck))
 
 
 def gedreht180(lage):
@@ -239,9 +240,84 @@ def matrix_lage(a, b, c, i, j, spalten, zeilen):
     return bk.Lage(a.r, o)
 
 
-def berechne(entwurf, merkmale_von, greifer):
+# --- Kollision am Punkt: Greifer und Backen (offen) gegen Tisch, Aufbauten und andere Werkstuecke ---
+# Wie im Controller (controllers/irc_bridge/kollision.py): Huellquader des Greifers aus protos/meshes/huellen.json
+# (im Flanschsystem, Backen offen), die Umgebung als Punktwolken der Teile-Netze; Masse dort in m.
+
+def lies_obj(pfad):
+    """Punkte und Dreiecke einer OBJ-Datei (wie netz.obj der Teilebibliothek, mm)."""
+    punkte_obj, dreiecke = [], []
+    with open(pfad, encoding="utf-8", errors="replace") as f:
+        for zeile in f:
+            teile = zeile.split()
+            if not teile:
+                continue
+            if teile[0] == "v":
+                punkte_obj.append([float(v) for v in teile[1:4]])
+            elif teile[0] == "f":
+                ecken = [int(v.split("/")[0]) - 1 for v in teile[1:]]
+                dreiecke += [(ecken[0], ecken[k], ecken[k + 1]) for k in range(1, len(ecken) - 1)]
+    return punkte_obj, dreiecke
+
+
+def _kollision_modul():
+    import os
+    import sys
+    pfad = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "controllers", "irc_bridge")
+    if pfad not in sys.path:
+        sys.path.insert(0, pfad)
+    import kollision
+    return kollision
+
+
+def _lage_m(lage):
+    return [v / 1000.0 for v in lage.o], [lage.r[i][k] for i in range(3) for k in range(3)]
+
+
+def pruefe_kollisionen(ergebnis, entwurf, lagen, netz_von, huelle, tcp_mm):
+    """Warnungen an den Punkten (und Magazintaschen), an denen Greifer oder Backen etwas beruehren. huelle:
+    {"grund": {mitte, halb}, "links": ..., "rechts": ...} in m im Flanschsystem; netz_von(teil) -> (Punkte, Dreiecke) mm."""
+    kollision = _kollision_modul()
+    wolken = {}
+
+    def wolke(name):
+        if name not in wolken:
+            pkt, dr = netz_von(name)
+            wolken[name] = kollision.Punktwolke(kollision.abtasten([[v / 1000.0 for v in p] for p in pkt], dr))
+        return wolken[name]
+    umgebung = []
+    for t in entwurf["teile"]:
+        if t.get("art", "aufbau") in ("aufbau", "werkstueck") and t.get("teil"):
+            try:
+                umgebung.append(kollision.Umgebungsteil(t["id"], t.get("art", "aufbau"), wolke(t["teil"]),
+                                                        _lage_m(lagen[t["id"]]), t["id"]))
+            except (OSError, ValueError, KeyError):
+                pass   # ohne Netz keine Pruefung fuer dieses Teil
+    tisch_z = bk.tisch_werte(entwurf)["hoehe_mm"] / 1000.0
+    def treffer(lage, ohne):
+        z = [lage.r[i][2] for i in range(3)]
+        flansch = _lage_m(bk.Lage(lage.r, bk._sub(lage.o, bk._mul(z, tcp_mm))))
+        koerper = [kollision.Quader(name, flansch, h["mitte"], h["halb"]) for name, h in huelle.items()]
+        andere = [u for u in umgebung if u.kennung != ohne]
+        return sorted({t["b"] for t in kollision.pruefe(koerper, andere, tisch_z, 0.0, 0.0, hoechstens=3)})
+    for p in ergebnis["punkte"]:
+        ohne = p.get("werkstueck")
+        b = treffer(p["lage"], ohne)
+        if b:
+            p["warnungen"].append("Greifer stoesst an: %s" % ", ".join(b))
+    for m in ergebnis["magazine"]:
+        for i, j, lage in m.get("taschen", []):
+            for was, l in (("", lage), (" (Vorposition)", vorposition(lage, m["vor_mm"]))):
+                b = treffer(l, m["von"])
+                if b:
+                    m["warnungen"].append("Tasche %d/%d%s: Greifer stoesst an %s" % (i + 1, j + 1, was, ", ".join(b)))
+    return ergebnis
+
+
+def berechne(entwurf, merkmale_von, greifer, netz_von=None, huelle=None):
     """Greif-, Ablage- und Magazinpunkte mit Vorpositionen in iRC-Basis, mit Erreichbarkeit (Gelenkwinkel) und
-    Warnungen. greifer: Kenndaten (greifer_daten). Rueckgabe: {"punkte", "magazine", "meldungen"}."""
+    Warnungen. greifer: Kenndaten (greifer_daten); mit netz_von und huelle auch die Kollisionspruefung am Punkt.
+    Rueckgabe: {"punkte", "magazine", "meldungen"}."""
     if not greifer or not greifer.get("offen_mm"):
         raise bk.BaukastenFehler("Greifpunkte gibt es nur fuer Backengreifer (dieser Greifer hat keine Backen).")
     bk.pruefe_punkte(entwurf)
@@ -261,7 +337,8 @@ def berechne(entwurf, merkmale_von, greifer):
             continue
         griffe[t["id"]] = (griff, info, g)
         _paar(punkte, g["name"] + "_greifen", "%s greifen" % t["id"],
-              griff_in_welt(lagen[t["id"]], griff, info["frei"], g["drehung_grad"]), g["vor_mm"], warnungen)
+              griff_in_welt(lagen[t["id"]], griff, info["frei"], g["drehung_grad"]), g["vor_mm"], warnungen,
+              werkstueck=t["id"])
     ablagen = {}
     for t in entwurf["teile"]:
         if t.get("art") != "ablage":
@@ -275,7 +352,7 @@ def berechne(entwurf, merkmale_von, greifer):
         vor = a["vor_mm"] if a["vor_mm"] is not None else g["vor_mm"]
         ablagen[t["id"]] = (lage, vor, a["von"])
         if t["id"] not in im_magazin:
-            _paar(punkte, a["name"] + "_ablegen", "%s ablegen (%s)" % (a["von"], t["id"]), lage, vor)
+            _paar(punkte, a["name"] + "_ablegen", "%s ablegen (%s)" % (a["von"], t["id"]), lage, vor, werkstueck=a["von"])
     mags = []
     for m in magazine:
         if any(m[k] and m[k] not in ablagen for k in "abc"):
@@ -285,7 +362,8 @@ def berechne(entwurf, merkmale_von, greifer):
         vor = ablagen[m["a"]][1]
         for k, lage in (("A", a), ("B", b), ("C", c)):
             if lage is not None:
-                _paar(punkte, "%s_%s" % (m["name"], k), "Magazin %s, Position %s" % (m["name"], k), lage, vor, magazin=m["name"])
+                _paar(punkte, "%s_%s" % (m["name"], k), "Magazin %s, Position %s" % (m["name"], k), lage, vor,
+                      magazin=m["name"], werkstueck=ablagen[m["a"]][2])
         mags.append(dict(m, vor_mm=vor, von=ablagen[m["a"]][2], warnungen=[]))
     # Zwei gleiche Backen: je Punkt die gleichwertige, um 180 Grad gedrehte Lage nehmen, wenn A6 dann weniger dreht
     # (bzw. nur so erreichbar ist); Vorposition wie ihr Punkt, ein Magazin einheitlich wie seine Position A
@@ -316,7 +394,10 @@ def berechne(entwurf, merkmale_von, greifer):
             for was, l in (("", lage), (" (Vorposition)", vorposition(lage, m["vor_mm"]))):
                 if rueckwaerts(l, tool, grenzen) is None:
                     m["warnungen"].append("Tasche %d/%d%s nicht erreichbar" % (i + 1, j + 1, was))
-    return {"punkte": punkte, "magazine": mags, "meldungen": meldungen}
+    ergebnis = {"punkte": punkte, "magazine": mags, "meldungen": meldungen}
+    if netz_von is not None and huelle:
+        pruefe_kollisionen(ergebnis, entwurf, lagen, netz_von, huelle, tool)
+    return ergebnis
 
 
 def bericht(ergebnis):

@@ -341,6 +341,31 @@ Roboterumgebung ihn verwendet).
 4. **Speichern**: Das Robotermodell wird neu erzeugt, der Greifer `egp40_<name>` steht in den Roboterumgebungen zur Wahl.
    Das **Werkzeugpaket für iRC** (ZIP mit XML, Modellen und `installieren.cmd`) bringt denselben TCP nach iRC.
 
+### Punkte für iRC (Greifen, Ablegen, Magazine)
+
+Die Simulation rechnet die Positionen zum Greifen und Ablegen selbst aus und gibt sie als iRC-Unterprogramm mit
+Positionsvariablen aus – so lassen sich Programme schreiben, ohne jeden Punkt von Hand einzuteachen.
+
+1. **Greifpunkt** (Werkstück wählen, Abschnitt „Greifpunkt für iRC“): „anklicken“ und die zwei gegenüberliegenden
+   Greifflächen anklicken – bei einer **runden** Fläche genügt ein Klick, die Gegenseite ergibt sich. Danach die
+   **Anfahrseite** anklicken (ebene Fläche, von der der Greifer kommt; auch schräg oder seitlich). Tiefe (leer = Backen
+   möglichst ganz am Teil), Abstand der **Vorposition** (Standard 40 mm entlang der Werkzeugachse zurück) und bei runden
+   Teilen von oben die Drehung der Backen (0 = A6 dreht kaum) sind einstellbar.
+2. **Ablage**: „+ Ablage“ setzt ein durchsichtiges Abbild des Werkstücks; dann die Zielstelle anklicken (z.B. den Boden
+   einer Magazintasche). Die Ablage nutzt den Greifpunkt des Werkstücks. In der Webots-Welt erscheint sie nicht.
+3. **Magazin** (Baum „Magazine“ oder bei einer Ablage „Magazin …“): drei Ablagen als **A** (erste Tasche), **B** (letzte
+   der ersten Reihe), **C** (erste der letzten Reihe) und die Anzahl Spalten (A nach B) und Zeilen (A nach C). iRC fährt
+   das mit dem Matrix-Befehl ab; im 3D-Bild zeigen blaue Punkte alle Taschen.
+4. Im 3D-Bild zeigen grüne Kugel, Strich und Backen jeden Punkt mit Vorposition; **pink** heißt: es gibt einen Hinweis.
+5. **Lehrerbereich → Roboterumgebung → „Punkte für iRC …“**: Prüfbericht (Erreichbarkeit innerhalb der Achsgrenzen,
+   Greifer oder Backen stoßen an Tisch, Aufbau oder Nachbarteil, Teil zu breit für den Greifer) und **Herunterladen**.
+   Das ZIP enthält `<welt>_punkte.xml` (Unterprogramm), `<welt>_beispiel.xml` (greift, legt ab, fährt das Magazin ab),
+   `installieren.cmd` (kopiert beide in den Programmordner von iRC) und `LIESMICH.txt` mit allen Variablen.
+
+In iRC dasselbe Werkzeug wählen wie in der Roboterumgebung (TCP), dann im eigenen Programm zuerst das Unterprogramm
+aufrufen und danach die Variablen nutzen: Gelenkbewegung zu `<Name>_vor`, linear zu `<Name>`, Greifer, linear zurück.
+Hinweis: Die Reihenfolge der Winkel A/B/C ist noch am echten iRC zu bestätigen; senkrechte Griffe von oben stimmen sicher.
+
 ## 9. Taster, Leuchtmelder und Sensoren
 
 Voraussetzung: App „WebotsSim“ in iRC (Abschnitt 5). Nummern immer **wie in der iRC-Anzeige** (DIn21, DOut32).
