@@ -265,9 +265,12 @@ class TestProgramme(unittest.TestCase):
     def test_punkte_xml(self):
         wurzel = ET.fromstring(punkte.punkte_xml(self.erg, ["Kopf"]).encode())
         stores = wurzel.findall("Store")
-        self.assertEqual([s.get("Name") for s in stores], [p["name"] for p in self.erg["punkte"]])
-        s = stores[1]
-        self.assertEqual((s.get("Nr"), s.get("Type")), ("2", "position"))
+        self.assertEqual([s.get("Name") for s in stores], ["pHome"] + [p["name"] for p in self.erg["punkte"]])
+        home = stores[0]   # Home-Stellung von iRC, TCP wie dort angezeigt
+        self.assertEqual(home.get("ValueJoints").split()[:6], ["0.000", "0.000", "90.000", "0.000", "90.000", "0.000"])
+        self.assertEqual([round(float(v)) for v in home.get("Value").split()], [300, 0, round(364.68 - 103), 180, 0, 180])
+        s = stores[2]
+        self.assertEqual((s.get("Nr"), s.get("Type")), ("3", "position"))
         werte = [float(v) for v in s.get("Value").split()]
         self.assertEqual(len(werte), 6)
         self.assertEqual([round(v, 2) for v in werte[:3]], [round(v, 2) for v in self.erg["punkte"][1]["lage"].o])
@@ -281,8 +284,10 @@ class TestProgramme(unittest.TestCase):
         self.assertEqual((befehle[0].tag, befehle[0].get("File")), ("Sub", "t_punkte.xml"))
         self.assertEqual([int(b.get("Nr")) for b in befehle], list(range(1, len(befehle) + 1)))
         variablen = [b.get("VariableName") for b in befehle if b.tag in ("Joint", "Linear")]
-        self.assertEqual(variablen[:4], ["w_greifen_vor", "w_greifen", "w_greifen_vor", "Mag_A_vor"])   # in Tasche A
-        self.assertTrue(set(variablen) <= {p["name"] for p in self.erg["punkte"]} | {"Mag_pos"})
+        self.assertEqual((befehle[1].tag, variablen[0], variablen[-1]), ("Joint", "pHome", "pHome"))   # Start und Ende
+        self.assertEqual(befehle[-1].get("VariableName"), "pHome")
+        self.assertEqual(variablen[1:5], ["w_greifen_vor", "w_greifen", "w_greifen_vor", "Mag_A_vor"])   # in Tasche A
+        self.assertTrue(set(variablen) <= {p["name"] for p in self.erg["punkte"]} | {"Mag_pos", "pHome"})
         matrix = wurzel.find("Matrix")
         self.assertEqual((matrix.get("CntX"), matrix.get("CntY"), matrix.get("VarPointA"), matrix.get("VarPointC")),
                          ("4", "2", "Mag_A_vor", "Mag_C_vor"))

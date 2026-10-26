@@ -363,8 +363,10 @@ Positionsvariablen aus – so lassen sich Programme schreiben, ohne jeden Punkt 
 4. Im 3D-Bild zeigen grüne Kugel, Strich und Backen jeden Punkt mit Vorposition; **pink** heißt: es gibt einen Hinweis.
 5. **Lehrerbereich → Roboterumgebung → „Punkte für iRC …“**: Prüfbericht (Erreichbarkeit innerhalb der Achsgrenzen,
    Greifer oder Backen stoßen an Tisch, Aufbau oder Nachbarteil, Teil zu breit für den Greifer) und **Herunterladen**.
-   Das ZIP enthält `<welt>_punkte.xml` (Unterprogramm), `<welt>_beispiel.xml` (greift, legt ab, fährt das Magazin ab),
+   Das ZIP enthält `<welt>_punkte.xml` (Unterprogramm), `<welt>_beispiel.xml` (startet in `pHome`, greift, legt ab, fährt das Magazin ab, endet in `pHome`),
    `installieren.cmd` (kopiert beide in den Programmordner von iRC) und `LIESMICH.txt` mit allen Variablen.
+   `pHome` ist die Home-Stellung von iRC (A1…A6 = 0 0 90 0 90 0) und steht als erste Variable im Unterprogramm;
+   jedes Programm soll dort starten und enden.
 
 In iRC dasselbe Werkzeug wählen wie in der Roboterumgebung (TCP), dann im eigenen Programm zuerst das Unterprogramm
 aufrufen und danach die Variablen nutzen: Gelenkbewegung zu `<Name>_vor`, linear zu `<Name>`, Greifer, linear zurück.

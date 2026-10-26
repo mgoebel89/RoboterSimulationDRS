@@ -194,6 +194,16 @@ def loesungen(lage, tool_mm):
     return ergebnis
 
 
+HOME_NAME = "pHome"
+HOME_GELENKE = [0.0, 0.0, 90.0, 0.0, 90.0, 0.0]   # Home-Stellung von iRC: jedes Programm startet und endet hier
+
+
+def home_werte(tool_mm):
+    """X Y Z A B C (mm, Grad) des TCP in der Home-Stellung."""
+    pos, r = kin.fk(HOME_GELENKE, tool_mm / 1000.0)
+    return [v * 1000.0 for v in pos] + abc_aus_matrix([[r[i * 3 + j] for j in range(3)] for i in range(3)])
+
+
 def grundhaltung(lage):
     """Bezugsstellung fuer die Wahl unter den Loesungen: wie die Home-Stellung von iRC (0 0 90 0 90 0), aber mit
     Achse 1 zum Ziel hin. So steht der Roboter vorne mit dem Ellbogen oben und dreht nicht ueber hinten."""
@@ -412,7 +422,7 @@ def berechne(entwurf, merkmale_von, greifer, netz_von=None, huelle=None):
             for was, l in (("", lage), (" (Vorposition)", vorposition(lage, m["vor_mm"]))):
                 if rueckwaerts(l, tool, grenzen) is None:
                     m["warnungen"].append("Tasche %d/%d%s nicht erreichbar" % (i + 1, j + 1, was))
-    ergebnis = {"punkte": punkte, "magazine": mags, "meldungen": meldungen}
+    ergebnis = {"punkte": punkte, "magazine": mags, "meldungen": meldungen, "tcp_mm": tool}
     if netz_von is not None and huelle:
         pruefe_kollisionen(ergebnis, entwurf, lagen, netz_von, huelle, tool)
     return ergebnis
@@ -450,7 +460,10 @@ def _kopfzeilen(kopf):
 def punkte_xml(ergebnis, kopf):
     """Unterprogramm mit allen Punkten als Positionsvariablen (Store). kopf: Kommentarzeilen."""
     zeilen = _kopfzeilen(kopf)
-    for nr, p in enumerate(ergebnis["punkte"], 1):
+    zeilen.append('    <Store Nr="1" Type="position" Value="%s" ValueJoints="%s" Name="%s" Descr="%s" />' % (
+        " ".join("%.2f" % v for v in home_werte(ergebnis["tcp_mm"])), " ".join("%.3f" % v for v in HOME_GELENKE + [0.0] * 3),
+        HOME_NAME, "Home-Stellung: jedes Programm startet und endet hier"))
+    for nr, p in enumerate(ergebnis["punkte"], 2):
         werte = list(p["lage"].o) + abc_aus_matrix(p["lage"].r)
         gelenke = (p["gelenke"] or [0.0] * 6) + [0.0, 0.0, 0.0]
         descr = p["titel"] + ("; ACHTUNG: " + "; ".join(p["warnungen"]) if p["warnungen"] else "")
@@ -500,6 +513,8 @@ def beispiel_xml(ergebnis, punkte_datei, kopf, dout_auf=31, dout_zu=32):
     namen = {p["name"] for p in ergebnis["punkte"]}
     prg = _Programm()
     prg.befehl('<Sub Nr="%%NR%%" File="%s" Descr="Punkte laden" />' % _attr(punkte_datei))
+    prg.kommentar("Start in der Home-Stellung")
+    prg.joint(HOME_NAME)
     prg.greifer(False, dout_auf, dout_zu)
     for p in ergebnis["punkte"]:
         if not p["name"].endswith("_greifen"):
@@ -537,6 +552,8 @@ def beispiel_xml(ergebnis, punkte_datei, kopf, dout_auf=31, dout_zu=32):
         prg.relativ(m["vor_mm"])
         prg.relativ(-m["vor_mm"])
         prg.befehl('<MatrixEnd Nr="%NR%" Descr="" />')
+    prg.kommentar("Ende in der Home-Stellung")
+    prg.joint(HOME_NAME)
     return "\n".join(_kopfzeilen(kopf) + prg.zeilen + ["</Program>"]) + "\n"
 
 
@@ -571,7 +588,8 @@ def paket(ergebnis, welt, titel, greifer_titel, greifer, datum):
     hinweise += ergebnis["meldungen"]
     zeilen = ["Punkte der Roboterumgebung %s fuer igus Robot Control V15" % titel, "",
               "%s  Unterprogramm: legt alle Punkte als Positionsvariablen an." % punkte_datei,
-              "%s  Beispiel: ruft das Unterprogramm auf, greift und legt ab." % beispiel_datei,
+              "%s  Beispiel: ruft das Unterprogramm auf, faehrt nach pHome, greift und legt ab, endet in pHome." % beispiel_datei,
+              "pHome = Home-Stellung A1..A6 = 0 0 90 0 90 0; jedes Programm startet und endet dort.",
               "installieren.cmd  kopiert beide in den Programmordner von iRC (dort liegen alle Programme).", "",
               "In iRC das Werkzeug \"%s\" (TCP %.1f mm) waehlen, sonst stimmen die Punkte nicht." % (greifer_titel, greifer["tcp_mm"]),
               "Eigene Programme: am Anfang das Unterprogramm %s aufrufen, danach die Variablen nutzen," % punkte_datei,
