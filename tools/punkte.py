@@ -18,25 +18,25 @@ WINKEL_TOL = math.radians(3.0)   # Greifflaechen parallel, Anfahrt quer zur Schl
 
 
 # --- Orientierung als A/B/C wie in iRC ---
-# A, B, C sind die Drehungen um X, Y, Z (Angabe des Nutzers). Die Reihenfolge ist noch mit iRC zu pruefen (Abschnitt 13):
-# angenommen R = Rz(C) * Ry(B) * Rx(A), also erst um X, dann Y, dann Z um die festen Achsen der Basis.
-# NUR diese beiden Funktionen aendern, falls der Test etwas anderes ergibt.
+# Gemessen am 26.10.2026 mit iRC V15 (CRI POSCARTROBOT gegen die Vorwaertsrechnung, Gelenke 20/30/35/25/40/20):
+# R = Rz(A) * Ry(B) * Rx(C), also A um Z, B um Y, C um X (feste Achsen der Basis: erst C um X, dann B, dann A).
+# Home 0/0/90/0/90/0 ergibt 180/0/180.
 
 def abc_aus_matrix(r):
     """Drehmatrix (Spalten = Achsen des Werkzeugs in Basiskoordinaten) -> [A, B, C] in Grad."""
     sb = max(-1.0, min(1.0, -r[2][0]))
     b = math.asin(sb)
     if abs(math.cos(b)) > 1e-6:
-        a = math.atan2(r[2][1], r[2][2])
-        c = math.atan2(r[1][0], r[0][0])
-    else:   # B = +-90 Grad: A und C drehen um dieselbe Achse, C = 0 setzen
-        a = math.atan2(-r[1][2], r[1][1])
-        c = 0.0
+        c = math.atan2(r[2][1], r[2][2])
+        a = math.atan2(r[1][0], r[0][0])
+    else:   # B = +-90 Grad: A und C drehen um dieselbe Achse, A = 0 setzen
+        c = math.atan2(-r[1][2], r[1][1])
+        a = 0.0
     return [math.degrees(a), math.degrees(b), math.degrees(c)]
 
 
 def matrix_aus_abc(a, b, c):
-    return bk._mm(bk._mm(bk._rot_z(c), bk._rot_y(b)), bk._rot_x(a))
+    return bk._mm(bk._mm(bk._rot_z(a), bk._rot_y(b)), bk._rot_x(c))
 
 
 # --- Greifer ---

@@ -52,8 +52,17 @@ class TestGeometrie(unittest.TestCase):
             a, b, c = zufall.uniform(-179, 179), zufall.uniform(-89, 89), zufall.uniform(-179, 179)
             self.assertEqual([round(v, 6) for v in punkte.abc_aus_matrix(punkte.matrix_aus_abc(a, b, c))],
                              [round(v, 6) for v in (a, b, c)])
-        r = punkte.matrix_aus_abc(180, 0, 0)   # Werkzeug zeigt nach unten
+        r = punkte.matrix_aus_abc(0, 0, 180)   # Werkzeug zeigt nach unten
         self.assertEqual([round(r[i][2], 6) for i in range(3)], [0, 0, -1])
+
+    def test_abc_wie_irc(self):
+        """Gemessen mit iRC V15 ueber CRI (26.10.2026): Gelenke -> POSCARTROBOT mit TCP 143.68 mm."""
+        for q, soll in (([20, 30, 35, 25, 40, 20], [584.6, 291.6, 532.5, 138.45, 45.69, 107.0]),
+                        ([0, 0, 90, 0, 90, 0], [300.0, 0.0, 221.0, 180.0, 0.0, 180.0])):
+            p, r = kin.fk(q, 0.14368)
+            abc = punkte.abc_aus_matrix([[r[0], r[1], r[2]], [r[3], r[4], r[5]], [r[6], r[7], r[8]]])
+            self.assertLess(max(abs(a - b) for a, b in zip([v * 1000 for v in p], soll[:3])), 0.1)
+            self.assertLess(max(abs(punkte._normiere(a - b)) for a, b in zip(abc, soll[3:])), 0.01)
 
     def test_rueckwaerts_trifft_jede_stellung(self):
         zufall = random.Random(5)
@@ -69,12 +78,12 @@ class TestGeometrie(unittest.TestCase):
         self.assertIsNone(punkte.rueckwaerts(bk.Lage(None, [2000, 0, 100]), 103, g))   # zu weit weg
         enge = [list(v) for v in g]
         enge[0] = [-10, 10]                                                              # Achse 1 eingeschraenkt
-        self.assertIsNone(punkte.rueckwaerts(bk.Lage(punkte.matrix_aus_abc(180, 0, 0), [0, 350, 50]), 103, enge))
+        self.assertIsNone(punkte.rueckwaerts(bk.Lage(punkte.matrix_aus_abc(0, 0, 180), [0, 350, 50]), 103, enge))
 
     def test_vorne_mit_ellbogen_oben(self):
         """Griff von oben: Achse 1 zeigt zum Ziel, Ellbogen oben, nicht ueber hinten (Fehler: Basis drehte 180 Grad)."""
         g = bk.IRC_ACHSGRENZEN
-        lage = bk.Lage(punkte.matrix_aus_abc(180, 0, 2.39), [480, 20, 74.2])
+        lage = bk.Lage(punkte.matrix_aus_abc(2.39, 0, 180), [480, 20, 74.2])
         if punkte._drehung_waehlen(lage, 143.68, g):
             lage = punkte.gedreht180(lage)
         q = punkte.rueckwaerts(lage, 143.68, g)
@@ -86,7 +95,7 @@ class TestGeometrie(unittest.TestCase):
         for _ in range(200):
             w = zufall.uniform(-150, 150)
             r = zufall.uniform(250, 550)
-            lage = bk.Lage(punkte.matrix_aus_abc(180, 0, zufall.uniform(-180, 180)),
+            lage = bk.Lage(punkte.matrix_aus_abc(zufall.uniform(-180, 180), 0, 180),
                            [r * math.cos(math.radians(w)), r * math.sin(math.radians(w)), zufall.uniform(0, 200)])
             if punkte._drehung_waehlen(lage, 103, g):
                 lage = punkte.gedreht180(lage)
