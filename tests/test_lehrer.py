@@ -823,6 +823,28 @@ class TestLehrerSeiten(Grundlage):
             server.shutdown()
             server.server_close()
 
+    def test_anleitung_im_lehrerbereich(self):
+        self.assertEqual(self.anfrage("GET", "/lehrer/anleitung")[0], 302)   # ohne Anmeldung zur Anmeldung
+        self.assertEqual(self.anfrage("GET", "/lehrer/testablauf")[0], 302)
+        self.konto("mueller", "lehrkraft")
+        self.anmelden("mueller")
+        status, seite = self.anfrage("GET", "/lehrer/anleitung")
+        self.assertEqual(status, 200)
+        self.assertIn('<h2 id="3-installation-auf-proxmox">', seite)
+        self.assertIn('src="/lehrer/anleitung/bilder/lehrer_welten.jpg"', seite)
+        self.assertNotIn("%%", seite)
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        c.request("GET", "/lehrer/anleitung/bilder/lehrer_welten.jpg", headers={"Cookie": self.cookie})
+        r = c.getresponse()
+        self.assertEqual((r.status, r.getheader("Content-Type"), r.read()[:2]), (200, "image/jpeg", b"\xff\xd8"))
+        c.close()
+        for pfad in ("/lehrer/anleitung/bilder/../ANLEITUNG.md", "/lehrer/anleitung/bilder/fehlt.jpg", "/lehrer/anleitung/x"):
+            self.assertEqual(self.anfrage("GET", pfad)[0], 404, pfad)
+        status, ablauf = self.anfrage("GET", "/lehrer/testablauf")
+        self.assertEqual(status, 200)
+        self.assertIn("Testablauf Schule", ablauf)
+        self.assertIn('href="/lehrer/anleitung"', self.anfrage("GET", "/lehrer")[1])
+
     def test_messungen_nur_fuer_admins(self):
         ordner = os.path.join(self.zustand, "messungen")
         os.makedirs(os.path.join(ordner, "2026-10-27_0800"))

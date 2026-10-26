@@ -49,6 +49,7 @@ import baukasten
 import lehrer
 import verwalter
 import welt_paket
+import anleitung_html
 import aufgabe_md
 import punkte
 
@@ -545,6 +546,9 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
 <button data-tab="protokoll">%%ICON_PROTOKOLL%%Protokoll</button>
 <button data-tab="einst" class="nur-admin">%%ICON_EINST%%Einstellungen</button>
 <button data-tab="benutzer" class="nur-admin">%%ICON_BENUTZER%%Benutzer</button>
+<div class="nav-titel">Hilfe</div>
+<a class="nav-link" href="/lehrer/anleitung" target="_blank" rel="noopener">%%ICON_PLAN%%Anleitung</a>
+<a class="nav-link" href="/lehrer/testablauf" target="_blank" rel="noopener">%%ICON_DRUCKEN%%Testablauf Schule</a>
 </nav>
 <div class="inhalt">
 
@@ -2441,6 +2445,7 @@ def teil_ersetzen(name, inhalt, erzwingen, wer_name, quelle=None):
 # --- Backensaetze (Phase 4): Backe am Schunk EGP 40/25 im Baukasten, daraus Greifer-Variante egp40_<name> ---
 
 PROJEKT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+DOCS_DIR = os.path.join(PROJEKT_DIR, "docs")
 BACKEN_DIR = os.environ.get("BACKEN_DIR", os.path.join(PROJEKT_DIR, "backen"))       # aus dem Baukasten (auch fuer den Generator)
 FESTE_BACKEN_DIR = os.path.join(PROJEKT_DIR, "cad", "backen")                       # aus dem Repository
 WERKZEUG_DIR = os.path.join(PROJEKT_DIR, "werkzeuge")
@@ -2933,6 +2938,27 @@ class Handler(BaseHTTPRequestHandler):
     def _platz(self, nummer):
         return next((p for p in lese_plaetze() if int(p["platz"]) == int(nummer)), None)
 
+    def _anleitung(self, pfad):
+        """Anleitung (docs/ANLEITUNG.md, hier gerendert), ihre Bilder und der Testablauf zum Ausdrucken."""
+        if not self._lehrer():
+            self._antwort(302, "", kopf=[("Location", "/lehrer")])
+            return
+        bild = re.fullmatch(r"/lehrer/anleitung/bilder/([a-z0-9_-]{1,60})\.(jpg|png)", pfad)
+        try:
+            if pfad == "/lehrer/anleitung":
+                with open(os.path.join(DOCS_DIR, "ANLEITUNG.md"), encoding="utf-8") as f:
+                    self._antwort(200, seite(anleitung_html.seite(f.read())))
+            elif pfad == "/lehrer/testablauf":
+                with open(os.path.join(DOCS_DIR, "testablauf_schule.html"), encoding="utf-8") as f:
+                    self._antwort(200, f.read())
+            elif bild:
+                with open(os.path.join(DOCS_DIR, "bilder", "%s.%s" % bild.groups()), "rb") as f:
+                    self._antwort(200, f.read(), "image/jpeg" if bild.group(2) == "jpg" else "image/png")
+            else:
+                self._text(404, "nicht gefunden")
+        except OSError:
+            self._text(404, "nicht gefunden")
+
     def do_GET(self):  # noqa: N802
         pfad, _, abfrage = self.path.partition("?")
         pc = self._pc()
@@ -3004,6 +3030,8 @@ class Handler(BaseHTTPRequestHandler):
                 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "baukasten_seite.html"),
                           encoding="utf-8") as f:
                     self._antwort(200, seite(f.read()))
+        elif pfad in ("/lehrer/anleitung", "/lehrer/testablauf") or pfad.startswith("/lehrer/anleitung/"):
+            self._anleitung(pfad)
         elif pfad == "/lehrer":
             if self._lehrer() and "anmelden=1" not in abfrage:
                 self._antwort(200, seite(LEHRER_SEITE))
