@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Bedienfeld der App WebotsSim (PRUEFVERSION 1.1.0, Stufe 0 der SPS-Kopplung).
+     Die Struktur ist fest (iRC kann keine Zeilen nachtraeglich anlegen): je Richtung 8 Zeilen, unbenutzte blendet
+     der Dienst im Container aus. Der Text "umlaut_test" prueft, ob iRC Umlaute und Pfeile richtig zeigt. -->
+<ui>
+	<ribbon label="Webots und SPS">
+		<group label="SPS-Kopplung">
+			<button name="band_lesen" label="Variablen lesen" />
+			<toggle name="band_verbinden" label="Verbinden" />
+		</group>
+		<group label="Test">
+			<button name="band_alles_aus" label="Alles auf 0" />
+		</group>
+	</ribbon>
+	<main>
+		<group name="g_verbindung" label="SPS-Kopplung">
+			<text name="sps_status" value="Dienst der ReBeL-Simulation nicht verbunden" />
+			<textbox name="sps_adresse" label="SPS-Adresse" value="" />
+			<horizontal>
+				<button name="sps_lesen" label="Variablen lesen" />
+				<button name="sps_verbinden" label="Verbinden" />
+				<button name="sps_trennen" label="Trennen" />
+			</horizontal>
+			<checkbox name="sps_alle_zeilen" label="Alle 8 Zeilen zeigen" />
+			<text name="umlaut_test" value="Umlaut-Test: Prüfung äöü ÄÖÜ ß, Pfeil →" />
+		</group>
+		<group name="g_ein" label="SPS -> Roboter (iRC fragt GSig ab)">
+			<horizontal>
+				<combobox name="ein_1_var" label="Variable 1" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_1_gsig" label="GSig" value="1" min="1" max="100" />
+				<text name="ein_1_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<combobox name="ein_2_var" label="Variable 2" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_2_gsig" label="GSig" value="2" min="1" max="100" />
+				<text name="ein_2_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<combobox name="ein_3_var" label="Variable 3" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_3_gsig" label="GSig" value="3" min="1" max="100" />
+				<text name="ein_3_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<combobox name="ein_4_var" label="Variable 4" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_4_gsig" label="GSig" value="4" min="1" max="100" />
+				<text name="ein_4_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<combobox name="ein_5_var" label="Variable 5" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_5_gsig" label="GSig" value="5" min="1" max="100" />
+				<text name="ein_5_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<combobox name="ein_6_var" label="Variable 6" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_6_gsig" label="GSig" value="6" min="1" max="100" />
+				<text name="ein_6_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<combobox name="ein_7_var" label="Variable 7" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_7_gsig" label="GSig" value="7" min="1" max="100" />
+				<text name="ein_7_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<combobox name="ein_8_var" label="Variable 8" value="- frei -"><item>- frei -</item></combobox>
+				<numberbox name="ein_8_gsig" label="GSig" value="8" min="1" max="100" />
+				<text name="ein_8_zustand" value="o" />
+			</horizontal>
+		</group>
+		<group name="g_aus" label="Roboter -> SPS (iRC setzt GSig)">
+			<horizontal>
+				<numberbox name="aus_1_gsig" label="GSig" value="11" min="1" max="100" />
+				<combobox name="aus_1_var" label="Variable 1" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_1_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<numberbox name="aus_2_gsig" label="GSig" value="12" min="1" max="100" />
+				<combobox name="aus_2_var" label="Variable 2" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_2_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<numberbox name="aus_3_gsig" label="GSig" value="13" min="1" max="100" />
+				<combobox name="aus_3_var" label="Variable 3" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_3_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<numberbox name="aus_4_gsig" label="GSig" value="14" min="1" max="100" />
+				<combobox name="aus_4_var" label="Variable 4" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_4_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<numberbox name="aus_5_gsig" label="GSig" value="15" min="1" max="100" />
+				<combobox name="aus_5_var" label="Variable 5" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_5_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<numberbox name="aus_6_gsig" label="GSig" value="16" min="1" max="100" />
+				<combobox name="aus_6_var" label="Variable 6" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_6_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<numberbox name="aus_7_gsig" label="GSig" value="17" min="1" max="100" />
+				<combobox name="aus_7_var" label="Variable 7" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_7_zustand" value="o" />
+			</horizontal>
+			<horizontal>
+				<numberbox name="aus_8_gsig" label="GSig" value="18" min="1" max="100" />
+				<combobox name="aus_8_var" label="Variable 8" value="- frei -"><item>- frei -</item></combobox>
+				<text name="aus_8_zustand" value="o" />
+			</horizontal>
+		</group>
+	</main>
+</ui>

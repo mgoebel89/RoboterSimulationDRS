@@ -102,6 +102,8 @@ Danach erscheint das Menü. Jeder Punkt lässt sich einzeln und mehrfach aufrufe
     kommen: mit <b>2</b> über iRC am Schüler-PC, verbunden mit dem echten ReBeL.</td><td></td></tr>
   <tr><td class="zahl">7</td><td>Notiz</td><td>Beobachtungen eintippen, z.B. Backenrichtung bei A6 = 0, Meldungen von iRC.</td><td></td></tr>
   <tr><td class="zahl">8</td><td>Fertig</td><td>Schreibt die ZIP und zeigt ihren Inhalt.</td><td></td></tr>
+  <tr><td class="zahl">9</td><td>iRC-Bedienfeld der SPS-Kopplung</td><td>Stufe 0, eigener Ablauf in Abschnitt 6. Vorher die
+    Prüfversion der App installieren. Danach wieder Schritt 8.</td><td></td></tr>
 </table>
 
 <h2 class="umbruch">4. A/B/C-Messung am echten ReBeL (Schritt 6)</h2>
@@ -131,6 +133,36 @@ gewählten Werkzeugs (EGP 40 mit Standardbacken: 143,7 mm).</p>
 <p class="leise">In der ZIP: Container-Zustand, Journal der Simulationsplätze, Berichte und Bildschirmausgabe der Tests,
 CRI-Aufzeichnung mit den Rohdaten, Notizen, IP-Adressen. Nicht drin: Passwörter, Lehrerkonten, Welten,
 Protokoll des Lehrerbereichs.</p>
+
+<h2 class="umbruch">6. Bedienfeld der SPS-Kopplung prüfen (Schritt 9)</h2>
+<p>Klärt vor dem Bau der SPS-Kopplung, ob iRC das Bedienfeld der App so zeigt und meldet, wie geplant. Dauer etwa 15 Minuten,
+am Schüler-PC (iRC-Simulation); wer mag, danach dasselbe mit iRC am echten ReBeL.</p>
+<ol>
+  <li><span class="hak"></span>Lehrerbereich → <b>Einstellungen</b> → <b>Messungen</b> → „Prüfversion der App WebotsSim 1.1“ herunterladen.</li>
+  <li><span class="hak"></span>In iRC: <b>Datei → Schnittstellen konfigurieren → Apps</b>, WebotsSim auswählen, <b>„Update App…“</b> und
+    die ZIP wählen. App aktiv lassen. (Ohne installierte App: „Install app…“.)</li>
+  <li><span class="hak"></span>In iRC den neuen Reiter <b>„Webots und SPS“</b> öffnen; das Bedienfeld neben der 3D-Ansicht anzeigen lassen.</li>
+  <li><span class="hak"></span>Im Container <code>rebel-sim-messung</code>, Schritt <b>9</b>, Auswahl <b>1</b> (Schüler-PC), IP eingeben.
+    Ist eine SPS-IP von Schritt 1/2 bekannt, zeigt die Liste deren echte Variablen.</li>
+  <li><span class="hak"></span>Fragen zur Darstellung mit <b>j/n</b> beantworten; bei „n“ kurz notieren, was anders ist.</li>
+  <li><span class="hak"></span>Die angezeigten Klicks in iRC nacheinander ausführen (Variablen lesen, Variable wählen, GSig ändern,
+    Adresse eintragen, Haken „Alle 8 Zeilen“, Verbinden). Im Container erscheint jedes Ereignis sofort, die Statuszeile
+    in iRC meldet „… angekommen“.</li>
+  <li><span class="hak"></span><b>GSig-Nummern:</b> Der Messkoffer schaltet GSig 1 und 100 ein. In iRC nachsehen, welche GSigs an sind.
+    Danach in iRC <b>GSig 11</b> einschalten (Ein-/Ausgänge, oder eine Programmzeile „Digitaler Ausgang“, Kanaltyp GSig,
+    Kanal 11, an) und wieder aus.</li>
+  <li><span class="hak"></span>Zum Schluss trennt der Messkoffer: notieren, was das Bedienfeld dann zeigt.</li>
+  <li><span class="hak"></span>Danach Schritt <b>8</b> (ZIP) wie gewohnt. Die Prüfversion kann installiert bleiben; Taster und Sensoren
+    der Simulation funktionieren damit unverändert.</li>
+</ol>
+<table>
+  <tr><th>Frage</th><th>Ergebnis</th></tr>
+  <tr><td>Bedienfeld sichtbar, Text „Prüfung läuft“?</td><td></td></tr>
+  <tr><td>Umlaute und ● richtig? Namen passen in die Liste?</td><td></td></tr>
+  <tr><td>Klicks kommen an, Statuszeile reagiert?</td><td></td></tr>
+  <tr><td>GSig 1/100 vom Container: iRC zeigt …</td><td></td></tr>
+  <tr><td>GSig 11 in iRC: Container sieht …</td><td></td></tr>
+</table>
 
 <h2>Notizen</h2>
 <div class="notiz"></div>

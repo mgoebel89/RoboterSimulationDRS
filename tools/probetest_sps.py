@@ -148,6 +148,14 @@ async def _opcua(args, b):
         if ns is None:
             ns = next((i for i, n in enumerate(namen) if "GlobalDataSpace" in n or "PLCnext" in n), None)
         b.info("Namensraeume", "PLCnext-Variablen in ns=%s" % ns, namen)
+        if ns is not None:   # alle mit OPC-Haken, wie sie die Schueler spaeter in iRC zur Auswahl sehen
+            import sps_opcua
+            try:
+                alle = await sps_opcua.durchsuchen(client, ns)
+                b.info("Alle freigegebenen Variablen", "%d, davon koppelbar (Bool/Byte/Word): %d"
+                       % (len(alle), sum(1 for v in alle if v["bits"])), alle)
+            except Exception as e:   # noqa: BLE001
+                b.warnung("Alle freigegebenen Variablen", "%s: %s" % (type(e).__name__, e))
         gefunden = {}
         for name in SPS_VARIABLEN:
             knoten = await _finde_variable(client, ua, ns, name, args.programm_instanz)

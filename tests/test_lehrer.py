@@ -985,14 +985,17 @@ class TestLehrerSeiten(Grundlage):
         self.konto()
         self.anmelden()
         for pfad, name, anfang in (("/api/lehrer/irc_export", "irc-daten-export.cmd", b"@echo off\r\n"),
-                                   ("/api/lehrer/webotssim_app", "WebotsSim.zip", b"PK")):
+                                   ("/api/lehrer/webotssim_app", "WebotsSim.zip", b"PK"),
+                                   ("/api/lehrer/webotssim_app?pruefung=1", "WebotsSim.zip", b"PK")):
             c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
             c.request("GET", pfad, headers={"Cookie": self.cookie})
             r = c.getresponse()
             self.assertEqual((r.status, r.getheader("Content-Disposition"), r.read()[:len(anfang)]),
                              (200, 'attachment; filename="%s"' % name, anfang), pfad)
             c.close()
-        self.assertIn('href="/einrichtung"', self.anfrage("GET", "/lehrer")[1])   # Einstellungen -> Assistent
+        seite = self.anfrage("GET", "/lehrer")[1]
+        self.assertIn('href="/einrichtung"', seite)   # Einstellungen -> Assistent
+        self.assertIn('href="/api/lehrer/webotssim_app?pruefung=1"', seite)   # Pruefversion fuer Messkoffer-Schritt 9
 
 
 if __name__ == "__main__":

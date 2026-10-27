@@ -9,6 +9,8 @@ Ein Menue fuehrt durch die Schritte; jeder Schritt ist einzeln aufrufbar und wie
   4  App-Schnittstelle Schueler-PC   5  App-Schnittstelle echter ReBeL (lesen, auf Wunsch ein GSig)
   6  CRI-Aufzeichnung: feste Stellungen nahe Home, Gelenke und X/Y/Z/A/B/C wie gemeldet
   7  Notiz                           8  Fertig: ZIP schreiben
+  9  iRC-Bedienfeld der SPS-Kopplung (Stufe 0): vorher in iRC die Pruefversion der App installieren,
+     deploy/irc_app/pruefung/WebotsSim.zip ("Update App..."); fragt durch Darstellung, Klicks und GSig-Nummern
 
 Nie in der ZIP: Passwoerter (werden abgefragt und nur im Speicher gehalten), Lehrerkonten, Welten, Protokoll des
 Lehrerbereichs. Am echten ReBeL startet der Messkoffer keine Programme; bewegt wird nur von Hand.
@@ -299,6 +301,25 @@ def schritt_cri(s):
     print("\n%d Stellungen aufgenommen, gespeichert: %s" % (len(messungen), pfad))
 
 
+def schritt_bedienfeld(s):
+    import bedienfeld_pruefen
+    print("Vorher in iRC (Datei -> Schnittstellen konfigurieren -> Apps) die Pruefversion der App WebotsSim 1.1 mit\n"
+          "\"Update App...\" installieren (Download: Lehrerbereich -> Einstellungen -> Messungen -> Pruefversion).")
+    wahl = input("Gegen welche Steuerung?  1 = iRC am Schueler-PC   2 = echter ReBeL\n> ").strip()
+    schluessel = "rebel" if wahl == "2" else "pc"
+    ziel = s.ip(schluessel, dict((k, t) for k, t, _p in GERAETE)[schluessel])
+    sps = s.einst.get("sps") if s.einst.get("sps") and ja("Variablen der SPS %s zeigen?" % s.einst["sps"]) else None
+    mit = Mitschrift(sys.stdout)
+    with contextlib.redirect_stdout(mit):
+        try:
+            b = bedienfeld_pruefen.Pruefung(ziel, sps).ablauf()
+            b.schreiben(s.datei("bedienfeld_%s" % schluessel, "json"))
+            b.zusammenfassung()
+        except Exception as e:   # noqa: BLE001 - der Messkoffer soll weiterlaufen
+            print("[FEHL] %s: %s" % (type(e).__name__, e))
+    s.text("bedienfeld_%s_ausgabe" % schluessel, "".join(mit.puffer))
+
+
 def schritt_notiz(s):
     print("Notiz eingeben (z.B. Backenrichtung bei A6 = 0, Beobachtungen). Ende mit einer leeren Zeile.")
     zeilen = []
@@ -344,7 +365,8 @@ MENUE = [("1", "Container pruefen", schritt_container),
          ("5", "App-Schnittstelle echter ReBeL", lambda s: schritt_app(s, "rebel")),
          ("6", "CRI-Aufzeichnung (Stellungen nahe Home)", schritt_cri),
          ("7", "Notiz", schritt_notiz),
-         ("8", "Fertig: ZIP schreiben", schritt_fertig)]
+         ("8", "Fertig: ZIP schreiben", schritt_fertig),
+         ("9", "iRC-Bedienfeld der SPS-Kopplung pruefen (Stufe 0)", schritt_bedienfeld)]
 
 
 def main():

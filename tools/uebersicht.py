@@ -736,7 +736,9 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
     <div class="feld"><h2>Messungen</h2>
       <div class="hilfe">Ergebnisse des Messkoffers (im Container <code>rebel-sim-messung</code>: SPS, App-Schnittstelle,
         CRI am echten ReBeL). Ohne Passwörter und Konten, IP-Adressen sind enthalten.</div>
-      <table><thead><tr><th>Messung</th><th>Größe</th><th></th></tr></thead><tbody id="messungen"></tbody></table></div>
+      <table><thead><tr><th>Messung</th><th>Größe</th><th></th></tr></thead><tbody id="messungen"></tbody></table>
+      <div class="hilfe">Für Schritt 9 (Bedienfeld der SPS-Kopplung prüfen): in iRC mit „Update App …“ die
+        <a href="/api/lehrer/webotssim_app?pruefung=1">Prüfversion der App WebotsSim 1.1</a> installieren.</div></div>
   </div>
 </section>
 
@@ -2811,6 +2813,7 @@ def modell_erzeugen():
 
 EINRICHTUNG_SEITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "einrichtung_seite.html")
 APP_ZIP = os.path.join(PROJEKT_DIR, "deploy", "irc_app", "WebotsSim.zip")
+APP_ZIP_PRUEFUNG = os.path.join(PROJEKT_DIR, "deploy", "irc_app", "pruefung", "WebotsSim.zip")   # Stufe 0 SPS-Kopplung
 EINRICHTUNG_SPERRE = lehrer.Sperre()   # falsche Einrichtungscodes wie falsche Passwoerter bremsen
 
 
@@ -3270,8 +3273,8 @@ class Handler(BaseHTTPRequestHandler):
             elif pfad == "/api/lehrer/irc_export":   # Exportskript zum Doppelklicken
                 self._antwort(200, irc_export_cmd(), "application/octet-stream",
                               kopf=[("Content-Disposition", 'attachment; filename="irc-daten-export.cmd"')])
-            elif pfad == "/api/lehrer/webotssim_app":   # App fuer iRC (Taster und Sensoren)
-                with open(APP_ZIP, "rb") as f:
+            elif pfad == "/api/lehrer/webotssim_app":   # App fuer iRC (Taster und Sensoren); ?pruefung=1: mit Bedienfeld
+                with open(APP_ZIP_PRUEFUNG if "pruefung=1" in abfrage else APP_ZIP, "rb") as f:
                     self._antwort(200, f.read(), "application/zip",
                                   kopf=[("Content-Disposition", 'attachment; filename="WebotsSim.zip"')])
             elif pfad == "/api/lehrer/einstellungen":

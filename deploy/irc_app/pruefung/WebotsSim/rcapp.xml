@@ -1,0 +1,5 @@
+<App name="WebotsSim" label="Webots-Simulation und SPS-Kopplung" vendor="DRS Neuwied" version="1.1.0">
+	<!-- Ohne Programm: die ReBeL-Simulation im Container verbindet sich von aussen (gRPC, Port 5000).
+	     Setzt in iRC digitale Eingaenge (Taster, Sensoren) und koppelt globale Signale (GSig) mit einer SPS.
+	     PRUEFVERSION fuer Stufe 0 der SPS-Kopplung: Bedienfeld vorhanden, Funktion erst mit rebel-sim-messung (Schritt 9). -->
+</App>
