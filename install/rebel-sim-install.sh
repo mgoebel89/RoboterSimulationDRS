@@ -67,6 +67,7 @@ bash "$BASIS/deploy/install.sh" >/dev/null
 install -m 755 "$BASIS/install/rebel-sim-update" /usr/local/sbin/rebel-sim-update
 install -m 755 "$BASIS/install/rebel-sim-modell" /usr/local/sbin/rebel-sim-modell
 install -m 755 "$BASIS/install/rebel-sim-admin" /usr/local/sbin/rebel-sim-admin
+install -m 755 "$BASIS/install/rebel-sim-einrichtung" /usr/local/sbin/rebel-sim-einrichtung
 install -m 755 "$BASIS/install/rebel-sim-messung" /usr/local/sbin/rebel-sim-messung
 
 schritt "Beispielwelten (nur fehlende)"
@@ -98,8 +99,7 @@ if [ -f "$BASIS/protos/IgusRebel6DOF.proto" ] && [ -d "$IRC_DATEN/Data" ]; then
 elif [ -f "$BASIS/protos/IgusRebel6DOF.proto" ]; then
   echo "Modell vorhanden (ohne gespeicherte iRC-Daten, wird nicht neu erzeugt)."
 else
-  gelb "Noch kein Robotermodell. Auf einem Windows-PC mit iRC tools/irc_daten_export.ps1 ausfuehren,"
-  gelb "die Datei irc-daten.zip in den Container kopieren und dann: rebel-sim-modell /root/irc-daten.zip"
+  gelb "Noch kein Robotermodell: im Einrichtungsassistenten (Browser) die iRC-Daten hochladen."
 fi
 
 schritt "Neustart der Webseite"
@@ -107,6 +107,10 @@ systemctl restart rebel-sim-web
 ip=$(hostname -I | awk '{print $1}')
 gruen "Fertig. Startseite fuer Schueler: http://$ip   Lehrerbereich (verschluesselt): https://$ip/lehrer"
 echo "Lehrer-PCs installieren einmal das Stammzertifikat http://$ip/ca.crt (die Lehrerseite fuehrt dorthin)."
-[ -s /var/lib/rebel-sim/benutzer.json ] || gelb "Noch kein Lehrerkonto: rebel-sim-admin <name>   (fragt nach dem Passwort)"
+if ! grep -q '"rolle"' /var/lib/rebel-sim/benutzer.json 2>/dev/null; then
+  code=$(rebel-sim-einrichtung --nur-code)
+  gruen "Einrichtung im Browser: https://$ip/einrichtung   Einrichtungscode: $code"
+  echo "  (fuehrt durch erstes Lehrerkonto, Robotermodell aus iRC und Schueler-PCs; Code spaeter: rebel-sim-einrichtung)"
+fi
 echo "Laufende Simulationen nutzen neuen Programmcode erst nach 'Neu starten'."
 echo "Tests in der Schule (SPS, echter ReBeL): rebel-sim-messung, Ergebnis im Lehrerbereich unter Messungen."

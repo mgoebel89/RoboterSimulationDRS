@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Einrichtungscode fuer den Einrichtungsassistenten im Browser (https://<container>/einrichtung).
+# Gilt, bis dort das erste Lehrerkonto angelegt ist.
+#
+#   rebel-sim-einrichtung              Code zeigen (wird beim ersten Aufruf angelegt)
+#   rebel-sim-einrichtung --neu        neuen Code erzeugen, der alte gilt nicht mehr
+#   rebel-sim-einrichtung --nur-code   nur den Code ausgeben (leer, wenn es schon ein Konto gibt)
+set -euo pipefail
+BASIS="${BASIS:-/opt/rebel-sim}"
+exec sudo -u rebelsim python3 "$BASIS/tools/einrichtung.py" code "$@"

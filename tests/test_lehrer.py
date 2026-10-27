@@ -252,7 +252,13 @@ class TestLehrerSeiten(Grundlage):
         return self.anfrage("POST", "/lehrer/anmelden", {"name": name, "passwort": passwort})
 
     def test_ohne_konto_gesperrt(self):
-        status, seite = self.anfrage("GET", "/lehrer")
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        c.request("GET", "/lehrer")
+        r = c.getresponse()
+        r.read()
+        c.close()
+        self.assertEqual((r.status, r.getheader("Location")), (302, "/einrichtung"))   # noch nichts eingerichtet
+        seite = self.anfrage("GET", "/lehrer?anmelden=1")[1]
         self.assertIn("Benutzername", seite)
         self.assertIn("noch kein Konto", seite)
         self.assertEqual(self.anmelden()[0], 403)
@@ -879,6 +885,114 @@ class TestLehrerSeiten(Grundlage):
         self.assertEqual(self.v.frei(), 6)
         self.assertEqual(self.anfrage("POST", "/api/lehrer/einstellungen", {"max_simulationen": 99,
                                                                             "leerlauf_minuten": 10})[0], 409)
+
+    # --- Einrichtungsassistent (einrichtung.py) ---
+
+    def test_einrichtung_erstes_konto_mit_code(self):
+        import einrichtung
+        uebersicht.EINRICHTUNG_SPERRE = lehrer.Sperre()
+        status, seite = self.anfrage("GET", "/einrichtung")
+        self.assertEqual(status, 200)
+        self.assertIn("Einrichtungscode", seite)
+        self.assertNotIn("%%", seite)
+        self.assertEqual(self.anfrage("GET", "/api/einrichtung/stand")[1],
+                         {"benutzer_vorhanden": False, "https": uebersicht.TLS_AKTIV, "ich": None})
+        self.assertIn("noch nicht eingerichtet", self.anfrage("GET", "/")[1])   # Hinweis auf der Startseite
+        code = einrichtung.code_holen(self.zustand)
+        status, d = self.anfrage("POST", "/einrichtung/code", {"code": "0000-0000-0000"})
+        self.assertEqual(status, 403)
+        self.assertIn("rebel-sim-einrichtung", d["fehler"])
+        self.assertIn("falscher Einrichtungscode", lehrer.lies_protokoll(self.zustand)[0]["was"])
+        self.assertEqual(self.anfrage("POST", "/einrichtung/code", {"code": code}), (200, {"ok": True}))
+        # Konto nur mit Code; danach angemeldet, Code verbraucht
+        self.assertEqual(self.anfrage("POST", "/einrichtung/konto", {"code": "1", "name": "goeb", "passwort": "geheim123"})[0], 403)
+        self.assertIsNone(self.cookie)
+        status, d = self.anfrage("POST", "/einrichtung/konto", {"code": code, "name": "goeb", "anzeige": "Herr Göbel",
+                                                                 "passwort": "geheim123"})
+        self.assertEqual((status, d), (200, {"ok": True, "name": "goeb"}))
+        self.assertIn("HttpOnly", self.cookie_kopf)
+        ich = self.anfrage("GET", "/api/lehrer/ich")[1]
+        self.assertEqual((ich["name"], ich["rolle"], ich["muss_aendern"]), ("goeb", "admin", False))
+        self.assertEqual(self.anfrage("POST", "/einrichtung/konto", {"code": code, "name": "zwei", "passwort": "geheim123"})[0], 409)
+        self.assertNotIn("noch nicht eingerichtet", self.anfrage("GET", "/")[1])
+        stand = self.anfrage("GET", "/api/lehrer/einrichtung")[1]
+        self.assertEqual((stand["konten"], stand["lehrkraefte"], stand["pc_test"]), (1, 0, None))
+        self.assertIn("modell", stand)
+        self.assertEqual(self.anfrage("GET", "/einrichtung")[0], 200)   # fuer Admins weiter erreichbar
+        # ohne Anmeldung bzw. als Lehrkraft: zum Lehrerbereich
+        self.konto("mueller", "lehrkraft")
+        self.anmelden("mueller")
+        c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        c.request("GET", "/einrichtung", headers={"Cookie": self.cookie})
+        r = c.getresponse()
+        r.read()
+        c.close()
+        self.assertEqual((r.status, r.getheader("Location")), (302, "/lehrer"))
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/einrichtung")[0], 403)
+        self.assertEqual(self.anfrage("GET", "/api/lehrer/irc_export")[0], 403)
+
+    def test_einrichtung_code_sperre(self):
+        import einrichtung
+        uebersicht.EINRICHTUNG_SPERRE = lehrer.Sperre()
+        code = einrichtung.code_holen(self.zustand)
+        for _ in range(lehrer.FEHLVERSUCHE):
+            self.anfrage("POST", "/einrichtung/code", {"code": "1234"})
+        self.assertEqual(self.anfrage("POST", "/einrichtung/code", {"code": code})[0], 429)   # auch der richtige wartet
+
+    def test_einrichtung_irc_daten_und_pc_test(self):
+        import einrichtung
+        import zipfile
+        self.konto()
+        self.anmelden()
+        zip_pfad = os.path.join(self.tmp.name, "irc-daten.zip")
+        with zipfile.ZipFile(zip_pfad, "w") as z:
+            z.writestr("Data\\Robots\\REBEL\\REBEL-6DOF-03\\REBEL-6DOF-03.xml", "<Robot/>")
+            z.writestr("Data\\Tools\\Schunk_EGP40_RebelMountingPlate.xml", "<Tool/>")
+        with open(zip_pfad, "rb") as f:
+            inhalt = f.read()
+        irc = os.path.join(self.tmp.name, "irc")
+        alt = (uebersicht.IRC_DATEN, uebersicht.modell_erzeugen, einrichtung.pc_pruefen)
+        aufrufe = []
+        uebersicht.IRC_DATEN = irc
+        uebersicht.modell_erzeugen = lambda: aufrufe.append(os.listdir(irc)) or {"egp40": {"tcp_mm": 103}, "_warnungen": ["w"]}
+        try:
+            status, d = self.anfrage("POST", "/api/lehrer/irc_daten", roh=inhalt, typ="application/zip")
+            self.assertEqual((status, d["dateien"], d["greifer"], d["warnungen"]), (200, 2, ["egp40"], ["w"]))
+            self.assertEqual(aufrufe, [["Data"]])   # Modell erst nach dem Entpacken erzeugt
+            self.assertTrue(self.anfrage("GET", "/api/lehrer/einrichtung")[1]["irc_daten"])
+            self.assertIn("iRC-Daten hochgeladen", lehrer.lies_protokoll(self.zustand)[0]["was"])
+            status, d = self.anfrage("POST", "/api/lehrer/irc_daten", roh=b"kein zip", typ="application/zip")
+            self.assertEqual((status, d["fehler"]), (409, "Das ist keine ZIP-Datei."))
+            self.assertEqual(len(aufrufe), 1)
+            # Lehrkraft darf das Modell nicht tauschen
+            self.konto("mueller", "lehrkraft")
+            self.anmelden("mueller")
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/irc_daten", roh=inhalt, typ="application/zip")[0], 409)
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/pc_pruefen", {"host": "10.0.0.5"})[0], 409)
+            self.anmelden()
+            einrichtung.pc_pruefen = lambda host: [{"port": 3921, "name": "x", "offen": True, "fehler": None},
+                                                   {"port": 5000, "name": "y", "offen": False, "fehler": "zu"}]
+            status, d = self.anfrage("POST", "/api/lehrer/pc_pruefen", {"host": "10.0.0.5"})
+            self.assertEqual((status, d["ports"][0]["offen"]), (200, True))
+            test = self.anfrage("GET", "/api/lehrer/einrichtung")[1]["pc_test"]
+            self.assertEqual((test["host"], test["ok"]), ("10.0.0.5", True))
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/einrichtung_abschliessen", {})[0], 200)
+            self.assertTrue(self.anfrage("GET", "/api/lehrer/einrichtung")[1]["abgeschlossen"])
+        finally:
+            uebersicht.IRC_DATEN, uebersicht.modell_erzeugen, einrichtung.pc_pruefen = alt
+
+    def test_einrichtung_downloads(self):
+        self.konto()
+        self.anmelden()
+        for pfad, name, anfang in (("/api/lehrer/irc_export", "irc-daten-export.cmd", b"@echo off\r\n"),
+                                   ("/api/lehrer/webotssim_app", "WebotsSim.zip", b"PK")):
+            c = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+            c.request("GET", pfad, headers={"Cookie": self.cookie})
+            r = c.getresponse()
+            self.assertEqual((r.status, r.getheader("Content-Disposition"), r.read()[:len(anfang)]),
+                             (200, 'attachment; filename="%s"' % name, anfang), pfad)
+            c.close()
+        self.assertIn('href="/einrichtung"', self.anfrage("GET", "/lehrer")[1])   # Einstellungen -> Assistent
 
 
 if __name__ == "__main__":

@@ -70,43 +70,53 @@ iRC auf dem Schüler-PC ──CRI (3921)──▶ Webots je Platz im Container �
    IP-Adresse (feste Adresse empfohlen, z.B. `192.168.7.1/16`, oder `dhcp`), Gateway, Root-Passwort.
 4. Das Skript lädt die Ubuntu-24.04-Vorlage, legt den Container an (unprivilegiert, `nesting=1`,
    Start beim Booten) und installiert darin alles. Das dauert einige Minuten.
-5. Zum Schluss fragt es nach dem **ersten Lehrerkonto** (Admin) und dessen Passwort.
+5. Zum Schluss zeigt es die Adresse der **Einrichtung** und den **Einrichtungscode**, z.B.
+   `https://192.168.7.1/einrichtung` und `4821-7730-1956`. Den Code abschreiben.
+6. Die Adresse an einem Lehrer-PC im Browser öffnen und dem **Einrichtungsassistenten** folgen:
+   - **Verschlüsselte Verbindung:** Beim ersten Mal erscheint die Anleitung zum Stammzertifikat (siehe Abschnitt 7).
+     Ohne Zertifikat geht es auch: Der Browser warnt, über „Erweitert“ → „Weiter zu …“ geht es weiter.
+   - **Willkommen:** Einrichtungscode eingeben.
+   - **Admin-Konto:** eigenes Konto anlegen, danach ist man angemeldet.
+   - **Robotermodell:** iRC-Daten hochladen (Abschnitt 4).
+   - **Lehrkräfte** und **Einstellungen** (Höchstzahl der Simulationen, Stundenende, Logo): freiwillig.
+   - **Schüler-PCs:** App für iRC herunterladen, Text für die IT kopieren, Verbindung zu einem PC prüfen.
+   - **Fertig:** Roboterumgebungen für Schüler freigeben.
+
+Der Code gilt nur, bis das erste Konto angelegt ist. Vergessen? In der Proxmox-Konsole des Containers
+`rebel-sim-einrichtung` eingeben. Der Assistent bleibt danach für Admins erreichbar:
+Lehrerbereich → **Einstellungen** → **Einrichtungsassistent öffnen** (z.B. für neue iRC-Daten nach einem iRC-Update).
+
+Das Root-Passwort aus dem Skript gilt für die Konsole und für SSH (das Skript erlaubt root die Anmeldung mit
+Passwort; Ubuntu lässt root sonst nur mit Schlüssel herein). Für die Einrichtung ist SSH nicht nötig.
 
 Ohne das Proxmox-Skript, z.B. in einem schon vorhandenen Ubuntu-24.04-Container, als root:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/mgoebel89/RoboterSimulationDRS/main/install/rebel-sim-install.sh)"
-rebel-sim-admin <name>
 ```
 
-Danach erreichbar: **`http://<container>`** – Startseite mit allen freigegebenen Roboterumgebungen (Schüler) und dem
-Knopf „Anmeldung Lehrkraft“ (oder direkt `https://<container>/lehrer`; beim ersten Mal das Stammzertifikat
-installieren, siehe Abschnitt 7).
+Auch dieses Skript zeigt am Ende Adresse und Einrichtungscode. Danach erreichbar: **`http://<container>`** –
+Startseite mit allen freigegebenen Roboterumgebungen (Schüler) und dem Knopf „Anmeldung Lehrkraft“.
 
 ## 4. Robotermodell aus iRC erzeugen
 
 Das Modell des ReBeL und des Greifers stammt aus iRC und gehört igus. Es steht deshalb nicht im Repository,
-sondern wird einmal im Container erzeugt.
+sondern wird einmal im Container erzeugt. Das geht im **Einrichtungsassistenten** (Schritt „Robotermodell“):
 
-1. Auf einem Windows-PC mit iRC V15 die Datei [`tools/irc_daten_export.ps1`](../tools/irc_daten_export.ps1)
-   herunterladen und in PowerShell ausführen:
+1. **irc-daten-export.cmd herunterladen** und auf einem Windows-PC mit iRC V15 doppelklicken. Warnt Windows
+   („Der Computer wurde durch Windows geschützt“): *Weitere Informationen* → *Trotzdem ausführen*.
+   Das Skript findet iRC selbst und legt `irc-daten.zip` (etwa 1,5 MB) auf den Desktop:
+   Roboter `REBEL-6DOF-03` und Greifer Schunk EGP 40 und 25.
+2. Die Datei im Assistenten **hochladen** (auswählen oder hineinziehen). Das Modell wird sofort erzeugt
+   (bis zu einer Minute). Mit „Probebild erzeugen“ fotografiert Webots die Beispielwelt zur Kontrolle.
 
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File irc_daten_export.ps1
-   ```
+Sind Skripte auf dem PC gesperrt: den Ordner `Data` aus `C:\Program Files\iRC-igusRobotControl-V15` als ZIP packen
+(Rechtsklick → *Senden an* → *ZIP-komprimierter Ordner*, etwa 270 MB) und diese ZIP hochladen. Übernommen werden nur
+der Roboter und die Dateien `Schunk_EGP*`.
 
-   Es legt `irc-daten.zip` (etwa 1,5 MB) auf den Desktop: Roboter `REBEL-6DOF-03` und Greifer Schunk EGP 25.
-2. Die Datei in den Container kopieren, z.B. mit WinSCP oder:
-
-   ```powershell
-   scp $HOME\Desktop\irc-daten.zip root@<container>:/root/
-   ```
-
-3. Im Container (Proxmox-Konsole des Containers oder SSH):
-
-   ```bash
-   rebel-sim-modell /root/irc-daten.zip
-   ```
+Ohne Browser geht es weiterhin im Container: die ZIP z.B. mit WinSCP nach `/root/` kopieren (bzw. auf den
+Proxmox-Host und dort `pct push <CT-ID> irc-daten.zip /root/irc-daten.zip`), dann `rebel-sim-modell /root/irc-daten.zip`.
+Das Exportskript gibt es auch als PowerShell-Datei: [`tools/irc_daten_export.ps1`](../tools/irc_daten_export.ps1).
 
 Die Daten bleiben unter `/var/lib/rebel-sim/irc`; bei jedem Update wird das Modell daraus neu erzeugt.
 
@@ -449,7 +459,8 @@ Einstellungen und das Robotermodell bleiben erhalten.** Laufende Simulationen nu
 | Befehl | Zweck |
 |---|---|
 | `rebel-sim-update` | Update aus dem Repository |
-| `rebel-sim-modell /root/irc-daten.zip` | Robotermodell aus iRC-Daten erzeugen |
+| `rebel-sim-einrichtung` | Einrichtungscode zeigen (gilt bis zum ersten Konto); `--neu` erzeugt einen neuen |
+| `rebel-sim-modell /root/irc-daten.zip` | Robotermodell aus iRC-Daten erzeugen (sonst im Einrichtungsassistenten hochladen) |
 | `rebel-sim-admin <name>` | Admin-Konto anlegen oder Passwort neu setzen; `--liste` zeigt die Konten |
 | `rebel-sim-platz liste` | laufende Simulationen |
 | `rebel-sim-platz anlegen 99 192.168.3.11 rebel_tisch.wbt dauerhaft` | fester Platz, z.B. Zwilling des echten ReBeL |

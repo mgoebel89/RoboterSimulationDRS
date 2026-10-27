@@ -5,7 +5,8 @@
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/mgoebel89/RoboterSimulationDRS/main/proxmox/rebel-sim.sh)"
 #
 # Legt einen unprivilegierten LXC mit Ubuntu 24.04 an (nesting=1, Start beim Booten) und ruft darin
-# install/rebel-sim-install.sh auf. Richtwerte: 4 Kerne, 6 GB RAM fuer 10 gleichzeitige Simulationen, 20 GB Platte.
+# install/rebel-sim-install.sh auf. Danach geht es im Browser weiter (https://<container>/einrichtung, mit dem
+# Einrichtungscode vom Ende dieses Skripts). Richtwerte: 4 Kerne, 6 GB RAM fuer 10 gleichzeitige Simulationen, 20 GB Platte.
 set -euo pipefail
 
 ZWEIG="${ZWEIG:-main}"
@@ -28,6 +29,11 @@ if [ "$aktion" = update ]; then
   pct status "$ctid" >/dev/null 2>&1 || { echo "Container $ctid gibt es nicht."; exit 1; }
   pct exec "$ctid" -- bash -c "if command -v rebel-sim-update >/dev/null; then rebel-sim-update;
     else bash -c \"\$(curl -fsSL $ROH/install/rebel-sim-install.sh)\"; fi"
+  code=$(pct exec "$ctid" -- rebel-sim-einrichtung --nur-code 2>/dev/null || true)
+  if [ -n "$code" ]; then
+    ip_ist=$(pct exec "$ctid" -- hostname -I | awk '{print $1}')
+    echo; echo "Noch nicht eingerichtet: https://$ip_ist/einrichtung   Einrichtungscode: $code"
+  fi
   exit 0
 fi
 
@@ -73,24 +79,27 @@ for _ in $(seq 1 60); do
 done
 pct exec "$ctid" -- getent hosts github.com >/dev/null || { echo "Container hat kein Internet (DNS/Gateway pruefen)."; exit 1; }
 
+echo "==> SSH: root darf sich mit dem Passwort anmelden (Ubuntu erlaubt fuer root sonst nur Schluessel)"
+pct exec "$ctid" -- bash -c 'mkdir -p /etc/ssh/sshd_config.d && echo "PermitRootLogin yes" > /etc/ssh/sshd_config.d/10-rebel-sim.conf
+  systemctl try-restart ssh.service 2>/dev/null || true'
+
 echo "==> Installation im Container"
 pct exec "$ctid" -- bash -c "apt-get update -q >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl ca-certificates >/dev/null && bash -c \"\$(curl -fsSL $ROH/install/rebel-sim-install.sh)\""
 
-admin=$(frage "Name fuer das erste Lehrerkonto (Admin), z.B. Kuerzel:" "")
-if [ -n "$admin" ]; then
-  echo "Passwort fuer $admin festlegen:"
-  pct exec "$ctid" -- rebel-sim-admin "$admin" || echo "Spaeter im Container: rebel-sim-admin $admin"
-fi
-
 ip_ist=$(pct exec "$ctid" -- hostname -I | awk '{print $1}')
+code=$(pct exec "$ctid" -- rebel-sim-einrichtung --nur-code)
 cat <<TEXT
 
 Fertig. Container $ctid ($name), Adresse $ip_ist
-  Startseite:   http://$ip_ist   (Schueler waehlen dort ihre Welt,
-                Lehrkraefte melden sich dort an)
-Noch zu tun (siehe Anleitung im Repository, docs/ANLEITUNG.md):
-  1. Robotermodell: auf einem PC mit iRC tools/irc_daten_export.ps1 ausfuehren, irc-daten.zip nach
-     /root/ im Container kopieren, dann im Container: rebel-sim-modell /root/irc-daten.zip
-  2. App deploy/irc_app/WebotsSim.zip in iRC auf jedem Schueler-PC installieren und freischalten.
-Update spaeter: dieses Skript erneut starten und "aktualisieren" waehlen, oder im Container: rebel-sim-update
+
+  Jetzt an einem Lehrer-PC im Browser die Einrichtung oeffnen:
+
+      https://$ip_ist/einrichtung        Einrichtungscode:  $code
+
+  Der Assistent fuehrt durch erstes Lehrerkonto, Robotermodell aus iRC (Daten hochladen),
+  weitere Lehrkraefte, Einstellungen und die Schueler-PCs. Der Code gilt bis zum ersten Konto;
+  vergessen: in der Konsole des Containers  rebel-sim-einrichtung
+
+  Startseite fuer Schueler danach:  http://$ip_ist
+  Update spaeter: dieses Skript erneut starten und "aktualisieren" waehlen, oder im Container: rebel-sim-update
 TEXT

@@ -34,14 +34,16 @@ Auf dem **Proxmox-Host** (Shell des Knotens) als root:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/mgoebel89/RoboterSimulationDRS/main/proxmox/rebel-sim.sh)"
 ```
 
-Das Skript legt einen Ubuntu-24.04-Container an, installiert Webots R2025a und die Simulation und fragt nach
-dem ersten Lehrerkonto. Danach noch:
+Das Skript legt einen Ubuntu-24.04-Container an, installiert Webots R2025a und die Simulation und zeigt am Ende
+die Adresse der Einrichtung mit einem **Einrichtungscode**. Im Browser (`https://<container>/einrichtung`) führt ein
+Assistent durch den Rest:
 
-1. **Robotermodell erzeugen:** Die igus-Modelldaten dürfen nicht weitergegeben werden und stehen deshalb nicht
-   im Repository. Auf einem PC mit iRC [`tools/irc_daten_export.ps1`](tools/irc_daten_export.ps1) ausführen,
-   `irc-daten.zip` in den Container kopieren und dort `rebel-sim-modell /root/irc-daten.zip` aufrufen.
-2. **Schüler-PCs:** die App [`deploy/irc_app/WebotsSim.zip`](deploy/irc_app/WebotsSim.zip) einmal in iRC
-   installieren und freischalten (für Taster und Sensoren).
+1. **Erstes Lehrerkonto** (Admin) mit dem Einrichtungscode anlegen.
+2. **Robotermodell:** Die igus-Modelldaten dürfen nicht weitergegeben werden und stehen deshalb nicht im
+   Repository. Der Assistent bietet ein Exportskript zum Doppelklicken an (auf einem PC mit iRC); die entstandene
+   `irc-daten.zip` lädt man im Assistenten hoch.
+3. **Lehrkräfte, Einstellungen, Schüler-PCs:** weitere Konten, Logo, App
+   [`WebotsSim.zip`](deploy/irc_app/WebotsSim.zip) für iRC, Text für die IT und Verbindungstest zu einem Schüler-PC.
 
 **Update:** dasselbe Skript erneut starten und „aktualisieren“ wählen, oder im Container `rebel-sim-update`.
 

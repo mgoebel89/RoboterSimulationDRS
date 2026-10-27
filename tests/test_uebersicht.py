@@ -321,6 +321,18 @@ class TestHttps(Grundlage):
         self.assertIn("Verschlüsselte Verbindung", seite.decode())
         self.assertIn(uebersicht.ca_fingerabdruck(self.tls), seite.decode())
         self.assertNotIn("%%", seite.decode())
+        self.assertIn("Weiter zum Lehrerbereich", seite.decode())
+        # Einrichtung ebenso nur verschluesselt (Einrichtungscode und erstes Passwort)
+        status, seite, _ = self.anfrage(False, "GET", "/einrichtung")
+        self.assertEqual(status, 200)
+        self.assertIn("Weiter zur Einrichtung", seite.decode())
+        self.assertNotIn("%%", seite.decode())
+        status, seite, _ = self.anfrage(True, "GET", "/einrichtung")
+        self.assertEqual(status, 302)   # es gibt schon ein Konto, ohne Anmeldung: zum Lehrerbereich
+        for methode, pfad in (("POST", "/einrichtung/code"), ("POST", "/einrichtung/konto"), ("GET", "/api/einrichtung/stand")):
+            status, text, _ = self.anfrage(False, methode, pfad, {"code": "1"})
+            self.assertEqual(status, 403, pfad)
+            self.assertIn("https", text.decode(), pfad)
         for methode, pfad in (("GET", "/api/lehrer/ich"), ("GET", "/status.json"), ("POST", "/lehrer/anmelden"),
                               ("POST", "/api/lehrer/alle_beenden")):
             status, text, cookie = self.anfrage(False, methode, pfad, {"name": "goebel", "passwort": "geheim123"})

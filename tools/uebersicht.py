@@ -11,6 +11,10 @@ Schueler (erkannt an der IP ihres PCs, siehe verwalter.py):
                   /api/kollision_quittieren, /api/zuruecksetzen (Neustart), /api/beenden
   /welten/x.png   Vorschaubild bzw. Arbeitsblatt (x.pdf) einer Welt
 
+Einrichtung (solange es kein Konto gibt, fuehrt /lehrer dorthin; siehe einrichtung.py):
+  /einrichtung    Assistent: Einrichtungscode, erstes Admin-Konto, iRC-Daten hochladen, weitere Konten,
+                  Einstellungen, Schueler-PCs pruefen. Danach fuer Admins weiter erreichbar.
+
 Lehrkraft (angemeldet; ohne Anmeldung nur im Container selbst und, solange es kein Konto gibt, lehrer_ips):
   /lehrer         Liste aller Simulationen mit Ampel, aktualisiert sich selbst
   /status.json    Zustand aller Simulationen (fuer die Seite und fuer Skripte)
@@ -46,6 +50,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import baukasten
+import einrichtung
 import lehrer
 import verwalter
 import welt_paket
@@ -366,10 +371,10 @@ UMSTIEG = """<!doctype html>
 .umstieg h1 { margin:0 0 10px; font-size:1.35em; display:flex; align-items:center; }
 .umstieg li { margin:7px 0; } .umstieg code { word-break:break-all; }
 </style></head>
-<body><header>%%MARKE%% <span class="unter">Lehrerbereich</span></header>
+<body><header>%%MARKE%% <span class="unter">%%BEREICH%%</span></header>
 <div class="umstieg">
   <h1>%%DREIECK%%Verschlüsselte Verbindung</h1>
-  <p id="pruefe">Der Lehrerbereich läuft verschlüsselt (https), damit Passwörter nicht mitgelesen werden können. Einen Moment …</p>
+  <p id="pruefe">%%DER_BEREICH%% läuft verschlüsselt (https), damit Passwörter nicht mitgelesen werden können. Einen Moment …</p>
   <div id="anleitung" hidden>
     <p>Dieser PC kennt das Zertifikat der Simulation noch nicht. Einmal je PC (bzw. Windows-Benutzer):</p>
     <ol>
@@ -382,7 +387,9 @@ UMSTIEG = """<!doctype html>
     </ol>
     <p class="leise">Diese Zertifizierungsstelle gehört nur zu dieser Simulation (%%NAME%%): Sie darf ausschließlich
       Zertifikate für deren Adresse ausstellen, nicht für andere Webseiten.</p>
-    <p><a class="btn" id="weiter" href="#">Weiter zum Lehrerbereich (https)</a></p>
+    <p><a class="btn" id="weiter" href="#">%%WEITER%% (https)</a></p>
+    <p class="leise">Ohne Zertifikat geht es auch: Der Browser warnt dann, über „Erweitert“ → „Weiter zu …“ geht es
+      trotzdem verschlüsselt weiter. Die Warnung kommt aber bei jedem Besuch wieder.</p>
   </div>
 </div>
 <script>
@@ -400,7 +407,8 @@ fetch(basis + '/tls-test', {mode: 'no-cors', cache: 'no-store', signal: abbruch.
 
 def lehrer_pfad(pfad):
     """Seiten und Schnittstellen der Lehrkraft: mit HTTPS nur noch verschluesselt (Passwort, Anmelde-Cookie)."""
-    return pfad in ("/lehrer", "/status.json") or pfad.startswith(("/lehrer/", "/api/lehrer/", "/platz/"))
+    return pfad in ("/lehrer", "/status.json", "/einrichtung") or pfad.startswith(
+        ("/lehrer/", "/api/lehrer/", "/platz/", "/einrichtung/", "/api/einrichtung/"))
 
 
 def tls_kontext(tls_dir=None):
@@ -425,15 +433,18 @@ def ca_fingerabdruck(tls_dir=None):
     return ":".join("%02X" % b for b in hashlib.sha1(der).digest())
 
 
-def seite_umstieg():
+def seite_umstieg(pfad="/lehrer"):
+    einrichten = pfad.startswith("/einrichtung")
     return (seite(UMSTIEG).replace("%%FINGERABDRUCK%%", ca_fingerabdruck() or "?")
+            .replace("%%BEREICH%%", "Einrichtung" if einrichten else "Lehrerbereich")
+            .replace("%%DER_BEREICH%%", "Die Einrichtung" if einrichten else "Der Lehrerbereich")
+            .replace("%%WEITER%%", "Weiter zur Einrichtung" if einrichten else "Weiter zum Lehrerbereich")
             .replace("%%NAME%%", html.escape(socket.gethostname()))
             .replace("%%TLS_PORT%%", "" if TLS_PORT == 443 else ":%d" % TLS_PORT))
 
 
-KEINE_BENUTZER = """<div class="leise">Es gibt noch kein Konto. Den ersten Admin legt man im Container an:
-<code>sudo -u rebelsim python3 /opt/rebel-sim/tools/lehrer.py admin &lt;name&gt;</code>, oder von einem Lehrer-PC aus
-(<code>lehrer_ips</code> in verwalter.json, gilt nur bis zum ersten Konto) im Reiter Benutzer.</div>"""
+KEINE_BENUTZER = """<div class="leise">Es gibt noch kein Konto. Das erste legt man in der
+<a href="/einrichtung">Einrichtung</a> an (mit dem Einrichtungscode, im Container: <code>rebel-sim-einrichtung</code>).</div>"""
 
 LEHRER_SEITE = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -512,6 +523,9 @@ table.welten tr.zeile-welt:hover td, #teile tr[data-name]:hover td { background:
 .logo-wahl .bildchen { height:64px; display:flex; align-items:center; justify-content:center; }
 .logo-wahl img { max-height:64px; max-width:100%; }
 .logo-wahl .unten { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:.85em; }
+ul.checkliste { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; font-size:.93em; }
+ul.checkliste li { display:flex; gap:10px; } ul.checkliste .ja { color:#6b7c00; font-weight:700; }
+ul.checkliste .nein { color:var(--gelb); font-weight:700; }
 .dialog > .feld { width:min(420px, 100%); max-height:calc(100vh - 32px); overflow:auto; box-shadow:var(--schatten-3); gap:14px;
   padding:22px 24px; }
 .dialog > .feld.gross { width:min(760px, 100%); }
@@ -703,6 +717,10 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
 <section id="tab-einst" hidden>
   <div class="seitenkopf"><div><h1>Einstellungen</h1><div class="unterzeile">Gelten für alle Lehrkräfte und Schüler.</div></div></div>
   <div class="spalte">
+    <div class="feld"><h2>Einrichtung</h2>
+      <ul class="checkliste" id="einrichtung-liste"></ul>
+      <div class="knopfreihe"><a class="btn haupt" href="/einrichtung">Einrichtungsassistent öffnen</a>
+        <span class="hilfe">Robotermodell (z.B. nach einem iRC-Update), Konten, Schüler-PCs prüfen</span></div></div>
     <div class="feld"><h2>Simulationen</h2>
       <div class="zeile"><label>Gleichzeitig höchstens <input id="e-max" type="number" min="1" max="20"></label>
       <label>Beenden nach so vielen Minuten ohne iRC <input id="e-leer" type="number" min="1" max="240"></label></div>
@@ -777,6 +795,9 @@ async function anmeldung() {
     $('abmelden').textContent = 'Anmelden'; $('abmelden').onclick = () => location.href = '/lehrer?anmelden=1';
   }
   if (ich.muss_aendern) passwortDialog(true);
+  else if (ich.rolle === 'admin') fetch('/api/lehrer/einrichtung', {cache: 'no-store'}).then(r => r.json()).then(s => {
+    if (!s.modell) melden('Das Robotermodell fehlt noch: Einstellungen → Einrichtungsassistent öffnen.', true);
+  }).catch(() => {});
   if (ich.vertraut && !ich.benutzer_vorhanden) {
     melden('Noch kein Konto vorhanden: im Reiter Benutzer zuerst ein Admin-Konto für dich anlegen.');
     document.querySelector('[data-tab="benutzer"]').click();
@@ -1205,6 +1226,18 @@ async function einstellungen() {
   $('e-uhr').value = (e.ende_uhrzeiten || []).join(', ');
   logosZeigen();
   messungenZeigen();
+  einrichtungZeigen();
+}
+async function einrichtungZeigen() {
+  const s = await (await fetch('/api/lehrer/einrichtung', {cache: 'no-store'})).json();
+  const punkte = [
+    [s.modell, s.modell ? 'Robotermodell vorhanden (' + s.greifer.map(g => g.titel || g.name).join(', ') + ')' : 'Robotermodell fehlt noch'],
+    [s.https, s.https ? 'Lehrerbereich verschlüsselt (https)' : 'ohne https'],
+    [true, (s.konten === 1 ? 'ein Konto' : s.konten + ' Konten') + ', davon Lehrkräfte: ' + s.lehrkraefte],
+    [s.pc_test && s.pc_test.ok, s.pc_test ? 'Verbindungstest zu PC ' + s.pc_test.host + ': ' + (s.pc_test.ok ? 'erreichbar' : 'nicht erreichbar')
+      + ' (' + s.pc_test.zeit + ')' : 'Verbindung zu einem Schüler-PC noch nicht getestet'],
+  ];
+  $('einrichtung-liste').innerHTML = punkte.map(p => '<li><span class="' + (p[0] ? 'ja">✓' : 'nein">!') + '</span>' + esc(p[1]) + '</li>').join('');
 }
 async function messungenZeigen() {
   const l = await (await fetch('/api/lehrer/messungen', {cache: 'no-store'})).json();
@@ -2149,9 +2182,12 @@ def seite_viewer(platz, welt=None):
                      "webots_js": WEBOTS_VIEW_JS, "wwi": WEBOTS_VIEW_JS.rsplit("/", 1)[0]}
 
 
-def seite_wahl(pc, welten, eigener, frei, max_sim, meldung=None, lehrkraft=False):
+def seite_wahl(pc, welten, eigener, frei, max_sim, meldung=None, lehrkraft=False, eingerichtet=True):
     """Startseite: Weltenliste fuer den Schueler, Zugang zum Lehrerbereich. eigener: laufende Simulation (Welt wechseln)."""
     balken = []
+    if not eingerichtet:
+        balken.append('<div class="balken warnen">Diese ReBeL-Simulation ist noch nicht eingerichtet. Lehrkraft: '
+                      '<a href="/einrichtung">Einrichtung starten</a></div>')
     if meldung:
         balken.append('<div class="balken warnen">Deine Simulation wurde beendet: %s.</div>' % html.escape(meldung))
     if eigener is not None:
@@ -2656,6 +2692,46 @@ def modell_erzeugen():
     return ergebnis
 
 
+# --- Einrichtung (Assistent unter /einrichtung, siehe einrichtung.py) ---
+
+EINRICHTUNG_SEITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "einrichtung_seite.html")
+APP_ZIP = os.path.join(PROJEKT_DIR, "deploy", "irc_app", "WebotsSim.zip")
+EINRICHTUNG_SPERRE = lehrer.Sperre()   # falsche Einrichtungscodes wie falsche Passwoerter bremsen
+
+
+def einrichtung_stand():
+    """Was ist eingerichtet? Fuer den Assistenten und die Checkliste im Lehrerbereich."""
+    benutzer = lehrer.benutzer_liste(ZUSTAND_DIR)
+    welten = _welten()
+    gemerkt = einrichtung.lies(ZUSTAND_DIR)
+    modell = os.path.exists(PROTO_DATEI)
+    e = _einstellungen()
+    return {
+        "konten": len(benutzer), "lehrkraefte": sum(1 for b in benutzer if b["rolle"] == "lehrkraft"),
+        "https": TLS_AKTIV, "fingerabdruck": ca_fingerabdruck(),
+        "irc_daten": os.path.isdir(os.path.join(IRC_DATEN, "Data")), "modell": modell,
+        "greifer": greifer_titel_liste() if modell else [],
+        "einstellungen_angepasst": os.path.exists(lehrer.einstellungen_datei(ZUSTAND_DIR)),
+        "einstellungen": {k: e[k] for k in ("max_simulationen", "leerlauf_minuten", "ende_uhrzeiten")},
+        "logo": lehrer.gewaehltes_logo(ZUSTAND_DIR),
+        "welten": [{"datei": w["datei"], "titel": w["titel"], "sichtbar": w["sichtbar"], "bild": w["bild"]} for w in welten],
+        "pc_test": gemerkt.get("pc_test"), "abgeschlossen": gemerkt.get("abgeschlossen"),
+    }
+
+
+def irc_daten_hochgeladen(zip_pfad):
+    """iRC-Daten aus dem Assistenten einspielen und das Robotermodell neu erzeugen."""
+    try:
+        return einrichtung.irc_daten_einspielen(zip_pfad, IRC_DATEN, modell_erzeugen)
+    except baukasten.BaukastenFehler as e:
+        raise lehrer.LehrerFehler(str(e))
+
+
+def irc_export_cmd():
+    with open(os.path.join(PROJEKT_DIR, "tools", "irc_daten_export.ps1"), encoding="ascii") as f:
+        return einrichtung.export_cmd(f.read())
+
+
 def backensatz_speichern(name, entwurf, wer_name):
     """Backe am Greifer loesen, backensatz.json schreiben, Modell und Werkzeugpaket neu erzeugen."""
     if not isinstance(entwurf, dict):
@@ -2967,7 +3043,7 @@ class Handler(BaseHTTPRequestHandler):
             if pfad.startswith(("/api/", "/status.json", "/lehrer/teil_vorschau.js")):
                 self._json(403, {"fehler": "Den Lehrerbereich bitte über https:// öffnen."})
             else:
-                self._antwort(200, seite_umstieg())
+                self._antwort(200, seite_umstieg(pfad))
         elif pfad == "/ca.crt":   # Stammzertifikat fuer die Lehrer-PCs (oeffentlich, enthaelt nichts Geheimes)
             try:
                 with open(os.path.join(TLS_DIR, "ca.crt"), "rb") as f:
@@ -3032,9 +3108,22 @@ class Handler(BaseHTTPRequestHandler):
                     self._antwort(200, seite(f.read()))
         elif pfad in ("/lehrer/anleitung", "/lehrer/testablauf") or pfad.startswith("/lehrer/anleitung/"):
             self._anleitung(pfad)
+        elif pfad == "/einrichtung":
+            ich = self._wer()
+            if lehrer.hat_benutzer(ZUSTAND_DIR) and (ich is None or ich["rolle"] != "admin"):
+                self._antwort(302, "", kopf=[("Location", "/lehrer")])   # nach der Ersteinrichtung nur fuer Admins
+            else:
+                with open(EINRICHTUNG_SEITE, encoding="utf-8") as f:
+                    self._antwort(200, seite(f.read()))
+        elif pfad == "/api/einrichtung/stand":   # fuer alle: gibt es schon ein Konto, wer bin ich
+            ich = self._wer()
+            self._json(200, {"benutzer_vorhanden": lehrer.hat_benutzer(ZUSTAND_DIR), "https": TLS_AKTIV,
+                             "ich": None if ich is None else {k: ich.get(k) for k in ("name", "anzeige", "rolle", "vertraut")}})
         elif pfad == "/lehrer":
             if self._lehrer() and "anmelden=1" not in abfrage:
                 self._antwort(200, seite(LEHRER_SEITE))
+            elif not lehrer.hat_benutzer(ZUSTAND_DIR) and "anmelden=1" not in abfrage:
+                self._antwort(302, "", kopf=[("Location", "/einrichtung")])   # noch nichts eingerichtet
             else:
                 self._antwort(200, seite(ANMELDUNG).replace(
                     "%%HINWEIS%%", "" if lehrer.hat_benutzer(ZUSTAND_DIR) else KEINE_BENUTZER))
@@ -3057,9 +3146,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, dict(self._wer(), benutzer_vorhanden=lehrer.hat_benutzer(ZUSTAND_DIR)))
             elif pfad == "/api/lehrer/protokoll":
                 self._json(200, lehrer.lies_protokoll(ZUSTAND_DIR))
-            elif (pfad in ("/api/lehrer/einstellungen", "/api/lehrer/benutzer", "/api/lehrer/messungen", "/api/lehrer/messung")
+            elif (pfad in ("/api/lehrer/einstellungen", "/api/lehrer/benutzer", "/api/lehrer/messungen", "/api/lehrer/messung",
+                           "/api/lehrer/einrichtung", "/api/lehrer/irc_export")
                   and self._wer()["rolle"] != "admin"):
                 self._json(403, {"fehler": "Nur für Admins."})
+            elif pfad == "/api/lehrer/einrichtung":
+                self._json(200, einrichtung_stand())
+            elif pfad == "/api/lehrer/irc_export":   # Exportskript zum Doppelklicken
+                self._antwort(200, irc_export_cmd(), "application/octet-stream",
+                              kopf=[("Content-Disposition", 'attachment; filename="irc-daten-export.cmd"')])
+            elif pfad == "/api/lehrer/webotssim_app":   # App fuer iRC (Taster und Sensoren)
+                with open(APP_ZIP, "rb") as f:
+                    self._antwort(200, f.read(), "application/zip",
+                                  kopf=[("Content-Disposition", 'attachment; filename="WebotsSim.zip"')])
             elif pfad == "/api/lehrer/einstellungen":
                 e = _einstellungen()
                 self._json(200, {k: e[k] for k in ("max_simulationen", "leerlauf_minuten", "ende_uhrzeiten")})
@@ -3165,12 +3264,13 @@ class Handler(BaseHTTPRequestHandler):
         max_sim = int(_einstellungen()["max_simulationen"])
         self._antwort(200, seite_wahl(pc, [w for w in welten if w["sichtbar"]], eigener,
                                       VERWALTER.frei(), max_sim, VERWALTER.meldungen.get(pc),
-                                      lehrkraft=lehrer.sitzung_pruefen(ZUSTAND_DIR, self._token()) is not None))
+                                      lehrkraft=lehrer.sitzung_pruefen(ZUSTAND_DIR, self._token()) is not None,
+                                      eingerichtet=lehrer.hat_benutzer(ZUSTAND_DIR)))
 
     def do_POST(self):  # noqa: N802
         pfad, _, abfrage = self.path.partition("?")
         if pfad in ("/api/lehrer/upload", "/api/lehrer/teil_hochladen", "/api/lehrer/logo_hochladen", "/api/lehrer/welt_import",
-                    "/api/lehrer/teil_vorschau"):
+                    "/api/lehrer/teil_vorschau", "/api/lehrer/irc_daten"):
             self._hochladen(abfrage, art=pfad.rsplit("/", 1)[1])
             return
         try:
@@ -3200,6 +3300,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if pfad.startswith("/lehrer/"):
                 self._anmeldung(pfad, daten)
+            elif pfad.startswith("/einrichtung/"):
+                self._einrichtung(pfad, daten)
             elif pfad.startswith("/api/lehrer/"):
                 if not self._lehrer():
                     self._json(403, {"fehler": "Bitte zuerst anmelden."})
@@ -3269,6 +3371,36 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "muss_aendern": benutzer["muss_aendern"]}, [self._cookie(token)])
         else:
             self._json(404, {"fehler": "nicht gefunden"})
+
+    def _einrichtung(self, pfad, daten):
+        """Ersteinrichtung: Code pruefen, erstes Admin-Konto anlegen (meldet gleich an)."""
+        pc = self._pc()
+        if pfad not in ("/einrichtung/code", "/einrichtung/konto"):
+            self._json(404, {"fehler": "nicht gefunden"})
+            return
+        if lehrer.hat_benutzer(ZUSTAND_DIR):
+            self._json(409, {"fehler": "Es gibt schon ein Konto. Bitte im Lehrerbereich anmelden."})
+            return
+        warten = EINRICHTUNG_SPERRE.wartezeit(pc)
+        if warten > 0:
+            self._json(429, {"fehler": "Zu viele falsche Codes. Bitte %d s warten." % (warten + 1)})
+            return
+        if not einrichtung.code_pruefen(ZUSTAND_DIR, daten.get("code")):
+            dauer = EINRICHTUNG_SPERRE.fehlversuch(pc)
+            lehrer.protokolliere(ZUSTAND_DIR, "-", "falscher Einrichtungscode (PC %s)%s" % (
+                pc, ", PC fuer %d s gesperrt" % dauer if dauer else ""))
+            self._json(403, {"fehler": "Der Einrichtungscode stimmt nicht. Er steht am Ende der Installation "
+                                       "(im Container: rebel-sim-einrichtung)."})
+            return
+        EINRICHTUNG_SPERRE.erfolg(pc)
+        if pfad == "/einrichtung/code":
+            self._json(200, {"ok": True})
+            return
+        benutzer = einrichtung.erstes_konto(ZUSTAND_DIR, daten.get("code"), daten.get("name"), daten.get("anzeige"),
+                                            str(daten.get("passwort", "")))
+        lehrer.protokolliere(ZUSTAND_DIR, benutzer["name"], "erstes Admin-Konto in der Einrichtung angelegt (PC %s)" % pc)
+        self._json(200, {"ok": True, "name": benutzer["name"]},
+                   [self._cookie(lehrer.sitzung_erzeugen(ZUSTAND_DIR, benutzer["name"]))])
 
     # Was eine Lehrkraft darf; alles andere nur Admins
     FUER_LEHRKRAFT = {"zuruecksetzen", "teile_zuruecksetzen", "beenden", "alle_beenden", "welt", "welt_loeschen", "markdown",
@@ -3390,6 +3522,17 @@ class Handler(BaseHTTPRequestHandler):
             name = str(daten.get("name", ""))
             self._baukasten(backensatz_loeschen, name)
             protokoll = "Eigener Greifer %s geloescht" % name
+        elif aktion == "pc_pruefen":
+            host = str(daten.get("host", "")).strip()
+            zusatz = {"ports": einrichtung.pc_pruefen(host)}
+            ok = any(p["offen"] for p in zusatz["ports"] if p["port"] in (3920, 3921))
+            einrichtung.merke(ZUSTAND_DIR, pc_test={"host": host, "ok": ok, "zeit": time.strftime("%d.%m.%Y %H:%M"),
+                                                    "ports": zusatz["ports"]})
+            protokoll = "Verbindungstest zu PC %s: %s" % (host, ", ".join(
+                "%d %s" % (p["port"], "offen" if p["offen"] else "zu") for p in zusatz["ports"]))
+        elif aktion == "einrichtung_abschliessen":
+            einrichtung.merke(ZUSTAND_DIR, abgeschlossen=time.strftime("%d.%m.%Y %H:%M"))
+            protokoll = "Einrichtung abgeschlossen"
         else:
             raise lehrer.LehrerFehler("Unbekannte Aktion.")
         if protokoll:
@@ -3434,10 +3577,13 @@ class Handler(BaseHTTPRequestHandler):
             laenge = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             laenge = -1
-        grenze = welt_paket.MAX_PAKET if art == "welt_import" else lehrer.MAX_DATEI
+        grenze = {"welt_import": welt_paket.MAX_PAKET, "irc_daten": einrichtung.MAX_IRC_ZIP}.get(art, lehrer.MAX_DATEI)
         if not 0 < laenge <= grenze:
             self.close_connection = True
             self._json(413, {"fehler": "Die Datei fehlt oder ist groesser als %d MB." % (grenze // (1024 * 1024))})
+            return
+        if art == "irc_daten":
+            self._irc_daten(ich, laenge)
             return
         try:
             if art == "welt_import":
@@ -3491,6 +3637,38 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "datei": name})
         except (lehrer.LehrerFehler, welt_paket.PaketFehler) as fehler:
             self._json(409, {"fehler": str(fehler)})
+
+    def _irc_daten(self, ich, laenge):
+        """iRC-Daten (ZIP, bis 400 MB) in eine Datei mitschreiben statt in den Speicher, dann Modell erzeugen."""
+        os.makedirs(ZUSTAND_DIR, exist_ok=True)
+        zwischen = os.path.join(ZUSTAND_DIR, ".irc-daten-%s.zip" % threading.get_ident())
+        try:
+            with open(zwischen, "wb") as f:
+                rest = laenge
+                while rest > 0:
+                    stueck = self.rfile.read(min(rest, 1 << 20))
+                    if not stueck:
+                        raise lehrer.LehrerFehler("Die Übertragung brach ab.")
+                    f.write(stueck)
+                    rest -= len(stueck)
+            if ich["rolle"] != "admin":
+                raise lehrer.LehrerFehler("Das Robotermodell ändern nur Admins.")
+            bericht = irc_daten_hochgeladen(zwischen)
+        except (lehrer.LehrerFehler, OSError, subprocess.SubprocessError) as fehler:
+            self._json(409, {"fehler": str(fehler) or "Das Einspielen ging nicht."})
+            return
+        finally:
+            try:
+                os.remove(zwischen)
+            except OSError:
+                pass
+        modell = bericht.get("modell") or {}
+        greifer = sorted(k for k in modell if not k.startswith("_"))
+        lehrer.protokolliere(ZUSTAND_DIR, ich["name"], "iRC-Daten hochgeladen, Robotermodell erzeugt (%d Dateien, Greifer %s)"
+                             % (bericht["dateien"], ", ".join(greifer) or "?"))
+        self._json(200, {"ok": True, "dateien": bericht["dateien"], "greifer": greifer,
+                         "warnungen": modell.get("_warnungen", []),
+                         "plaetze": len(lese_plaetze())})
 
     def log_message(self, fmt, *args):
         pass

@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ReBeL - Einrichtung</title><style>%%STIL%%
+/* Einrichtungsassistent: Schritte links, aktueller Schritt als Karte rechts */
+.rahmen { max-width:1120px; margin:0 auto; padding:28px 24px 48px; display:grid; grid-template-columns:250px 1fr; gap:28px;
+  align-items:start; }
+ol.schritte { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; position:sticky; top:20px; }
+ol.schritte li { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:var(--r); color:var(--leise);
+  font-weight:600; cursor:pointer; border:1px solid transparent; }
+ol.schritte li:hover { background:var(--karte); border-color:var(--linie); }
+ol.schritte li.aus { cursor:default; opacity:.55; } ol.schritte li.aus:hover { background:none; border-color:transparent; }
+ol.schritte li.an { background:var(--karte); border-color:var(--blau-mittel); color:var(--blau); box-shadow:var(--schatten-1); }
+ol.schritte .nr { width:28px; height:28px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
+  border:2px solid var(--linie-stark); font-size:.85em; background:var(--karte); color:var(--leise); }
+ol.schritte li.an .nr { border-color:var(--blau); color:var(--blau); }
+ol.schritte li.ok .nr { background:var(--gruen); border-color:var(--gruen); color:#fff; }
+ol.schritte .klein { display:block; font-size:.78em; font-weight:400; color:var(--leise); }
+.karte { background:var(--karte); border-radius:var(--ecke) 8px 8px 8px; border:1px solid var(--linie); box-shadow:var(--schatten-2);
+  padding:28px 32px; display:flex; flex-direction:column; gap:16px; min-width:0; }
+.karte h1 { margin:0; font-size:1.5em; letter-spacing:-.015em; display:flex; align-items:center; }
+.karte h3 { margin:8px 0 0; font-size:1.02em; display:flex; align-items:center; gap:10px; }
+.karte h3 .zahl { width:24px; height:24px; border-radius:50%; background:var(--blau); color:#fff; font-size:.8em; display:flex;
+  align-items:center; justify-content:center; flex:none; }
+.karte p { margin:0; } .karte ul, .karte ol { margin:0; padding-left:1.3em; } .karte li { margin:4px 0; }
+.fuss { display:flex; gap:10px; align-items:center; border-top:1px solid var(--linie); padding-top:18px; margin-top:6px; flex-wrap:wrap; }
+.fuss .rechts { margin-left:auto; display:flex; gap:10px; }
+.zeile { display:flex; gap:14px; flex-wrap:wrap; } .zeile > label { flex:1; min-width:190px; display:flex; flex-direction:column; gap:5px; }
+label.block { display:flex; flex-direction:column; gap:5px; }
+input.code { font-family:'Cascadia Mono', Consolas, monospace; font-size:1.5em !important; letter-spacing:.12em; max-width:340px;
+  text-align:center; }
+.hinweis { padding:12px 16px; border-radius:var(--ecke) 6px 6px 6px; background:var(--blau-hell); border:1px solid #cfe3f1;
+  color:#0d3d5c; font-size:.93em; }
+.hinweis.warnen { background:#fff6e6; border-color:#f6dcae; color:#6b4500; }
+.hinweis.gut { background:#f3f8dc; border-color:#dce8a3; color:#3d4700; }
+.hinweis.fehler { background:var(--pink-hell); border-color:#f0b7cf; color:#7a0036; }
+.leise { color:var(--leise); font-size:.9em; }
+details { border:1px solid var(--linie); border-radius:var(--r); padding:10px 14px; font-size:.92em; }
+details summary { cursor:pointer; font-weight:600; color:var(--blau); }
+details[open] summary { margin-bottom:8px; }
+.ablage { border:2px dashed var(--linie-stark); border-radius:var(--ecke) 8px 8px 8px; padding:26px; text-align:center;
+  display:flex; flex-direction:column; gap:10px; align-items:center; background:var(--bg); transition:border-color .15s, background .15s; }
+.ablage.drueber { border-color:var(--blau); background:var(--blau-hell); }
+.balken-aussen { width:100%; max-width:420px; height:8px; border-radius:4px; background:var(--linie); overflow:hidden; }
+.balken-innen { height:100%; width:0; background:var(--blau); transition:width .2s; }
+.dreht { width:18px; height:18px; border:3px solid var(--blau-hell); border-top-color:var(--blau); border-radius:50%;
+  animation:drehen .8s linear infinite; display:inline-block; vertical-align:-4px; margin-right:8px; }
+@keyframes drehen { to { transform:rotate(360deg); } }
+#probe { display:flex; flex-direction:column; gap:12px; }
+img.probe { max-width:100%; border-radius:var(--ecke) 6px 6px 6px; border:1px solid var(--linie); }
+table { border-collapse:collapse; width:100%; font-size:.93em; }
+th { font-weight:600; color:var(--leise); font-size:.78em; text-transform:uppercase; letter-spacing:.05em; background:var(--bg); }
+th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--linie); }
+td.ok { color:#4d5a00; font-weight:700; } td.zu { color:var(--pink); font-weight:700; }
+.liste-check { list-style:none; padding:0 !important; } .liste-check li { display:flex; gap:10px; align-items:baseline; }
+.liste-check .z { font-weight:700; width:1.2em; flex:none; } .liste-check .z.ok { color:#6b7c00; } .liste-check .z.offen { color:var(--gelb); }
+.it-text { white-space:pre-wrap; font-family:'Cascadia Mono', Consolas, monospace; font-size:.84em; background:var(--bg);
+  border:1px solid var(--linie); border-radius:var(--r); padding:12px; }
+.welten-wahl { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; }
+.welten-wahl label { display:flex; gap:10px; align-items:center; border:1px solid var(--linie); border-radius:var(--r); padding:10px;
+  color:var(--text); font-weight:600; cursor:pointer; }
+@media (max-width: 820px) {
+  .rahmen { grid-template-columns:1fr; padding:16px; gap:16px; }
+  ol.schritte { position:static; flex-direction:row; overflow-x:auto; }
+  ol.schritte .text { display:none; } ol.schritte li.an .text { display:block; }
+  .karte { padding:20px 18px; }
+}
+</style></head>
+<body><header>%%MARKE%% <span class="unter">Einrichtung</span></header>
+<div id="meldung" hidden></div>
+<div class="rahmen">
+<ol class="schritte" id="schritte"></ol>
+<div>
+
+<section class="karte" data-schritt="start" hidden>
+  <h1>%%DREIECK%%Willkommen</h1>
+  <p>Dieser Assistent richtet die ReBeL-Simulation Schritt für Schritt ein: erstes Lehrerkonto, Robotermodell aus iRC,
+    weitere Lehrkräfte, Einstellungen und die Schüler-PCs. Alles lässt sich später im Lehrerbereich ändern.</p>
+  <div class="hinweis">Du brauchst:
+    <ul>
+      <li>den <b>Einrichtungscode</b>: Er steht am Ende der Installation. Vergessen? In der Proxmox-Konsole des Containers
+        <code>rebel-sim-einrichtung</code> eingeben.</li>
+      <li>einen <b>Windows-PC mit igus Robot Control V15</b> (für die Daten des Robotermodells).</li>
+    </ul></div>
+  <div id="verbindung"></div>
+  <label class="block">Einrichtungscode <input id="code" class="code" placeholder="1234-5678-9012" autocomplete="off"
+    inputmode="numeric" autofocus></label>
+  <div class="fuss"><span class="rechts"><button class="haupt" id="code-weiter">Weiter</button></span></div>
+</section>
+
+<section class="karte" data-schritt="konto" hidden>
+  <h1>%%DREIECK%%Dein Admin-Konto</h1>
+  <p>Mit diesem Konto meldest du dich im Lehrerbereich an. Admins verwalten Konten und Einstellungen.</p>
+  <div class="zeile"><label>Benutzername <input id="k-name" placeholder="z.B. Kürzel wie goeb" autocapitalize="none"
+      autocomplete="username"></label>
+    <label>Anzeigename <input id="k-anzeige" placeholder="z.B. Herr Göbel"></label></div>
+  <div class="zeile"><label>Passwort (mindestens 8 Zeichen) <input id="k-pw" type="password" autocomplete="new-password"></label>
+    <label>Passwort wiederholen <input id="k-pw2" type="password" autocomplete="new-password"></label></div>
+  <p class="leise">Passwort vergessen? Dann hilft nur die Konsole des Containers: <code>rebel-sim-admin &lt;name&gt;</code>.</p>
+  <div class="fuss"><button id="konto-zurueck">Zurück</button>
+    <span class="rechts"><button class="haupt" id="konto-anlegen">Konto anlegen und weiter</button></span></div>
+</section>
+
+<section class="karte" data-schritt="modell" hidden>
+  <h1>%%DREIECK%%Robotermodell aus iRC</h1>
+  <p>Das 3D-Modell von ReBeL und Schunk-Greifer gehört igus. Es ist deshalb nicht im Paket, sondern kommt einmal aus einer
+    iRC-Installation hierher und bleibt nur in diesem Container.</p>
+  <div id="modell-stand"></div>
+  <h3><span class="zahl">1</span>Daten am iRC-PC einpacken</h3>
+  <p><a class="btn haupt" href="/api/lehrer/irc_export">irc-daten-export.cmd herunterladen</a></p>
+  <p>Auf einem PC mit iRC V15 doppelklicken. Fragt Windows nach („Der Computer wurde durch Windows geschützt“):
+    <i>Weitere Informationen</i> → <i>Trotzdem ausführen</i>. Das Skript legt <code>irc-daten.zip</code> (etwa 1,5 MB) auf
+    den Desktop.</p>
+  <details><summary>Skripte sind auf dem PC gesperrt?</summary>
+    Im Explorer <code>C:\Program Files\iRC-igusRobotControl-V15</code> öffnen, Rechtsklick auf den Ordner <code>Data</code>
+    → <i>Senden an</i> → <i>ZIP-komprimierter Ordner</i> (auf den Desktop speichern lassen) und diese ZIP hochladen (etwa
+    270 MB). Übernommen werden nur der Roboter <code>REBEL-6DOF-03</code> und die Dateien <code>Schunk_EGP*</code>.</details>
+  <h3><span class="zahl">2</span>Hier hochladen</h3>
+  <div class="ablage" id="ablage">
+    <div>ZIP-Datei hierher ziehen oder</div>
+    <label class="knopf-datei haupt btn" style="background:var(--blau);color:#fff;border-color:var(--blau)">irc-daten.zip auswählen
+      <input type="file" id="m-datei" accept=".zip,application/zip" hidden></label>
+    <div class="balken-aussen" id="m-balken" hidden><div class="balken-innen" id="m-fortschritt"></div></div>
+    <div id="m-text" class="leise"></div>
+  </div>
+  <div id="m-ergebnis"></div>
+  <div id="probe" hidden>
+    <h3><span class="zahl">3</span>Probebild (freiwillig)</h3>
+    <p>Startet Webots kurz und fotografiert die Beispielwelt. Dauert etwa eine halbe Minute.</p>
+    <p><button id="probe-knopf">Probebild erzeugen</button></p>
+    <div id="probe-bild"></div>
+  </div>
+  <div class="fuss"><span class="rechts"><button class="haupt" data-weiter>Weiter</button></span></div>
+</section>
+
+<section class="karte" data-schritt="konten" hidden>
+  <h1>%%DREIECK%%Weitere Lehrkräfte</h1>
+  <p>Freiwillig, geht auch später unter Lehrerbereich → Benutzer. Neue Konten bekommen ein vorläufiges Passwort, das sie
+    beim ersten Anmelden ändern müssen.</p>
+  <table><thead><tr><th>Benutzer</th><th>Name</th><th>Rolle</th></tr></thead><tbody id="konten-liste"></tbody></table>
+  <div class="zeile"><label>Benutzername <input id="n-name" placeholder="z.B. mueller" autocapitalize="none"></label>
+    <label>Anzeigename <input id="n-anzeige" placeholder="z.B. Frau Müller"></label></div>
+  <div class="zeile"><label>Rolle <select id="n-rolle"><option value="lehrkraft">Lehrkraft</option><option value="admin">Admin</option></select></label>
+    <label>Vorläufiges Passwort <input id="n-pw" autocomplete="off"></label></div>
+  <p><button id="n-anlegen">Konto anlegen</button></p>
+  <div id="n-ergebnis"></div>
+  <div class="fuss"><button data-zurueck>Zurück</button><span class="rechts"><button class="haupt" data-weiter>Weiter</button></span></div>
+</section>
+
+<section class="karte" data-schritt="einst" hidden>
+  <h1>%%DREIECK%%Einstellungen</h1>
+  <p>Die Vorgaben passen meist. Ändern lässt sich alles später unter Lehrerbereich → Einstellungen.</p>
+  <div class="zeile"><label>Gleichzeitig höchstens so viele Simulationen <input id="e-max" type="number" min="1" max="20"></label>
+    <label>Beenden nach so vielen Minuten ohne iRC <input id="e-leer" type="number" min="1" max="240"></label></div>
+  <label class="block">Alle beenden um (Stundenende, z.B. 09:30, 11:15) <input id="e-uhr" placeholder="keine"></label>
+  <p class="leise">Je Simulation braucht der Container etwa 400 MB Arbeitsspeicher.</p>
+  <h3>Logo</h3>
+  <p class="leise">Erscheint oben links auf allen Seiten. PNG, JPG oder SVG, am besten quer auf weißem Grund.</p>
+  <div class="zeile" style="align-items:center"><div id="logo-jetzt" class="leise"></div>
+    <label class="knopf-datei btn" style="flex:0">Logo hochladen<input type="file" id="l-datei" accept="image/png,image/jpeg,image/svg+xml,.svg" hidden></label></div>
+  <div class="fuss"><button data-zurueck>Zurück</button>
+    <span class="rechts"><button class="haupt" id="e-weiter">Speichern und weiter</button></span></div>
+</section>
+
+<section class="karte" data-schritt="pcs" hidden>
+  <h1>%%DREIECK%%Schüler-PCs</h1>
+  <p>Auf jedem PC, an dem Schüler programmieren, einmal:</p>
+  <ol>
+    <li><b>iRC V15</b> mit dem ReBeL-Projekt installieren. Der <b>Windows-Benutzername darf keine Umlaute</b> haben,
+      sonst startet iRC nicht (Fehler in iRC V15).</li>
+    <li>In iRC das Werkzeug <code>Schunk_EGP40_RebelMountingPlate</code> wählen.</li>
+    <li>Für Taster und Sensoren: <a class="btn" href="/api/lehrer/webotssim_app">App WebotsSim.zip herunterladen</a>,
+      in iRC unter <i>Apps</i> installieren und <b>aktivieren</b>.</li>
+  </ol>
+  <h3>Text für die IT (Firewall)</h3>
+  <div class="it-text" id="it-text"></div>
+  <p><button id="it-kopieren">Text kopieren</button></p>
+  <h3>Verbindung prüfen</h3>
+  <p>iRC an einem Schüler-PC starten, dann dessen IP-Adresse eintragen. Sie steht auf der Startseite der Simulation am PC oben
+    rechts („Dein PC: …“).</p>
+  <div class="zeile" style="align-items:flex-end"><label>IP-Adresse oder Name des PCs <input id="p-host" placeholder="z.B. 192.168.7.21"></label>
+    <button id="p-pruefen" style="flex:0">Prüfen</button></div>
+  <div id="p-ergebnis"></div>
+  <div class="fuss"><button data-zurueck>Zurück</button><span class="rechts"><button class="haupt" data-weiter>Weiter</button></span></div>
+</section>
+
+<section class="karte" data-schritt="fertig" hidden>
+  <h1>%%DREIECK%%Fertig</h1>
+  <ul class="liste-check" id="zusammenfassung"></ul>
+  <h3>Roboterumgebungen für Schüler freigeben</h3>
+  <p class="leise">Angehakte erscheinen auf der Startseite. Eigene Umgebungen baust du später im Lehrerbereich.</p>
+  <div class="welten-wahl" id="welten-wahl"></div>
+  <div class="hinweis" id="adresse"></div>
+  <div class="fuss"><button data-zurueck>Zurück</button>
+    <span class="rechts"><button class="haupt" id="abschliessen">Einrichtung abschließen</button></span></div>
+</section>
+
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+let meldungZeit;
+function melden(text, fehler) {
+  const m = $('meldung');
+  m.textContent = text; m.className = fehler ? 'fehler' : ''; m.hidden = false;
+  clearTimeout(meldungZeit); meldungZeit = setTimeout(() => m.hidden = true, Math.max(fehler ? 6000 : 2500, text.length * 70));
+}
+async function senden(url, daten, lehrer) {
+  const kopf = {'Content-Type': 'application/json'};
+  if (lehrer) kopf['X-Lehrer'] = '1';
+  const r = await fetch(url, {method: 'POST', body: JSON.stringify(daten || {}), headers: kopf});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { melden(d.fehler || 'Das hat nicht geklappt.', true); throw new Error(d.fehler); }
+  return d;
+}
+const api = (aktion, daten) => senden('/api/lehrer/' + aktion, daten, true);
+const holen = async url => (await fetch(url, {cache: 'no-store'})).json();
+function vorschlag() {   // vorlaeufiges Passwort zum Weitergeben
+  const z = 'abcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(10)), b => z[b % z.length]).join('');
+}
+
+// --- Schritte ---
+const SCHRITTE = [
+  {id: 'start', titel: 'Willkommen'}, {id: 'konto', titel: 'Admin-Konto'}, {id: 'modell', titel: 'Robotermodell'},
+  {id: 'konten', titel: 'Lehrkräfte', frei: true}, {id: 'einst', titel: 'Einstellungen', frei: true},
+  {id: 'pcs', titel: 'Schüler-PCs'}, {id: 'fertig', titel: 'Fertig'}];
+let basis = {}, stand = null, code = '', aktuell = 'start';
+
+function erledigt(id) {
+  if (!stand) return id === 'start' && !!code;
+  return {start: true, konto: true, modell: stand.modell, konten: stand.lehrkraefte > 0,
+          einst: stand.einstellungen_angepasst || !!stand.logo, pcs: !!(stand.pc_test && stand.pc_test.ok),
+          fertig: !!stand.abgeschlossen}[id];
+}
+function unterzeile(id) {
+  if (!stand) return '';
+  if (id === 'modell') return stand.modell ? 'vorhanden' : 'fehlt noch';
+  if (id === 'konten') return stand.lehrkraefte ? stand.lehrkraefte + ' angelegt' : 'freiwillig';
+  if (id === 'einst') return erledigt('einst') ? 'angepasst' : 'Vorgaben';
+  if (id === 'pcs') return stand.pc_test ? (stand.pc_test.ok ? 'getestet' : 'Test ohne Verbindung') : 'noch nicht getestet';
+  return '';
+}
+function erreichbar(id) {
+  if (stand) return !['start', 'konto'].includes(id);
+  return id === 'start' || (id === 'konto' && !!code);
+}
+function schritteZeigen() {
+  $('schritte').innerHTML = SCHRITTE.map((s, i) => '<li data-id="' + s.id + '" class="' + [s.id === aktuell ? 'an' : '',
+      erledigt(s.id) ? 'ok' : '', erreichbar(s.id) ? '' : 'aus'].join(' ') + '"><span class="nr">' + (erledigt(s.id) ? '✓' : i + 1)
+    + '</span><span class="text">' + esc(s.titel) + '<span class="klein">' + esc(unterzeile(s.id)) + '</span></span></li>').join('');
+}
+$('schritte').onclick = ev => {
+  const li = ev.target.closest('li'); if (li && erreichbar(li.dataset.id)) zeige(li.dataset.id);
+};
+function zeige(id) {
+  aktuell = id;
+  document.querySelectorAll('[data-schritt]').forEach(s => s.hidden = s.dataset.schritt !== id);
+  schritteZeigen();
+  ({modell: modellZeigen, konten: kontenZeigen, einst: einstZeigen, pcs: pcsZeigen, fertig: fertigZeigen}[id] || (() => {}))();
+  window.scrollTo(0, 0);
+  const erstes = document.querySelector('[data-schritt="' + id + '"] input:not([type=file])');
+  if (erstes && !erstes.value) erstes.focus();
+}
+function naechster() {
+  const i = SCHRITTE.findIndex(s => s.id === aktuell);
+  if (i < SCHRITTE.length - 1) zeige(SCHRITTE[i + 1].id);
+}
+function voriger() {
+  const i = SCHRITTE.findIndex(s => s.id === aktuell);
+  if (i > 0 && erreichbar(SCHRITTE[i - 1].id)) zeige(SCHRITTE[i - 1].id);
+}
+document.querySelectorAll('[data-weiter]').forEach(b => b.onclick = naechster);
+document.querySelectorAll('[data-zurueck]').forEach(b => b.onclick = voriger);
+async function standLaden() { stand = await holen('/api/lehrer/einrichtung'); schritteZeigen(); }
+
+// --- 1 + 2: Code und erstes Konto ---
+$('code-weiter').onclick = async () => {
+  const eingabe = $('code').value.trim();
+  if (!eingabe) { melden('Bitte den Einrichtungscode eintragen.', true); return; }
+  await senden('/einrichtung/code', {code: eingabe});
+  code = eingabe; zeige('konto');
+};
+$('code').onkeydown = ev => { if (ev.key === 'Enter') $('code-weiter').click(); };
+$('konto-zurueck').onclick = () => zeige('start');
+$('konto-anlegen').onclick = async () => {
+  if ($('k-pw').value !== $('k-pw2').value) { melden('Die beiden Passwörter sind verschieden.', true); return; }
+  await senden('/einrichtung/konto', {code, name: $('k-name').value.trim().toLowerCase(), anzeige: $('k-anzeige').value,
+                                      passwort: $('k-pw').value});
+  ['k-pw', 'k-pw2'].forEach(id => $(id).value = '');
+  code = '';
+  await standLaden();
+  melden('Konto angelegt, du bist angemeldet.');
+  zeige('modell');
+};
+$('k-pw2').onkeydown = ev => { if (ev.key === 'Enter') $('konto-anlegen').click(); };
+
+// --- 3: Robotermodell ---
+function greiferText(g) { return g.map(x => x.titel || x.name).join(', '); }
+function modellZeigen() {
+  $('modell-stand').innerHTML = stand.modell
+    ? '<div class="hinweis gut">✓ Das Robotermodell ist vorhanden (Greifer: ' + esc(greiferText(stand.greifer))
+      + '). Neu hochladen ist nur nach einem iRC-Update nötig.</div>'
+    : '<div class="hinweis warnen">Noch kein Robotermodell: Ohne es zeigt die Simulation keinen Roboter.</div>';
+  const beispiel = stand.welten.find(w => w.datei === 'rebel_tisch.wbt') || stand.welten[0];
+  $('probe').hidden = !(stand.modell && beispiel);
+  $('probe-knopf').dataset.welt = beispiel ? beispiel.datei : '';
+}
+function hochladen(datei) {
+  if (!/\.zip$/i.test(datei.name)) { melden('Bitte die ZIP-Datei wählen (irc-daten.zip).', true); return; }
+  const xhr = new XMLHttpRequest();
+  $('m-balken').hidden = false; $('m-fortschritt').style.width = '0'; $('m-ergebnis').innerHTML = '';
+  $('m-text').textContent = 'Lade hoch …';
+  xhr.upload.onprogress = ev => {
+    if (!ev.lengthComputable) return;
+    $('m-fortschritt').style.width = (100 * ev.loaded / ev.total) + '%';
+    if (ev.loaded >= ev.total) $('m-text').innerHTML = '<span class="dreht"></span>Robotermodell wird erzeugt (bis zu einer Minute) …';
+  };
+  xhr.onload = async () => {
+    $('m-balken').hidden = true; $('m-text').textContent = '';
+    let d = {}; try { d = JSON.parse(xhr.responseText); } catch (e) { /* leer */ }
+    if (xhr.status !== 200) {
+      $('m-ergebnis').innerHTML = '<div class="hinweis fehler">' + esc(d.fehler || 'Hochladen fehlgeschlagen (' + xhr.status + ').') + '</div>';
+      return;
+    }
+    await standLaden();
+    modellZeigen();
+    $('m-ergebnis').innerHTML = '<div class="hinweis gut">✓ Robotermodell erzeugt aus ' + d.dateien + ' Dateien.'
+      + (d.warnungen.length ? '<br>Hinweise: ' + esc(d.warnungen.join('; ')) : '')
+      + (d.plaetze ? '<br>Laufende Simulationen zeigen das neue Modell erst nach „Neu starten“.' : '') + '</div>';
+  };
+  xhr.onerror = () => { $('m-balken').hidden = true; $('m-text').textContent = '';
+    $('m-ergebnis').innerHTML = '<div class="hinweis fehler">Die Verbindung brach ab.</div>'; };
+  xhr.open('POST', '/api/lehrer/irc_daten');
+  xhr.setRequestHeader('Content-Type', 'application/zip');
+  xhr.setRequestHeader('X-Lehrer', '1');
+  xhr.send(datei);
+}
+$('m-datei').onchange = () => { const f = $('m-datei').files[0]; $('m-datei').value = ''; if (f) hochladen(f); };
+const ablage = $('ablage');
+['dragenter', 'dragover'].forEach(n => ablage.addEventListener(n, ev => { ev.preventDefault(); ablage.classList.add('drueber'); }));
+['dragleave', 'drop'].forEach(n => ablage.addEventListener(n, ev => { ev.preventDefault(); ablage.classList.remove('drueber'); }));
+ablage.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) hochladen(f); });
+$('probe-knopf').onclick = async () => {
+  const welt = $('probe-knopf').dataset.welt, knopf = $('probe-knopf');
+  knopf.disabled = true; $('probe-bild').innerHTML = '<p class="leise"><span class="dreht"></span>Webots fotografiert …</p>';
+  try {
+    await api('vorschau', {datei: welt});
+    const bild = new Image();
+    bild.className = 'probe'; bild.alt = 'Probebild';
+    bild.onerror = () => $('probe-bild').innerHTML = '<p class="hinweis warnen">Kein Bild entstanden (läuft Webots im Container?).</p>';
+    bild.src = '/welten/' + encodeURIComponent(welt.replace(/\.wbt$/, '.jpg')) + '?' + Date.now();
+    $('probe-bild').replaceChildren(bild);
+  } catch (e) { $('probe-bild').innerHTML = ''; }
+  knopf.disabled = false;
+};
+
+// --- 4: weitere Konten ---
+async function kontenZeigen() {
+  const liste = await holen('/api/lehrer/benutzer');
+  $('konten-liste').innerHTML = liste.map(b => '<tr><td>' + esc(b.name) + '</td><td>' + esc(b.anzeige) + '</td><td>'
+    + (b.rolle === 'admin' ? 'Admin' : 'Lehrkraft') + '</td></tr>').join('');
+  if (!$('n-pw').value) $('n-pw').value = vorschlag();
+}
+$('n-anlegen').onclick = async () => {
+  const name = $('n-name').value.trim().toLowerCase(), pw = $('n-pw').value;
+  await api('benutzer_anlegen', {name, anzeige: $('n-anzeige').value, rolle: $('n-rolle').value, passwort: pw});
+  $('n-ergebnis').innerHTML = '<div class="hinweis gut">Angelegt. Bitte weitergeben: Benutzername <b>' + esc(name)
+    + '</b>, vorläufiges Passwort <b>' + esc(pw) + '</b>, Adresse <b>' + esc(location.origin) + '/lehrer</b></div>';
+  $('n-name').value = $('n-anzeige').value = ''; $('n-pw').value = vorschlag();
+  await standLaden(); kontenZeigen();
+};
+
+// --- 5: Einstellungen und Logo ---
+async function einstZeigen() {
+  const e = stand.einstellungen;
+  $('e-max').value = e.max_simulationen; $('e-leer').value = e.leerlauf_minuten; $('e-uhr').value = e.ende_uhrzeiten.join(', ');
+  $('logo-jetzt').innerHTML = stand.logo ? 'Jetzt: <img src="/logos/' + encodeURIComponent(stand.logo) + '?' + Date.now()
+    + '" alt="" style="height:38px;vertical-align:middle">' : 'Noch kein Logo (nur Schriftzug).';
+}
+$('e-weiter').onclick = async () => {
+  await api('einstellungen', {max_simulationen: $('e-max').value, leerlauf_minuten: $('e-leer').value, ende_uhrzeiten: $('e-uhr').value});
+  await standLaden(); naechster();
+};
+$('l-datei').onchange = async () => {
+  const f = $('l-datei').files[0]; $('l-datei').value = ''; if (!f) return;
+  const r = await fetch('/api/lehrer/logo_hochladen?name=' + encodeURIComponent(f.name), {method: 'POST', body: f,
+    headers: {'Content-Type': 'application/octet-stream', 'X-Lehrer': '1'}});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { melden(d.fehler || 'Hochladen fehlgeschlagen.', true); return; }
+  await api('logo_waehlen', {name: d.datei});
+  location.reload();   // die Kopfzeile zeigt das neue Logo (der Assistent oeffnet wieder diesen Schritt)
+};
+
+// --- 6: Schueler-PCs ---
+function pcsZeigen() {
+  const ich = location.hostname;
+  $('it-text').textContent = 'ReBeL-Simulation (Container ' + ich + ') und Schüler-PCs mit igus Robot Control V15:\n'
+    + '- Schüler-PCs: eingehend TCP 3920, 3921 und 5000 vom Container ' + ich + ' erlauben, im Domänenprofil.\n'
+    + '  (Die Regel „robotcontrol“ der iRC-Installation gilt nur im Profil Privat.)\n'
+    + '- Container ' + ich + ': von den Schul-PCs TCP 80 und 443 erreichbar, ohne Proxy/NAT dazwischen\n'
+    + '  (die Simulation erkennt die PCs an ihrer IP-Adresse).\n'
+    + '- Browser der Schul-PCs: Internetzugriff auf cyberbotics.com und cdn.jsdelivr.net (3D-Ansicht).';
+  if (stand.pc_test && !$('p-ergebnis').innerHTML) {
+    $('p-host').value = stand.pc_test.host;
+    pcErgebnis(stand.pc_test.ports, stand.pc_test.zeit);
+  }
+}
+$('it-kopieren').onclick = async () => {
+  try { await navigator.clipboard.writeText($('it-text').textContent); melden('Kopiert.'); }
+  catch (e) { melden('Kopieren ging nicht – bitte markieren und mit Strg+C kopieren.', true); }
+};
+function pcErgebnis(ports, zeit) {
+  const cri = ports.filter(p => p.port !== 5000 && p.offen).length > 0, app = ports.find(p => p.port === 5000);
+  $('p-ergebnis').innerHTML = '<table><thead><tr><th>Port</th><th>Wofür</th><th>Ergebnis</th></tr></thead><tbody>'
+    + ports.map(p => '<tr><td>' + p.port + '</td><td>' + esc(p.name) + '</td><td class="' + (p.offen ? 'ok">✓ erreichbar'
+      : 'zu">✗ ' + esc(p.fehler)) + '</td></tr>').join('') + '</tbody></table>'
+    + '<div class="hinweis ' + (cri ? 'gut' : 'warnen') + '">' + (cri
+      ? '✓ Die Simulation erreicht iRC an diesem PC. ' + (app && app.offen ? '' : 'Taster und Sensoren brauchen noch Port 5000 (App WebotsSim, Firewall).')
+      : 'Die Simulation erreicht iRC an diesem PC nicht. Läuft iRC dort? Sonst die Firewall-Regel (Text oben) einrichten lassen.')
+    + (zeit ? ' <span class="leise">(' + esc(zeit) + ')</span>' : '') + '</div>';
+}
+$('p-pruefen').onclick = async () => {
+  $('p-ergebnis').innerHTML = '<p class="leise"><span class="dreht"></span>Prüfe …</p>';
+  try {
+    const d = await api('pc_pruefen', {host: $('p-host').value});
+    pcErgebnis(d.ports); await standLaden();
+  } catch (e) { $('p-ergebnis').innerHTML = ''; }
+};
+$('p-host').onkeydown = ev => { if (ev.key === 'Enter') $('p-pruefen').click(); };
+
+// --- 7: Fertig ---
+let weltenVoll = [];
+async function fertigZeigen() {
+  const punkte = [
+    [true, 'Admin-Konto angelegt (' + (stand.konten === 1 ? 'ein Konto' : stand.konten + ' Konten') + ')'],
+    [stand.https, stand.https ? 'Lehrerbereich verschlüsselt (https)' : 'Ohne https: Passwörter gehen unverschlüsselt durchs Netz'],
+    [stand.modell, stand.modell ? 'Robotermodell vorhanden' : 'Robotermodell fehlt noch (Schritt 3)'],
+    [stand.pc_test && stand.pc_test.ok, stand.pc_test && stand.pc_test.ok ? 'Verbindung zu einem Schüler-PC getestet'
+      : 'Verbindung zu einem Schüler-PC noch nicht erfolgreich getestet (Schritt 6)'],
+  ];
+  $('zusammenfassung').innerHTML = punkte.map(p => '<li><span class="z ' + (p[0] ? 'ok">✓' : 'offen">!') + '</span><span>'
+    + esc(p[1]) + '</span></li>').join('');
+  weltenVoll = await holen('/api/lehrer/welten');
+  $('welten-wahl').innerHTML = weltenVoll.map((w, i) => '<label><input type="checkbox" data-i="' + i + '"'
+    + (w.sichtbar ? ' checked' : '') + '>' + esc(w.titel) + '</label>').join('') || '<p class="leise">Keine Roboterumgebungen vorhanden.</p>';
+  $('adresse').innerHTML = 'Schüler öffnen <b>http://' + esc(location.hostname) + '</b>, Lehrkräfte melden sich dort über '
+    + '„Anmeldung Lehrkraft“ an. Diesen Assistenten findest du später unter Lehrerbereich → Einstellungen.';
+}
+$('welten-wahl').onchange = async ev => {
+  const w = weltenVoll[ev.target.dataset.i]; if (!w) return;
+  await api('welt', {datei: w.datei, titel: w.titel, aufgabe: w.aufgabe, sichtbar: ev.target.checked, ablage: w.ablage});
+  w.sichtbar = ev.target.checked;
+  melden(ev.target.checked ? 'Freigegeben: ' + w.titel : 'Gesperrt: ' + w.titel);
+};
+$('abschliessen').onclick = async () => {
+  await api('einrichtung_abschliessen', {});
+  location.href = '/lehrer';
+};
+
+// Downloads ueber fetch und aus dem Speicher sichern (Chrome brach direkte Downloads ueber https teils ab)
+document.addEventListener('click', async ev => {
+  const a = ev.target.closest('a[href^="/api/lehrer/"]');
+  if (!a || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  ev.preventDefault();
+  try {
+    const r = await fetch(a.getAttribute('href'), {cache: 'no-store'});
+    if (!r.ok) { const d = await r.json().catch(() => ({})); melden(d.fehler || 'Das Herunterladen ging nicht.', true); return; }
+    const name = (/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || 'download';
+    const url = URL.createObjectURL(await r.blob());
+    const link = document.createElement('a');
+    link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (e) { melden('Das Herunterladen ging nicht: ' + e.message, true); }
+});
+
+// --- Start ---
+(async () => {
+  basis = await holen('/api/einrichtung/stand');
+  $('verbindung').innerHTML = basis.https && location.protocol === 'https:'
+    ? '<div class="hinweis gut">✓ Verbindung verschlüsselt (https): Code und Passwort gehen nicht im Klartext durchs Netz.</div>'
+    : '<div class="hinweis warnen">Unverschlüsselte Verbindung: Code und Passwort könnten im Netz mitgelesen werden.</div>';
+  if (basis.ich && basis.ich.rolle === 'admin' && basis.benutzer_vorhanden) {
+    await standLaden();
+    // nach dem Logo-Hochladen wieder bei den Einstellungen, sonst beim ersten offenen Pflichtschritt
+    const offen = SCHRITTE.find(s => erreichbar(s.id) && !s.frei && !erledigt(s.id));
+    zeige(sessionStorage.getItem('einrichtung-schritt') || (offen ? offen.id : 'fertig'));
+    sessionStorage.removeItem('einrichtung-schritt');
+  } else {
+    zeige('start');
+  }
+})();
+$('l-datei').addEventListener('click', () => sessionStorage.setItem('einrichtung-schritt', 'einst'));
+</script></body></html>
