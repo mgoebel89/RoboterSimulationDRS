@@ -45,8 +45,8 @@ class TestPruefversion(unittest.TestCase):
         with zipfile.ZipFile(os.path.join(PRUEF, "WebotsSim.zip")) as z:
             self.assertEqual(sorted(z.namelist()), ["WebotsSim/rcapp.xml", "WebotsSim/ui.xml"])
             for n in z.namelist():
-                with open(os.path.join(PRUEF, n), "rb") as f:
-                    self.assertEqual(z.read(n), f.read(), "ZIP neu packen: %s" % n)
+                with open(os.path.join(PRUEF, n), "rb") as f:   # Git darf unter Windows CRLF auschecken
+                    self.assertEqual(z.read(n).replace(b"\r\n", b"\n"), f.read().replace(b"\r\n", b"\n"), "ZIP neu packen: %s" % n)
 
 
 class FalscheApp:
