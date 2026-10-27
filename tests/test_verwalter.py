@@ -343,10 +343,19 @@ class TestSchuelerseiten(Grundlage):
     def test_ansichten_und_greiferdaten(self):
         self.senden("/api/starten", {"welt": "tisch.wbt"})
         ansicht = self.holen("/")
-        for knopf in ("standard", "vorne", "seite", "oben", "greifer"):
+        for knopf in ("standard", "vorne", "links", "rechts", "oben", "teach"):
             self.assertIn('data-ansicht="%s"' % knopf, ansicht)
         self.assertIn("fetch('/api/platz/01'", ansicht)
-        self.assertIn("(i + 1) % 3", ansicht)   # %%-Platzhalter richtig aufgeloest
+        self.assertIn("translate(-50%,-100%)", ansicht)   # %%-Platzhalter richtig aufgeloest
+        self.assertIn("WbMatrix3.prototype.toRotation", ansicht)   # robuste Umrechnung nahe 180 Grad
+        self.assertNotIn('data-ansicht="seite"', ansicht)
+        # Maus wie in iRC: vor dem Webots-Viewer abgefangen (Capture), Rad ohne passive, Kontextmenue aus
+        for teil in ("flaeche.addEventListener('mousedown'", "flaeche.addEventListener('wheel'", "passive: false",
+                     "flaeche.addEventListener('contextmenu'", "ev.button === 2 ? 'schieben' : 'drehen'"):
+            self.assertIn(teil, ansicht)
+        ansichten = uebersicht.kamera_ansichten("tisch.wbt")
+        self.assertGreater(ansichten["links"][0][1], ansichten["links"][1][1])     # links = +y (Robotersicht)
+        self.assertLess(ansichten["rechts"][0][1], ansichten["rechts"][1][1])
         self.status("01", tcp=[0.35, 0, 0.016], tcp_y=[0, 1, 0], hilfe={"text": "stift: Greifstellung erreicht"},
                     sekunden_seit_irc=0.1, geheim="x")
         d = json.loads(self.holen("/api/platz/1"))

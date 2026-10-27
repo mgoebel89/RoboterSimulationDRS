@@ -164,11 +164,15 @@ der Spalt bei geschlossenem Greifer ist und auf Backenhöhe liegt; das Teil ruts
 **Einteachen:** iRC und Browser nebeneinander legen.
 - Unten links zeigt die **Einteach-Hilfe**, wie weit der TCP noch von der Greifstellung des nächsten Werkstücks
   entfernt ist, in iRC-Koordinaten (z.B. `target1: noch X +2 Y -1 Z -12 mm`). Grün, sobald der Griff klappen würde.
-- Unten rechts: **Ansichten** Standard, Vorne, Seite, Oben und **Greifer** (Kamera folgt dem TCP).
+- Unten rechts: **Ansichten** Standard, Vorne, Links, Rechts (aus Sicht des Roboters), Oben und **Teach**: Die Kamera
+  kreist in etwa 25 cm Abstand um die Greiferspitze und folgt ihr. Ziehen mit der mittleren (oder linken) Taste dreht
+  um die Spitze, das Rad ändert den Abstand; so sieht man beim Einteachen den Spalt zwischen Backen und Werkstück.
 - **Namen** blendet Schilder mit den Namen der Werkstücke, Aufbauten und Sensorflächen ins 3D-Bild ein oder aus
   (die Wahl merkt sich der Browser). Werkstücke behalten ihr Schild auch, während der Greifer sie trägt; liegen
   Schilder übereinander, weicht eines nach oben aus. Die Namen vergibt der Baukasten (Feld „Name“).
-- Maus: linke Taste dreht, rechte verschiebt, nach einem Klick ins Bild zoomt das Rad.
+- Maus **wie in iRC**: mittlere Taste ziehen dreht, rechte Taste ziehen verschiebt, das Rad zoomt zum Mauszeiger.
+  Die linke Taste dreht ebenfalls (für Touchpads ohne mittlere Taste; ein Gelenk ziehen geht hier nicht, den Roboter
+  bewegt iRC).
 
 Die Simulation endet automatisch nach 15 Minuten ohne iRC und zu den eingestellten Stundenenden.
 

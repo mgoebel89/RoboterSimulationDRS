@@ -1446,10 +1446,11 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 <body><header>%(marke)s <span class="unter">%(titel)s</span> <span id="hinweis">verbinde ...</span>
 <div class="knoepfe">%(knoepfe)s</div></header>
 <div class="ansicht"><div class="bildflaeche"><webots-view></webots-view>
-<div class="ansichten" title="Blickrichtung. Mit der Maus: linke Taste drehen, rechte schieben, nach einem Klick Rad zoomen.">
+<div class="ansichten" title="Maus wie in iRC: mittlere Taste drehen, rechte Taste verschieben, Rad zoomt zum Mauszeiger (die linke Taste dreht auch).">
 <button data-ansicht="standard" class="an">Standard</button><button data-ansicht="vorne">Vorne</button>
-<button data-ansicht="seite">Seite</button><button data-ansicht="oben">Oben</button>
-<button data-ansicht="greifer" title="Kamera folgt dem Greifer, Blick quer zu den Backen">Greifer</button>
+<button data-ansicht="links" title="Von links (aus Sicht des Roboters)">Links</button>
+<button data-ansicht="rechts" title="Von rechts (aus Sicht des Roboters)">Rechts</button><button data-ansicht="oben">Oben</button>
+<button data-ansicht="teach" title="Kamera kreist um die Greiferspitze und folgt ihr: mittlere oder linke Taste dreht, Rad ändert den Abstand">Teach</button>
 <span class="trenner"></span><button data-schilder title="Namen der Teile im 3D-Bild ein- oder ausblenden">Namen</button>
 <button data-grenzen title="Arbeitsraum und Sperrzonen im 3D-Bild ein- oder ausblenden" hidden>Grenzen</button></div>
 <svg id="grenzlinien" hidden></svg><div id="achsgrenzen-info" hidden></div><div id="schilder"></div><div id="kollision" hidden><span id="kollision-text"></span><small id="kollision-zusatz" hidden></small>
@@ -1462,6 +1463,22 @@ import ImageLoader from "%(wwi)s/ImageLoader.js";
 import WbWorld from "%(wwi)s/nodes/WbWorld.js";
 import WbVector3 from "%(wwi)s/nodes/utils/WbVector3.js";
 import WbVector4 from "%(wwi)s/nodes/utils/WbVector4.js";
+import WbMatrix3 from "%(wwi)s/nodes/utils/WbMatrix3.js";
+// Drehmatrix (Zeilen, 9 Zahlen) -> [Achse x, y, z, Winkel] ueber die Quaternion (Shepperd): auch nahe 180 Grad genau.
+// WbMatrix3.toRotation von R2025a nimmt dort die Achse aus Differenzen fast gleicher Zahlen; die Kamera zeigte dann
+// z.B. von links oder in der Teach-Ansicht nur eine graue Flaeche. Deshalb ersetzt (gilt fuer den ganzen Viewer).
+function achseWinkel(m) {
+  const t = m[0] + m[4] + m[8];
+  let w, x, y, z, s;
+  if (t > 0) { s = 2 * Math.sqrt(t + 1); w = s / 4; x = (m[7] - m[5]) / s; y = (m[2] - m[6]) / s; z = (m[3] - m[1]) / s; }
+  else if (m[0] > m[4] && m[0] > m[8]) { s = 2 * Math.sqrt(1 + m[0] - m[4] - m[8]); w = (m[7] - m[5]) / s; x = s / 4; y = (m[1] + m[3]) / s; z = (m[2] + m[6]) / s; }
+  else if (m[4] > m[8]) { s = 2 * Math.sqrt(1 + m[4] - m[0] - m[8]); w = (m[2] - m[6]) / s; x = (m[1] + m[3]) / s; y = s / 4; z = (m[5] + m[7]) / s; }
+  else { s = 2 * Math.sqrt(1 + m[8] - m[0] - m[4]); w = (m[3] - m[1]) / s; x = (m[2] + m[6]) / s; y = (m[5] + m[7]) / s; z = s / 4; }
+  if (w < 0) { w = -w; x = -x; y = -y; z = -z; }
+  const l = Math.hypot(x, y, z);
+  return l < 1e-12 ? [0, 0, 1, 0] : [x / l, y / l, z / l, 2 * Math.atan2(l, w)];
+}
+WbMatrix3.prototype.toRotation = function () { return new WbVector4(...achseWinkel(this.m)); };
 // Im Nur-Zuschauen-Modus schickt Webots den Weltnamen nicht mit; ohne ihn findet
 // der Viewer die Robotermodelle (Meshes) nicht. Deshalb hier selbst setzen.
 MeshLoader.currentWorld = ImageLoader.currentWorld = 'worlds/%(welt)s';
@@ -1493,21 +1510,9 @@ function blick(pos, ziel, oben = [0, 0, 1]) {
   const norm = a => { const l = Math.hypot(...a); return a.map(v => v / l); };
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const x = norm(sub(ziel, pos)), z = norm(sub(oben, x.map(v => v * dot(oben, x)))), y = cross(z, x);
-  const m = [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
-  const w = Math.acos(Math.max(-1, Math.min(1, (m[0] + m[4] + m[8] - 1) / 2)));
-  let achse;
-  if (w < 1e-6) achse = [0, 0, 1];
-  else if (Math.PI - w < 1e-4) {
-    const d = [m[0], m[4], m[8]], i = d.indexOf(Math.max(...d)), j = (i + 1) %% 3, k = (i + 2) %% 3;
-    achse = [0, 0, 0];
-    achse[i] = Math.sqrt((d[i] + 1) / 2); achse[j] = m[i * 3 + j] / (2 * achse[i]); achse[k] = m[i * 3 + k] / (2 * achse[i]);
-  } else {
-    const s = 2 * Math.sin(w);
-    achse = [(m[7] - m[5]) / s, (m[2] - m[6]) / s, (m[3] - m[1]) / s];
-  }
   const vp = WbWorld.instance.viewpoint;
   vp.position = new WbVector3(...pos);
-  vp.orientation = new WbVector4(...achse, w);
+  vp.orientation = new WbVector4(...achseWinkel([x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]]));
   vp.updatePosition(); vp.updateOrientation();
   view._view.w3dScene.render();
 }
@@ -1521,33 +1526,141 @@ async function platzHolen() {
   platzStand = d;
   for (const f of platzHoerer) f(d);
 }
-let folgen = null;
-async function greiferBlick() {
-  // von der Seite auf den TCP, quer zur Bewegung der Backen: so sieht man den Spalt
-  const auftrag = folgen;
+// --- Teach-Ansicht: Kamera kreist um die Greiferspitze (TCP) und folgt ihr. Die Lage kommt nur einige Male je Sekunde
+// (/api/platz), deshalb gleitet der Mittelpunkt in jedem Bild ein Stueck nach, statt zu springen. ---
+let teach = null;    // {az, el, abstand, mitte, ziel} (Winkel in rad, Laengen in m)
+let teachAbruf = null;
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mal3 = (a, s) => [a[0] * s, a[1] * s, a[2] * s], dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const norm3 = a => mal3(a, 1 / (Math.hypot(a[0], a[1], a[2]) || 1));
+async function teachHolen() {
+  const auftrag = teachAbruf;
   const d = platzHoerer.length && platzStand ? platzStand
     : await fetch('/api/platz/%(platz)s', {cache: 'no-store'}).then(r => r.json()).catch(() => ({}));
-  // inzwischen eine andere Ansicht gewaehlt: diese Antwort nicht mehr anwenden
-  if (auftrag !== folgen || !d.tcp || !WbWorld.instance) return;
-  let q = [d.tcp_y[0], d.tcp_y[1]];
-  const l = Math.hypot(...q);
-  q = l > 0.2 ? q.map(v => v / l) : [0, -1];
-  blick([d.tcp[0] + 0.24 * q[0], d.tcp[1] + 0.24 * q[1], d.tcp[2] + 0.05], [d.tcp[0], d.tcp[1], d.tcp[2] + 0.01]);
+  if (auftrag !== teachAbruf || !teach || !d.tcp) return;   // inzwischen eine andere Ansicht gewaehlt
+  if (!teach.mitte) {
+    // Startblick wie frueher die Greifer-Ansicht: von der Seite, quer zur Bewegung der Backen (man sieht den Spalt)
+    let q = d.tcp_y ? [d.tcp_y[0], d.tcp_y[1]] : [0, -1];
+    const l = Math.hypot(...q);
+    q = l > 0.2 ? q.map(v => v / l) : [0, -1];
+    teach.az = Math.atan2(q[1], q[0]);
+    teach.mitte = d.tcp.slice();
+  }
+  teach.ziel = d.tcp.slice();
 }
+function teachZeichnen(t) {
+  if (!t || teach !== t) return;   // je Teach-Ansicht genau eine Bildschleife
+  requestAnimationFrame(() => teachZeichnen(t));
+  if (!teach.mitte || !WbWorld.instance) return;
+  const weg = sub3(teach.ziel, teach.mitte);
+  teach.mitte = Math.hypot(...weg) < 0.0002 ? teach.ziel.slice() : add3(teach.mitte, mal3(weg, 0.25));
+  const s = [teach.az, teach.el, teach.abstand, ...teach.mitte].join(' ');
+  if (s === teach.gezeichnet) return;   // nichts bewegt: nicht neu rendern
+  teach.gezeichnet = s;
+  const c = Math.cos(teach.el);
+  blick(add3(teach.mitte, [teach.abstand * c * Math.cos(teach.az), teach.abstand * c * Math.sin(teach.az),
+                           teach.abstand * Math.sin(teach.el)]), teach.mitte);
+}
+function teachAus() { teach = null; clearInterval(teachAbruf); teachAbruf = null; }
 function ansicht(name) {
-  clearInterval(folgen); folgen = null;
+  teachAus();
   document.querySelectorAll('[data-ansicht]').forEach(b => b.classList.toggle('an', b.dataset.ansicht === name));
   if (!WbWorld.instance) return;
   if (name === 'standard') { WbWorld.instance.viewpoint.resetViewpoint(); view._view.w3dScene.render(); }
-  else if (name === 'greifer') { folgen = setInterval(greiferBlick, 250); greiferBlick(); }
+  else if (name === 'teach') {
+    teach = {az: -Math.PI / 2, el: 0.17, abstand: 0.25, mitte: null, ziel: null};
+    teachAbruf = setInterval(teachHolen, 250); teachHolen();
+    const t = teach;
+    requestAnimationFrame(() => teachZeichnen(t));
+  }
   else blick(...ANSICHTEN[name]);
 }
 document.querySelectorAll('[data-ansicht]').forEach(b => b.onclick = () => ansicht(b.dataset.ansicht));
-// wer selbst mit der Maus dreht, will nicht mehr mitgezogen werden
-view.addEventListener('mousedown', () => {
-  if (folgen) { clearInterval(folgen); folgen = null; }
-  document.querySelectorAll('[data-ansicht]').forEach(b => b.classList.remove('an'));
-});
+
+// --- Maus wie in iRC: mittlere Taste ziehen = drehen, rechte Taste ziehen = verschieben, Rad = Zoom zum Mauszeiger.
+// Die linke Taste dreht auch (ein Gelenk ziehen wie in iRC geht hier nicht, den Roboter steuert iRC; Touchpads haben
+// keine mittlere Taste). Die Ereignisse werden vor dem Webots-Viewer abgefangen (nur auf dem 3D-Bild, Knoepfe und
+// Taster darueber bleiben unberuehrt); die Kamera stellt blick() ueber den Viewpoint. Touch bleibt beim Viewer. ---
+const TISCH = ANSICHTEN.oben[1];   // Tischmitte, z = Tischhoehe (m)
+const flaeche = document.querySelector('.bildflaeche');
+function kamera() {
+  const vp = WbWorld.instance && WbWorld.instance.viewpoint, bild = view.querySelector('canvas');
+  if (!vp || !vp.position || !bild) return null;
+  const o = vp.orientation, m = drehung(o.x, o.y, o.z, o.w), r = bild.getBoundingClientRect();
+  const aspekt = r.width / r.height, halb = Math.tan(vp.fieldOfView / 2);
+  const tanY = aspekt < 1 ? halb : halb / aspekt;
+  return {p: [vp.position.x, vp.position.y, vp.position.z], r, tanY, tanX: tanY * aspekt,
+          x: [m[0][0], m[1][0], m[2][0]], y: [m[0][1], m[1][1], m[2][1]], z: [m[0][2], m[1][2], m[2][2]]};
+}
+function strahl(k, cx, cy) {   // Blickrichtung durch den Bildpunkt (Kamera: x vor, y links, z oben)
+  const u = (cx - k.r.left) / k.r.width * 2 - 1, v = (cy - k.r.top) / k.r.height * 2 - 1;
+  return norm3(add3(k.x, add3(mal3(k.y, -u * k.tanX), mal3(k.z, -v * k.tanY))));
+}
+function aufTisch(k, d) {   // Abstand bis zur Tischebene entlang d, sonst null (Blick waagrecht oder nach oben)
+  const t = d[2] < -0.02 ? (TISCH[2] - k.p[2]) / d[2] : -1;
+  return t > 0.02 && t < 4 ? t : null;
+}
+function um(v, a, w) {   // v um die Achse a (Einheitsvektor) drehen
+  const c = Math.cos(w), s = Math.sin(w), kr = [a[1] * v[2] - a[2] * v[1], a[2] * v[0] - a[0] * v[2], a[0] * v[1] - a[1] * v[0]];
+  return add3(add3(mal3(v, c), mal3(kr, s)), mal3(a, dot3(a, v) * (1 - c)));
+}
+function markenAus() { document.querySelectorAll('[data-ansicht]').forEach(b => b.classList.remove('an')); }
+let zug = null;
+const aufBild = ev => ev.target.tagName === 'CANVAS' && flaeche.contains(ev.target);
+flaeche.addEventListener('mousedown', ev => {
+  if (!aufBild(ev)) return;
+  ev.preventDefault(); ev.stopPropagation();   // auch kein Autoscroll mit der mittleren Taste
+  const k = kamera();
+  if (!k) return;
+  const art = ev.button === 2 ? 'schieben' : 'drehen';
+  if (teach && art === 'schieben') teachAus();
+  if (!teach) markenAus();
+  // Drehpunkt: wo die Bildmitte den Tisch trifft (sonst 1 m vor der Kamera); in der Teach-Ansicht die Greiferspitze
+  const t = aufTisch(k, k.x) || 1.0;
+  zug = {art, x: ev.clientX, y: ev.clientY, punkt: add3(k.p, mal3(k.x, t)), abstand: t};
+}, true);
+window.addEventListener('mousemove', ev => {
+  if (!zug) { if (aufBild(ev)) ev.stopPropagation(); return; }   // Webots soll keine Teile hervorheben
+  ev.preventDefault(); ev.stopPropagation();
+  const dx = ev.clientX - zug.x, dy = ev.clientY - zug.y;
+  zug.x = ev.clientX; zug.y = ev.clientY;
+  if (teach && zug.art === 'drehen') {
+    teach.az -= dx * 0.008;
+    teach.el = Math.max(-0.6, Math.min(1.45, teach.el + dy * 0.008));
+    return;
+  }
+  const k = kamera();
+  if (!k) return;
+  if (zug.art === 'drehen') {
+    let p = k.p, x = k.x, z = k.z;
+    const w = -dx * 0.006;   // waagrecht: um die senkrechte Achse durch den Drehpunkt
+    p = add3(zug.punkt, um(sub3(p, zug.punkt), [0, 0, 1], w)); x = um(x, [0, 0, 1], w); z = um(z, [0, 0, 1], w);
+    const y = norm3([x[1] * z[2] - x[2] * z[1], x[2] * z[0] - x[0] * z[2], x[0] * z[1] - x[1] * z[0]]);
+    const wy = -dy * 0.006, x2 = um(x, y, wy);   // senkrecht: kippen um die Querachse (Maus runter = mehr von oben)
+    if (x2[2] > -0.999 && x2[2] < 0.35 && um(z, y, wy)[2] > 0) {   // nicht ueber Kopf und kaum von unten
+      p = add3(zug.punkt, um(sub3(p, zug.punkt), y, wy)); x = x2; z = um(z, y, wy);
+    }
+    blick(p, add3(p, x), z);
+  } else {   // verschieben: das Bild folgt der Maus (gemessen in der Tiefe des Drehpunkts)
+    const s = 2 * zug.abstand * k.tanY / k.r.height;
+    blick(add3(k.p, add3(mal3(k.y, dx * s), mal3(k.z, dy * s))), add3(add3(k.p, k.x), add3(mal3(k.y, dx * s), mal3(k.z, dy * s))), k.z);
+  }
+}, true);
+window.addEventListener('mouseup', ev => { if (zug) { zug = null; ev.stopPropagation(); } }, true);
+['click', 'dblclick', 'auxclick'].forEach(n => flaeche.addEventListener(n, ev => { if (aufBild(ev)) ev.stopPropagation(); }, true));
+flaeche.addEventListener('contextmenu', ev => { if (aufBild(ev)) ev.preventDefault(); }, true);
+flaeche.addEventListener('wheel', ev => {
+  if (!aufBild(ev)) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const schritt = Math.max(-3, Math.min(3, -ev.deltaY / (ev.deltaMode ? 3 : 100))) * 0.12;   // Rad vor = naeher
+  if (teach) { teach.abstand = Math.max(0.06, Math.min(1.2, teach.abstand * (1 - schritt))); return; }
+  const k = kamera();
+  if (!k) return;
+  markenAus();
+  const d = strahl(k, ev.clientX, ev.clientY), weit = aufTisch(k, d) || (zug ? zug.abstand : 1.0);
+  const weg = Math.min(weit * schritt, weit - 0.03);   // nie durch den Punkt hindurch
+  blick(add3(k.p, mal3(d, weg)), add3(add3(k.p, mal3(d, weg)), k.x), k.z);
+}, {capture: true, passive: false});
 
 // --- Beschriftungen: Namen der Teile im Bild. Werkstuecke und Sensorflaechen haengen am Solid gleichen Namens
 // im Viewer (laufen beim Tragen mit), Aufbauten an einem festen Punkt ueber ihrer Oberseite. Jedes Bild wird mit
@@ -1974,8 +2087,10 @@ def kamera_ansichten(welt_datei):
         t = baukasten.tisch_werte({})
     m = baukasten.tisch_merkmale(t)["flaechen"][0]["mitte"]
     cx, cy, h = m[0] / 1000, m[1] / 1000, t["hoehe_mm"] / 1000
+    # links/rechts aus Sicht des Roboters (links = +y, wie bei den Tischkanten)
     return {"vorne": [[cx + 1.0, cy, h + 0.25], [cx, cy, h + 0.08]],
-            "seite": [[cx, cy - 1.15, h + 0.25], [cx, cy, h + 0.08]],
+            "links": [[cx, cy + 1.15, h + 0.25], [cx, cy, h + 0.08]],
+            "rechts": [[cx, cy - 1.15, h + 0.25], [cx, cy, h + 0.08]],
             "oben": [[cx, cy, h + 1.3], [cx, cy, h], [1, 0, 0]]}
 
 
