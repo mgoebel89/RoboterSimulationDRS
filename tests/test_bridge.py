@@ -306,6 +306,89 @@ class TestGreifer(unittest.TestCase):
                 self.assertIn("zu tief abgelegt (bleibt liegen)", g.meldung)
         self.assertEqual(irc_bridge.welt_ablage(os.path.join(ROOT, "worlds", "gibtsnicht.wbt")), "auflage")
 
+    @staticmethod
+    def _stapelteil_obj(ordner):
+        """Wie die gestapelten Teile des Nutzers: Koerper 40 x 40 x 20 mm, oben Zapfen 10 x 10 x 6 mm, unten Bohrung
+        10 x 10 x 7 mm (mm, z -10 .. 16). Nur waagrechte Flaechen; senkrechte Waende trifft die Senkrechte ohnehin nicht."""
+        def ring(z, a, i):   # quadratischer Ring zwischen Kantenlaenge 2a und 2i
+            return [(-a, -a, z), (a, -a, z), (a, a, z), (-a, a, z), (-i, -i, z), (i, -i, z), (i, i, z), (-i, i, z)]
+
+        def quadrat(z, a):
+            return [(-a, -a, z), (a, -a, z), (a, a, z), (-a, a, z)]
+        punkte, flaechen = [], []
+        for teil, art in ((ring(-10, 20, 5), "ring"), (quadrat(-3, 5), "quadrat"), (ring(10, 20, 5), "ring"),
+                          (quadrat(16, 5), "quadrat")):
+            b = len(punkte) + 1
+            punkte += teil
+            if art == "ring":
+                for k in range(4):
+                    a0, a1, i0, i1 = b + k, b + (k + 1) % 4, b + 4 + k, b + 4 + (k + 1) % 4
+                    flaechen += [(a0, a1, i1), (a0, i1, i0)]
+            else:
+                flaechen += [(b, b + 1, b + 2), (b, b + 2, b + 3)]
+        pfad = os.path.join(ordner, "stapelteil.obj")
+        with open(pfad, "w", encoding="utf-8") as f:
+            f.write("".join("v %g %g %g\n" % p for p in punkte) + "".join("f %d %d %d\n" % d for d in flaechen))
+        return pfad
+
+    def _stapelteil(self, name, pos, obj):
+        # Huellquader 40 x 40 x 26 mm, Mitte 3 mm ueber der Koerpermitte: modellversatz wie vom Baukasten
+        return _Teil(name, pos, (0.04, 0.04, 0.026), form="modell", modell=[obj], skalierung=0.001,
+                     modellversatz=[0.0, 0.0, -0.003])
+
+    def test_gestapelte_teile_liegen_mit_der_echten_form_aufeinander(self):
+        # Webots stoesst nur die Huellquader an: die ueberlappen um die Zapfenhoehe (6 mm), deshalb stehen die Teile in
+        # der Simulation mit Abstand und wippen. Festgehalten liegen sie wie im Baukasten an der Schulter aufeinander.
+        with tempfile.TemporaryDirectory() as tmp:
+            obj = self._stapelteil_obj(tmp)
+            g = self.greifer
+            a = self._stapelteil("unten", (0.35, 0.0, 0.013), obj)       # auf dem Tisch
+            b = self._stapelteil("mitte", (0.35, 0.0, 0.033), obj)       # Schulter von a bei 20 mm
+            c = self._stapelteil("oben", (0.35, 0.0, 0.053), obj)
+            daneben = self._stapelteil("daneben", (0.39, 0.0, 0.0135), obj)   # beruehrt a nur am Rand
+            teile = [a, b, c, daneben]
+            g.werkstuecke = lambda: teile
+            na, nb = g.welt_netz_von(a), g.welt_netz_von(b)
+            self.assertAlmostEqual(irc_bridge.stapel_abstand(nb, na), 0.0)
+            b.pos[2] = 0.035
+            self.assertAlmostEqual(irc_bridge.stapel_abstand(g.welt_netz_von(b), na), 0.002)
+            b.pos[2] = 0.031
+            self.assertAlmostEqual(irc_bridge.stapel_abstand(g.welt_netz_von(b), na), -0.002)
+            b.pos[2] = 0.033
+            self.assertIsNone(irc_bridge.stapel_abstand(g.welt_netz_von(daneben), na))
+            # Start: der ganze Stapel wird festgehalten, das Teil daneben nicht
+            startlagen = {}
+            irc_bridge.merke_startlagen(teile, startlagen)
+            self.assertEqual(g.startlagen_festhalten(teile, startlagen), 3)
+            self.assertEqual(g.traeger, {b.getId(): a.getId(), c.getId(): b.getId()})
+            b.pos, c.pos = [0.35, 0.0, 0.039], [0.351, 0.0, 0.060]   # die Physik drueckt die Huellquader auseinander ...
+            g.festhalten()
+            self.assertEqual([round(b.pos[2], 4), round(c.pos[2], 4)], [0.033, 0.053])   # ... festhalten nicht
+            # das untere Teil greifen: was darauf liegt, faellt (nicht mehr festgehalten), darunter bleibt
+            g.abgelegt.pop(b.getId())
+            g._stapel_loesen(b)
+            self.assertEqual(set(g.abgelegt), {a.getId()})
+            self.assertEqual(g.traeger, {})
+            # ein Teil etwas ueber dem Stapel losgelassen: kommt auf die Schulter von a, gemeldet mit dem Namen
+            b.pos = [0.35, 0.0, 0.036]
+            g.teil, g.teil_name = b, "mitte"
+            g._loslassen()
+            self.assertAlmostEqual(b.pos[2], 0.0332)
+            self.assertEqual((g.traeger, g.abgelegt_auf), ({b.getId(): a.getId()}, "unten"))
+            # 2 mm zu tief (Zapfen steckt im Koerper): wird angehoben, Meldung nennt das Teil darunter
+            g.abgelegt.pop(b.getId())
+            b.pos = [0.35, 0.0, 0.031]
+            g.teil, g.teil_name = b, "mitte"
+            g._loslassen()
+            self.assertAlmostEqual(b.pos[2], 0.0332)
+            self.assertIn("zu tief in unten", g.meldung)
+            # neben dem Stapel losgelassen: Physik wie bisher
+            g.fallen_lassen("neu")
+            daneben.pos = [0.39, 0.0, 0.0135]
+            g.teil, g.teil_name = daneben, "daneben"
+            g._loslassen()
+            self.assertEqual((daneben.pos[2], g.abgelegt), (0.0135, {}))
+
     def test_daneben_gegriffen(self):
         self.tcp.setze(kin.ik_nach_unten(0.35, 0.08, 0.0155, kin.TCP_EGP25))
         self.greifer.schalte(True, [self.stift])

@@ -280,6 +280,9 @@ class Greifer:
         self.meldung = ""
         self.auflagen = lambda: []   # Netze der Aufbauten (setzt main), fuer _auf_auflage
         self.abgelegt = {}           # Node-Id -> (Node, Lage, Drehung): auf Aufbauten abgelegt, festgehalten
+        self.werkstuecke = lambda: []   # alle Werkstuecke (setzt main), fuer Teile auf Teilen
+        self.traeger = {}            # Node-Id -> Node-Id des Werkstuecks darunter (gestapelt, beide festgehalten)
+        self.abgelegt_auf = None     # Name des Werkstuecks, auf dem das zuletzt losgelassene Teil liegt
         self.tischhoehe = lambda: None   # Oberkante des Tischs in m (setzt main)
         self.ablage = "auflage"          # oder "liegen_lassen" (Einstellung der Welt, siehe _auf_auflage)
         self.beim_loslassen = lambda node: None   # setzt main (Kollisionswaechter)
@@ -496,6 +499,7 @@ class Greifer:
             return
         _d, node, lokal, r_rel, e = bestes
         self.abgelegt.pop(node.getId(), None)   # war auf einem Aufbau festgehalten
+        self._stapel_loesen(node)
         self.teil = node
         self.teil_name = node.getField("name").getSFString()
         self.halte_pos = lokal
@@ -534,38 +538,103 @@ class Greifer:
         netze = self.auflagen()
         auflage = auflage_hoehe(netze, p, [0.6 * halb[0], 0.6 * halb[1]], p[2]) if netze else None
         unten = p[2] - halb[2]
+        # liegt es auf einem anderen Werkstueck (Stapel)? Mit der echten Form beider Teile
+        andere = [(n, self.welt_netz_von(n), n.getPosition()[2]) for n in self.werkstuecke() if n.getId() != node.getId()]
+        w_hub, traeger = self.auf_teil(self.welt_netz_von(node), p[2], andere) if andere else (None, None)
+        self.abgelegt_auf = None
         if self.ablage == "liegen_lassen":
             tisch = self.tischhoehe()
             stuetze = max((h for h in (auflage, tisch) if h is not None), default=None)
-            if stuetze is not None and unten < stuetze - 0.0005:
+            steckt = max(stuetze - unten if stuetze is not None else 0.0, w_hub - 0.0002 if w_hub is not None else 0.0)
+            if steckt > 0.0005:
                 self._festlegen(node, 0.0)
-                return 0.0, stuetze - unten
-        if auflage is None:
+                if w_hub is not None and w_hub - 0.0002 >= steckt:
+                    self._stapeln(node, traeger)
+                return 0.0, steckt
+        a_hub = None if auflage is None else auflage + 0.0002 - unten
+        if a_hub is None and w_hub is None:
             return None, 0.0
-        hub = auflage + 0.0002 - unten
+        hub = max(h for h in (a_hub, w_hub) if h is not None)
         self._festlegen(node, hub)
+        if w_hub is not None and hub == w_hub:
+            self._stapeln(node, traeger)
         return hub, 0.0
+
+    def welt_netz_von(self, node, lage=None, drehung=None):
+        """Form eines Werkstuecks in Weltkoordinaten (CAD-Netz, sonst Huellquader), in seiner aktuellen Lage oder
+        in lage/drehung (Achse-Winkel, z.B. die Startlage)."""
+        roh = self._netz(node) or (quader_punkte(node.getField("size").getSFVec3f()), QUADER_DREIECKE)
+        p = list(lage) if lage is not None else node.getPosition()
+        r = achse_winkel_zu_matrix(drehung) if drehung is not None else node.getOrientation()
+        return welt_netz(roh, p, r)
+
+    @staticmethod
+    def auf_teil(netz, z, andere):
+        """Lage auf dem hoechsten Werkstueck darunter: (Verschiebung nach oben in m, dieses Werkstueck) oder
+        (None, None). andere: [(Node, Netz in Welt, Hoehe der Mitte)]; gezaehlt werden nur tiefer liegende."""
+        bestes = (None, None)
+        for node, anderes, z_mitte in andere:
+            if z_mitte >= z:
+                continue
+            abstand = stapel_abstand(netz, anderes)
+            if abstand is None or abstand > STAPEL_FANG:
+                continue
+            hub = 0.0002 - abstand
+            if bestes[0] is None or hub > bestes[0]:
+                bestes = (hub, node)
+        return bestes
+
+    def _stapeln(self, node, traeger, lage=None, drehung=None):
+        """node liegt auf traeger: beide festhalten (traeger dort, wo er gerade bzw. in lage/drehung ist)."""
+        self.traeger[node.getId()] = traeger.getId()
+        self.abgelegt_auf = traeger.getField("name").getSFString()
+        if traeger.getId() not in self.abgelegt and traeger is not self.teil:
+            self.abgelegt[traeger.getId()] = (traeger, list(lage) if lage is not None else list(traeger.getPosition()),
+                                              list(drehung) if drehung is not None else traeger.getField("rotation").getSFRotation())
+
+    def _stapel_loesen(self, node):
+        """Wird ein Teil gegriffen, auf dem andere liegen, haelt nichts sie mehr fest: Sie fallen (wie in echt)."""
+        self.traeger.pop(node.getId(), None)
+        frei, weiter = {node.getId()}, True
+        while weiter:
+            weiter = False
+            for oben, unten in list(self.traeger.items()):
+                if unten in frei:
+                    del self.traeger[oben]
+                    self.abgelegt.pop(oben, None)
+                    frei.add(oben)
+                    weiter = True
 
     def startlagen_festhalten(self, teile, startlagen):
         """Teile, deren Startlage auf einem Aufbau liegt (z.B. in einer Magazintasche), von Anfang an festhalten.
         Sonst sinken sie schon vor dem ersten Griff ein (der Quader rutscht durch den Netz-Boden, beim Target im
         Magazin 5 mm), werden eingesunken gegriffen und gelten beim Ablegen am selben Punkt als zu tief.
+        Ebenso gestapelte Teile: Liegt ein Teil in der Startlage auf einem anderen (echte Form, hoechstens 2 mm
+        Abstand bzw. Ueberlappung), werden beide festgehalten; sonst drueckt die Physik die Huellquader auseinander.
         Erst nach dem ersten Simulationsschritt aufrufen (dann kennt Webots die Lage der Aufbauten)."""
         netze = self.auflagen()
-        anzahl = 0
-        for node in teile if netze else []:
-            lage = startlagen.get(node.getId())
-            if lage is None or node is self.teil or node.getId() in self.abgelegt:
+        start = {n.getId(): (list(startlagen[n.getId()][0]), list(startlagen[n.getId()][1]))
+                 for n in teile if startlagen.get(n.getId()) is not None}
+        formen = {n.getId(): self.welt_netz_von(n, *start[n.getId()]) for n in teile if n.getId() in start}
+        for node in teile:
+            if node.getId() not in start or node is self.teil:
                 continue
-            p, drehung = list(lage[0]), list(lage[1])
-            r = achse_winkel_zu_matrix(drehung)
-            size = node.getField("size").getSFVec3f()
-            halb = [0.5 * sum(abs(r[k * 3 + j]) * size[j] for j in range(3)) for k in range(3)]
-            auflage = auflage_hoehe(netze, p, [0.6 * halb[0], 0.6 * halb[1]], p[2])
-            if auflage is not None and abs(p[2] - halb[2] - auflage) <= 0.002:
-                self.abgelegt[node.getId()] = (node, p, drehung)
-                anzahl += 1
-        return anzahl
+            p, drehung = start[node.getId()]
+            if netze and node.getId() not in self.abgelegt:
+                r = achse_winkel_zu_matrix(drehung)
+                size = node.getField("size").getSFVec3f()
+                halb = [0.5 * sum(abs(r[k * 3 + j]) * size[j] for j in range(3)) for k in range(3)]
+                auflage = auflage_hoehe(netze, p, [0.6 * halb[0], 0.6 * halb[1]], p[2])
+                if auflage is not None and abs(p[2] - halb[2] - auflage) <= 0.002:
+                    self.abgelegt[node.getId()] = (node, p, drehung)
+            andere = [(n, formen[n.getId()], start[n.getId()][0][2]) for n in teile
+                      if n.getId() in start and n.getId() != node.getId() and n is not self.teil]
+            hub, traeger = self.auf_teil(formen[node.getId()], p[2], andere)
+            if traeger is not None and abs(hub - 0.0002) <= 0.002:
+                self.abgelegt.setdefault(node.getId(), (node, p, drehung))
+                self._stapeln(node, traeger, *start[traeger.getId()])
+        self.abgelegt_auf = None
+        return len(self.abgelegt)
 
     def festhalten(self):
         """Auf Aufbauten abgelegte Teile ruhig halten (in jedem Schritt; siehe _auf_auflage)."""
@@ -587,17 +656,19 @@ class Greifer:
             elif hub is None:
                 zusatz = ""
             elif hub > 0.001:
-                zusatz = " - lag %.1f mm zu tief im Aufbau, auf die Auflage gehoben (Ablegepunkt in iRC hoeher setzen)" % (hub * 1000)
+                zusatz = " - lag %.1f mm zu tief %s, darauf gehoben (Ablegepunkt in iRC hoeher setzen)" % (
+                    hub * 1000, "in " + self.abgelegt_auf if self.abgelegt_auf else "im Aufbau")
             else:
-                zusatz = " - liegt auf dem Aufbau" + (" (%.1f mm abgesenkt)" % (-hub * 1000) if hub < -0.001 else "")
+                zusatz = (" - liegt auf " + (self.abgelegt_auf or "dem Aufbau")
+                          + (" (%.1f mm abgesenkt)" % (-hub * 1000) if hub < -0.001 else ""))
             print("losgelassen: %s bei x=%.0f y=%.0f z=%.0f mm%s" % (
                 self.teil_name, x * 1000, y * 1000, (z + (hub or 0.0)) * 1000, zusatz))
         # zu tief abgelegt: im 3D-Bild stehen lassen, bis wieder gegriffen wird (am echten Roboter ein Crash)
         if self.teil is not None and steckt:
             self.meldung = "offen - %s %.1f mm zu tief abgelegt (bleibt liegen)" % (self.teil_name, steckt * 1000)
         elif self.teil is not None and hub is not None and hub > 0.001:
-            self.meldung = "offen - %s lag %.1f mm zu tief im Aufbau: Ablegepunkt in iRC hoeher setzen" % (
-                self.teil_name, hub * 1000)
+            self.meldung = "offen - %s lag %.1f mm zu tief %s: Ablegepunkt in iRC hoeher setzen" % (
+                self.teil_name, hub * 1000, "in " + self.abgelegt_auf if self.abgelegt_auf else "im Aufbau")
         else:
             self.meldung = "Greifer offen"
         if self.teil is not None:
@@ -612,6 +683,7 @@ class Greifer:
         """Gegriffenes Teil freigeben, ohne die Backen zu bewegen (die steuert weiter iRC).
         Auch festgehaltene Teile sind danach wieder frei (z.B. vor "Teile zurueck")."""
         self.abgelegt = {}
+        self.traeger = {}
         self.teil = None
         self.teil_name = ""
         self.meldung = meldung
@@ -712,6 +784,77 @@ def auflage_hoehe(netze, mitte, halb, z_max):
             for q in poly:
                 hoechste = q[2] if hoechste is None else max(hoechste, q[2])
     return hoechste
+
+
+# --- Teile auf Teilen (Stapeln): Abstand ueber die echte Form statt ueber den Huellquader ---
+# Webots stoesst Werkstuecke nur als Huellquader an. Steckt ein Zapfen in der Bohrung des Teils darueber, ueberlappen
+# die Quader um die Zapfenhoehe: Die Physik drueckt die Teile auseinander, sie stehen mit Abstand und wippen.
+# Deshalb werden gestapelte Teile wie Teile auf Aufbauten festgehalten, in der Lage, die ihre echte Form ergibt.
+
+QUADER_DREIECKE = [(0, 1, 2), (0, 2, 3), (4, 6, 5), (4, 7, 6), (0, 4, 5), (0, 5, 1), (1, 5, 6), (1, 6, 2),
+                   (2, 6, 7), (2, 7, 3), (3, 7, 4), (3, 4, 0)]
+STAPEL_FANG = 0.05   # so weit ueber einem Werkstueck losgelassen, kommt ein Teil noch darauf (sonst faellt es frei)
+
+
+def quader_punkte(size):
+    hx, hy, hz = size[0] / 2, size[1] / 2, size[2] / 2
+    return [[-hx, -hy, -hz], [hx, -hy, -hz], [hx, hy, -hz], [-hx, hy, -hz],
+            [-hx, -hy, hz], [hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz]]
+
+
+def welt_netz(roh, p, r):
+    """(Punkte, Dreiecke) im Teilsystem -> (Punkte in Welt, Dreiecke, Grundriss [xmin, ymin, xmax, ymax])."""
+    punkte = [add(p, m_vec(r, v)) for v in roh[0]]
+    return punkte, roh[1], [min(q[0] for q in punkte), min(q[1] for q in punkte),
+                            max(q[0] for q in punkte), max(q[1] for q in punkte)]
+
+
+def _senkrechte(netz, x0, dx, y0, dy, n, unterseite):
+    """Je Gitterpunkt (i, j) mit x = x0 + (i + 0,5) dx usw.: tiefste (unterseite) bzw. hoechste Stelle, an der die
+    Senkrechte das Netz schneidet. Jedes Dreieck prueft nur die Gitterpunkte in seinem Grundriss."""
+    punkte, dreiecke, _g = netz
+    werte = {}
+    for a, b, c in dreiecke:
+        pa, pb, pc = punkte[a], punkte[b], punkte[c]
+        det = (pb[1] - pc[1]) * (pa[0] - pc[0]) + (pc[0] - pb[0]) * (pa[1] - pc[1])
+        if abs(det) < 1e-14:   # senkrechte Wand: die Senkrechte trifft sie nicht
+            continue
+        i0 = max(0, int(math.ceil((min(pa[0], pb[0], pc[0]) - x0) / dx - 0.5)))
+        i1 = min(n - 1, int(math.floor((max(pa[0], pb[0], pc[0]) - x0) / dx - 0.5)))
+        j0 = max(0, int(math.ceil((min(pa[1], pb[1], pc[1]) - y0) / dy - 0.5)))
+        j1 = min(n - 1, int(math.floor((max(pa[1], pb[1], pc[1]) - y0) / dy - 0.5)))
+        for i in range(i0, i1 + 1):
+            x = x0 + (i + 0.5) * dx
+            for j in range(j0, j1 + 1):
+                y = y0 + (j + 0.5) * dy
+                l1 = ((pb[1] - pc[1]) * (x - pc[0]) + (pc[0] - pb[0]) * (y - pc[1])) / det
+                l2 = ((pc[1] - pa[1]) * (x - pc[0]) + (pa[0] - pc[0]) * (y - pc[1])) / det
+                if l1 < -1e-9 or l2 < -1e-9 or l1 + l2 > 1 + 1e-9:
+                    continue
+                z = l1 * pa[2] + l2 * pb[2] + (1 - l1 - l2) * pc[2]
+                alt = werte.get((i, j))
+                if alt is None or (z < alt if unterseite else z > alt):
+                    werte[(i, j)] = z
+    return werte
+
+
+def stapel_abstand(oben, unten, n=14, kern=0.6):
+    """Senkrechter Abstand (m) von der Unterseite des Netzes oben zur Oberseite des Netzes unten (beide in Welt), an
+    n x n Senkrechten im gemeinsamen Grundriss; negativ, wenn sie ineinander stecken. Ein Zapfen in einer Bohrung
+    zaehlt so nicht: Getragen wird an der Schulter. Vom oberen Teil zaehlt nur der Kern seines Grundrisses (60 %),
+    damit ein Nachbar, der nur am Rand ueberlappt, nicht als Unterlage gilt (wie bei den Aufbauten).
+    None, wenn sich die Grundrisse dort nicht ueberdecken."""
+    g = oben[2]
+    mx, my, hx, hy = (g[0] + g[2]) / 2, (g[1] + g[3]) / 2, kern * (g[2] - g[0]) / 2, kern * (g[3] - g[1]) / 2
+    x0, y0 = max(mx - hx, unten[2][0]), max(my - hy, unten[2][1])
+    x1, y1 = min(mx + hx, unten[2][2]), min(my + hy, unten[2][3])
+    if x1 - x0 < 1e-4 or y1 - y0 < 1e-4:
+        return None
+    dx, dy = (x1 - x0) / n, (y1 - y0) / n
+    unterseite = _senkrechte(oben, x0, dx, y0, dy, n, True)
+    oberseite = _senkrechte(unten, x0, dx, y0, dy, n, False)
+    abstaende = [unterseite[k] - oberseite[k] for k in unterseite if k in oberseite]
+    return min(abstaende) if abstaende else None
 
 
 # --- Kollisionen (Stufe K1): Roboter, Greifer und gegriffenes Teil gegen Tisch, Aufbauten und Werkstuecke ---
@@ -1032,7 +1175,7 @@ def teile_zuruecksetzen(teile, startlagen, greifer):
         node.getField("rotation").setSFRotation(list(lage[1]))
         node.resetPhysics()
     fest = greifer.startlagen_festhalten(teile, startlagen)
-    print("Teile auf Startlage gesetzt (%d Werkstuecke%s)" % (len(teile), ", %d davon auf Aufbauten festgehalten" % fest
+    print("Teile auf Startlage gesetzt (%d Werkstuecke%s)" % (len(teile), ", %d davon festgehalten (Aufbauten, Stapel)" % fest
                                                               if fest else ""))
 
 
@@ -1059,6 +1202,7 @@ def main():
     tcp = me.getFromProtoDef("TCP")
     greifer = Greifer(robot, cfg, tcp)
     greifer.auflagen = lambda: [n for n in (aufbau_welt_netz(robot, a) for a in aufbauten(robot)) if n]
+    greifer.werkstuecke = lambda: werkstuecke(robot)
     tisch_oben = {}   # erst beim ersten Loslassen lesen (vor dem ersten Schritt kennt Webots die Lage noch nicht)
 
     def tischhoehe():
@@ -1148,7 +1292,8 @@ def main():
             erster_schritt = False
             fest = greifer.startlagen_festhalten(teile, startlagen)
             if fest:
-                print("%d Werkstueck(e) liegen auf Aufbauten und werden dort festgehalten, bis sie gegriffen werden" % fest)
+                print("%d Werkstueck(e) liegen auf Aufbauten oder aufeinander und werden festgehalten, bis sie gegriffen "
+                      "werden" % fest)
         if vorschau and robot.getTime() > 1.0:
             robot.exportImage(vorschau, 90)
             print("Vorschaubild gespeichert: %s" % vorschau)
