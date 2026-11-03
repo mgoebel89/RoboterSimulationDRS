@@ -161,7 +161,9 @@ class FalschesWebots:
                     break
                 c.sendall(teil)
         else:
-            c.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhallo")
+            # wie Webots R2025a: Dateien eine Stunde zwischenspeichern
+            c.sendall(b"HTTP/1.1 200 OK\r\nCache-Control: public, max-age=3600\r\nContent-Length: 5\r\n"
+                      b"Connection: close\r\n\r\nhallo")
         c.close()
 
     def schliessen(self):
@@ -197,6 +199,8 @@ class TestDurchleitung(Grundlage):
     def test_dateien_werden_durchgeleitet(self):
         antwort = urllib.request.urlopen("http://127.0.0.1:%d/sim/7/meshes/rebel.obj?x=1" % self.port, timeout=5)
         self.assertEqual(antwort.read(), b"hallo")
+        # nach einem Haenger reicht F5: der Browser fragt jedes Mal nach statt eine Stunde den Speicher zu nehmen
+        self.assertEqual(antwort.headers.get_all("Cache-Control"), ["no-cache"])
         kopf = self.webots.anfragen[-1]
         self.assertTrue(kopf.startswith("GET /meshes/rebel.obj?x=1 HTTP/1.1"), kopf)
         self.assertIn("Host: 127.0.0.1:%d" % self.webots.port, kopf)
@@ -237,6 +241,16 @@ class TestDurchleitung(Grundlage):
         self.assertTrue(kopf.startswith("GET / HTTP/1.1"), kopf)
         self.assertIn("Connection: Upgrade", kopf)
         self.assertIn("Sec-WebSocket-Key: abc", kopf)
+
+    def test_antwortkopf_in_stuecken(self):
+        roh = b"HTTP/1.1 200 OK\r\nCACHE-CONTROL: public, max-age=3600\r\nETag: 1\r\n\r\nKoerper\r\n\r\nmehr"
+        for teilung in (1, 10, 40, len(roh)):
+            a = uebersicht.AntwortKopf()
+            raus = a.weiter(roh[:teilung]) + a.weiter(roh[teilung:]) + a.weiter(b"!")
+            self.assertEqual(raus, b"HTTP/1.1 200 OK\r\nCache-Control: no-cache\r\nETag: 1\r\n\r\nKoerper\r\n\r\nmehr!")
+        a = uebersicht.AntwortKopf()
+        self.assertEqual(a.weiter(b"HTTP/1.1 200"), b"")
+        self.assertEqual(a.rest(), b"HTTP/1.1 200")   # Webots schliesst mitten im Kopf: nichts geht verloren
 
     def test_rahmen_hin_und_zurueck(self):
         for text in ("w3d", "x" * 200, "y" * 70000):

@@ -58,6 +58,10 @@ def _floats(values, n=None):
     return out
 
 
+class KeineDaten(OSError):
+    """Verbindung steht, aber iRC schickt keinen STATUS mehr."""
+
+
 class RobotState:
     """Ein ausgewerteter STATUS-Datensatz."""
 
@@ -89,12 +93,16 @@ class CriClient:
     letzten STATUS. Thread-sicher genug fuer einen Leser (Webots-Schleife)."""
 
     def __init__(self, host="127.0.0.1", ports=(3920,), passive=True,
-                 alive_interval=0.2, log=print):
+                 alive_interval=0.2, status_timeout=3.0, log=print):
         self.host = host
         self.ports = list(ports)
         self.passive = passive
         self.alive_interval = alive_interval
+        # iRC schickt STATUS etwa alle 60 ms; bleibt er so lange aus, gilt die Verbindung als tot, auch wenn sie
+        # offen ist (in der Schule blieb "iRC verbunden" stehen, der Roboter fuhr aber nicht mehr mit)
+        self.status_timeout = status_timeout
         self.log = log
+        self.stumm = False       # letzte Verbindung endete ohne STATUS: Meldungen bis zum naechsten STATUS sparen
         self.state = None
         self.runstate = None
         self.connected = False
@@ -145,11 +153,14 @@ class CriClient:
             self.connected_port = port
             self._sock = sock
             self.connected = True
-            self.log("CRI: verbunden mit %s:%d" % (self.host, port))
+            if not self.stumm:
+                self.log("CRI: verbunden mit %s:%d" % (self.host, port))
             try:
                 self._session(sock)
             except OSError as exc:
-                self.log("CRI: Verbindung unterbrochen (%s)" % exc)
+                if not self.stumm:
+                    self.log("CRI: Verbindung unterbrochen (%s)" % exc)
+                self.stumm = isinstance(exc, KeineDaten)
             finally:
                 self.connected = False
                 self._sock = None
@@ -168,8 +179,11 @@ class CriClient:
         buf = ""
         last_alive = 0.0
         last_status = None
+        seit = time.monotonic()   # Verbindungsbeginn, danach letzter STATUS
         while not self._stop.is_set():
             now = time.monotonic()
+            if now - seit > self.status_timeout:
+                raise KeineDaten("seit %.0f s keine STATUS-Meldung von iRC, verbinde neu" % (now - seit))
             if now - last_alive >= self.alive_interval:
                 self._send(sock, "ALIVEJOG 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0")
                 last_alive = now
@@ -195,8 +209,11 @@ class CriClient:
                         dt = state.received - last_status
                         if 0.001 < dt < 1.0:
                             self.status_period = 0.8 * self.status_period + 0.2 * dt
-                    last_status = state.received
+                    last_status = seit = state.received
                     self.state = state
+                    if self.stumm:
+                        self.stumm = False
+                        self.log("CRI: STATUS kommt wieder (%s:%d)" % (self.host, self.connected_port))
                 elif kind == "RUNSTATE":
                     self.runstate = tokens[3:]
                 elif kind not in ("GSIG", "OPINFO", "LOGMSG", "SUPPLY"):

@@ -885,6 +885,45 @@ class TestVerbindung(unittest.TestCase):
             stop.set()
 
 
+    def test_verstummtes_irc_wird_neu_verbunden(self):
+        # Verbindung bleibt offen, iRC schickt nach dem ersten STATUS aber nichts mehr (Schultest 2026-11:
+        # "iRC verbunden" stand da, der Roboter fuhr nicht mehr mit)
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(5)
+        port, verbindungen, offen = srv.getsockname()[1], [], []
+
+        def annehmen():
+            while True:
+                try:
+                    c, _ = srv.accept()
+                except OSError:
+                    return
+                verbindungen.append(time.monotonic())
+                offen.append(c)
+                if len(verbindungen) == 1:   # nur die erste Verbindung bekommt einen STATUS
+                    c.sendall(("CRISTART 1 STATUS MODE joint POSJOINTCURRENT 1 2 3 4 5 6 CRIEND").encode())
+
+        threading.Thread(target=annehmen, daemon=True).start()
+        log = []
+        cli = cri_client.CriClient("127.0.0.1", [port], status_timeout=0.5, log=log.append).start()
+        try:
+            ende = time.monotonic() + 10
+            while time.monotonic() < ende and len(verbindungen) < 3:
+                time.sleep(0.05)
+            self.assertGreaterEqual(len(verbindungen), 3, log)
+            self.assertIsNotNone(cli.state)
+            self.assertTrue(cli.stumm)
+            # nur einmal melden, nicht bei jedem neuen Versuch
+            self.assertEqual(sum("keine STATUS-Meldung" in z for z in log), 1, log)
+            self.assertEqual(sum("verbunden mit" in z for z in log), 1, log)
+        finally:
+            cli.stop()
+            srv.close()
+            for c in offen:
+                c.close()
+
+
 class TestModell(unittest.TestCase):
     PROTO = os.path.join(ROOT, "protos", "IgusRebel6DOF.proto")
 

@@ -2046,10 +2046,40 @@ class BrowserRahmen:
         return b"".join(raus)
 
 
+class AntwortKopf:
+    """Webots liefert Modelle, Texturen und Welt mit "Cache-Control: public, max-age=3600". Der Browser nimmt sie
+    dann eine Stunde lang aus seinem Speicher, auch nach F5 - in der Schule half nach einem Haenger nur Strg+F5.
+    Hier wird daraus "no-cache": der Browser fragt jedes Mal nach (mit ETag, die Dateien sind klein)."""
+
+    def __init__(self):
+        self.puffer = b""
+        self.fertig = False
+
+    def weiter(self, daten):
+        if self.fertig:
+            return daten
+        self.puffer += daten
+        ende = self.puffer.find(b"\r\n\r\n")
+        if ende < 0:
+            if len(self.puffer) <= 65536:
+                return b""
+            ende = len(self.puffer)   # kein Kopf erkennbar: unveraendert weitergeben
+        kopf, rest = self.puffer[:ende], self.puffer[ende:]
+        self.fertig, self.puffer = True, b""
+        zeilen = [z for z in kopf.split(b"\r\n") if not z.lower().startswith(b"cache-control:")]
+        return b"\r\n".join(zeilen[:1] + [b"Cache-Control: no-cache"] + zeilen[1:]) + rest
+
+    def rest(self):
+        """Was beim Schliessen noch im Puffer liegt (unvollstaendiger Kopf)."""
+        daten, self.puffer = self.puffer, b""
+        return daten
+
+
 def verbinden(browser, webots, websocket):
     """Leitet in beide Richtungen weiter, bis eine Seite schliesst - in EINEM Thread: eine TLS-Verbindung (https)
     darf nicht aus zwei Threads gleichzeitig gelesen und beschrieben werden; ausserdem spart es einen Thread je Ansicht."""
     rahmen = BrowserRahmen() if websocket else None
+    antwort = None if websocket else AntwortKopf()
     wahl = selectors.DefaultSelector()
     wahl.register(browser, selectors.EVENT_READ, "browser")
     wahl.register(webots, selectors.EVENT_READ, "webots")
@@ -2064,9 +2094,13 @@ def verbinden(browser, webots, websocket):
                 quelle, ziel = (browser, webots) if wer == "browser" else (webots, browser)
                 daten = quelle.recv(65536)
                 if not daten:
+                    if wer == "webots" and antwort is not None and antwort.puffer:
+                        browser.sendall(antwort.rest())
                     return
                 if wer == "browser" and rahmen is not None:
                     daten = rahmen.weiter(daten)
+                elif wer == "webots" and antwort is not None:
+                    daten = antwort.weiter(daten)
                 if daten:
                     ziel.sendall(daten)
     except OSError:

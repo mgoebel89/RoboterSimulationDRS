@@ -1465,7 +1465,11 @@ def main():
                 "zeit": time.strftime("%Y-%m-%dT%H:%M:%S"),
             })
 
-        if cri.connected:
+        still_s = None if letzter is None else jetzt - letzter.received
+        if still_s is not None and still_s > 2.0 and (cri.connected or cri.stumm):
+            # Verbindung steht vielleicht noch, aber iRC meldet nichts (der Client verbindet laufend neu)
+            zeile1 = "%siRC schickt seit %d s keine Daten (%s) - iRC neu starten?" % (platz_text, still_s, cfg["host"])
+        elif cri.connected:
             zeile1 = "%siRC verbunden (%s:%d)" % (platz_text, cfg["host"], cri.connected_port)
         else:
             zeile1 = "%swarte auf iRC (%s, Port %s) ..." % (platz_text, cfg["host"],
