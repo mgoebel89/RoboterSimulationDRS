@@ -30,12 +30,12 @@ class Feld:
     def getSFFloat(self):
         return self.wert
 
-    getSFString = getSFVec3f = getSFColor = getSFFloat
+    getSFString = getSFVec3f = getSFColor = getSFRotation = getSFFloat
 
     def setSFVec3f(self, v):
         self.wert = list(v)
 
-    setSFColor = setSFVec3f
+    setSFColor = setSFRotation = setSFVec3f
 
 
 class Knoten:
@@ -76,8 +76,8 @@ def band_knoten(pos=(0.0, 0.0, 0.0), dreh=EINS, links="anschlag", rechts="anschl
                    "led_links": [0, 0, 0], "led_rechts": [0, 0, 0], "lampe": [0, 0, 0]}, pos, dreh, "Foerderband")
 
 
-def teil(pos, size=(0.02, 0.02, 0.02)):
-    return Knoten({"size": list(size), "name": "teil"}, pos)
+def teil(pos, size=(0.02, 0.02, 0.02), name="teil"):
+    return Knoten({"size": list(size), "name": name, "rotation": [0.0, 0.0, 1.0, 0.0]}, pos)
 
 
 CFG = {"name": "Band 1", "knoten": "BAND_0", "dout_vor": 21, "dout_zurueck": 22, "geschwindigkeit_mm_s": 60,
@@ -280,10 +280,160 @@ class TestKonfiguration(unittest.TestCase):
         with open(os.path.join(ROOT, "controllers", "irc_bridge", "irc_bridge.py"), encoding="utf-8") as f:
             text = f.read()
         for stelle in ("foerderband.Baender(", "baender.schritt(", "baender.taster_pruefen(", "baender.signale()",
-                       "baender.treffer()", '"baender": baender.status()',
-                       "baender.kuerzlich_bewegt(jetzt)"):
+                       "baender.treffer()", '"baender": baender.status(jetzt)',
+                       "baender.kuerzlich_bewegt(jetzt)", "baender.lagerboxen(", "baender.vorrat_parken()",
+                       'worte[0] == "band_nachlegen"', "baender.nachlegen("):
             self.assertIn(stelle, text)
         self.assertTrue(math.isclose(fb.GESCHWINDIGKEIT_MM_S, 60.0))
+
+    def test_proto_lagerbox_wie_controller(self):
+        with open(os.path.join(ROOT, "protos", "Foerderband.proto"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn('"lagerbox"} ende_links', text)
+        self.assertIn("bx0 = L / 2 + 0.003, bxl = 0.12, byb = 0.14, hb = Math.max(0.03, H - 0.025)", text)
+        self.assertIn("const PARK_Z = %d;" % fb.PARK_Z, text)
+        xm, hx, hy, rand = fb.lagerbox_mass(0.6, 0.07)
+        self.assertAlmostEqual(xm, 0.3 + 0.003 + 0.06)              # Mitte der Box (aussen 120 mm lang)
+        self.assertAlmostEqual(hx, 0.06 - 0.003)                    # innen: minus Wand
+        self.assertAlmostEqual(hy, 0.07 - 0.003)
+        self.assertAlmostEqual(rand, 0.045)
+
+
+class TestLagerboxUndVorrat(unittest.TestCase):
+    def setUp(self):
+        self.meldungen = []
+        self.knoten = band_knoten(links="anschlag", rechts="lagerbox")
+        self.band = fb.Band(dict(CFG), self.knoten, -1, -1, log=self.meldungen.append)
+        self.vorrat = [("rot", teil([1.0, 1.0, 0.01], name="rot_0")), ("rot", teil([1.1, 1.0, 0.01], name="rot_1")),
+                       ("blau", teil([1.2, 1.0, 0.01], size=(0.03, 0.02, 0.04), name="blau_0"))]
+        self.band.vorrat_setzen(self.vorrat)
+        self.band.zufall.seed(1)
+
+    def sichtbar(self, extra=()):
+        return [n for _s, n in self.vorrat if n.getId() not in self.band.geparkt] + list(extra)
+
+    def test_rechnung(self):
+        self.assertTrue(fb.in_lagerbox([0.363, 0.0, 0.02], 1, 0.6, 0.07))
+        self.assertFalse(fb.in_lagerbox([0.363, 0.0, 0.05], 1, 0.6, 0.07))    # noch ueber dem Rand
+        self.assertFalse(fb.in_lagerbox([0.363, 0.0, 0.02], -1, 0.6, 0.07))   # links ist keine
+        self.assertTrue(fb.in_lagerbox([-0.363, 0.06, 0.0], -1, 0.6, 0.07))
+        self.assertEqual(fb.parkplatz(0), [-0.4, -0.4])
+        self.assertEqual([round(v, 6) for v in fb.parkplatz(12)], [-0.24, -0.32])
+        self.assertEqual([round(v, 6) for v in fb.achse_winkel_matrix([0, 0, 1, math.pi / 2])], DREH_90)
+        halb = [0.01, 0.01, 0.01]
+        self.assertFalse(fb.einlauf_frei([([-0.28, 0.0, 0.08], halb)], -0.3, -0.27, 0.08, 0.07))
+        self.assertTrue(fb.einlauf_frei([([-0.2, 0.0, 0.08], halb)], -0.3, -0.27, 0.08, 0.07))     # weiter vorn
+        self.assertTrue(fb.einlauf_frei([([-0.28, 0.0, 0.2], halb)], -0.3, -0.27, 0.08, 0.07))     # gegriffen, hoch
+
+    def test_vorrat_parken_und_nachlegen(self):
+        start = self.band.vorrat_parken()
+        self.assertEqual(len(start), 3)
+        self.assertEqual(self.band.geparkt, {n.getId() for _s, n in self.vorrat})
+        for _s, n in self.vorrat:   # unsichtbar auf der Ablage, jedes auf eigenem Platz
+            self.assertLess(n.getPosition()[2], fb.PARK_Z + 0.05)
+            self.assertEqual(start[n.getId()][0], n.getPosition())
+        self.assertEqual(len({tuple(n.getPosition()) for _s, n in self.vorrat}), 3)
+        self.assertEqual(self.band.status()["vorrat"], 3)
+        self.assertTrue(self.band.nachlegen(self.sichtbar(), 0.0))
+        neu = self.sichtbar()
+        self.assertEqual(len(neu), 1)
+        p = neu[0].getPosition()
+        halb_x = 0.015 if neu[0].getField("name").getSFString() == "blau_0" else 0.01
+        self.assertAlmostEqual(p[0], -0.3 + fb.LUECKE + halb_x)      # links am Anschlag
+        self.assertAlmostEqual(p[1], 0.0)
+        self.assertGreater(p[2], 0.07)
+        self.assertTrue(fb.auf_gurt(p, [halb_x, 0.01, p[2] - 0.0705], 0.6, 0.08, 0.07))
+        # gleich noch einmal: Einlauf belegt, Meldung fuer die Anzeige
+        self.assertFalse(self.band.nachlegen(self.sichtbar(), 1.0))
+        self.assertEqual(self.band.status(2.0)["meldung"], "Einlauf belegt")
+        self.assertNotIn("meldung", self.band.status(1.0 + fb.MELDUNG_S + 0.1))
+        neu[0].getField("translation").setSFVec3f([0.1, 0.0, 0.08])   # weitergefoerdert
+        self.assertTrue(self.band.nachlegen(self.sichtbar(), 2.0))
+        self.assertEqual(self.band.status()["vorrat"], 1)
+
+    def test_beide_sorten_kommen(self):
+        self.band.vorrat_parken()
+        sorten = set()
+        for i in range(3):
+            self.assertTrue(self.band.nachlegen(self.sichtbar(), float(i)))
+            for n in self.sichtbar():   # vom Einlauf wegraeumen
+                n.getField("translation").setSFVec3f([0.5 + 0.1 * i, 0.5, 0.01]) if n.getPosition()[0] < -0.2 else None
+            sorten |= {s for s, n in self.vorrat if n.getId() not in self.band.geparkt}
+        self.assertEqual(sorten, {"rot", "blau"})
+        self.assertFalse(self.band.nachlegen(self.sichtbar(), 5.0))
+        self.assertIn("Vorrat leer", self.band.meldung)
+
+    def test_lagerbox_zaehlt_und_parkt(self):
+        self.band.vorrat_parken()
+        self.band.nachlegen(self.sichtbar(), 0.0)
+        drin = self.sichtbar()[0]
+        drin.getField("translation").setSFVec3f([0.36, 0.01, 0.015])   # in die Box gefallen
+        fremd = teil([0.36, -0.03, 0.03], name="fremd")                # kein Vorratsteil: auch zaehlen
+        daneben = teil([0.5, 0.0, 0.01], name="daneben")
+        self.band.lagerboxen([drin, fremd, daneben])
+        self.assertEqual(self.band.im_box, [0, 2])
+        self.assertIn(drin.getId(), self.band.geparkt)
+        self.assertIn(fremd.getId(), self.band.geparkt)
+        self.assertNotIn(daneben.getId(), self.band.geparkt)
+        self.assertLess(fremd.getPosition()[2], -19)
+        self.assertEqual(self.band.status()["box"], [None, 2])
+        self.assertEqual(self.band.status()["vorrat"], 3)
+        self.assertIn("Foerderband Band 1: fremd in der Lagerbox rechts (2)", self.meldungen)
+        # gegriffen ueber der Box zaehlt nicht
+        oben = teil([0.36, 0.0, 0.03], name="oben")
+        self.band.lagerboxen([oben], {oben.getId()})
+        self.assertEqual(self.band.im_box, [0, 2])
+        # "Teile zurueck": Boxen leer, Vorrat wieder komplett geparkt
+        self.band.vorrat_parken()
+        self.assertEqual(self.band.im_box, [0, 0])
+        self.assertNotIn(fremd.getId(), self.band.geparkt)   # fremde Teile legt "Teile zurueck" selbst zurueck
+        self.assertIn("Box rechts: 0", fb.Baender.label(types.SimpleNamespace(liste=[self.band])))
+
+    def test_baender_mit_vorrat_aus_der_welt(self):
+        knoten = band_knoten()
+        teile = {"V_0": teil([1, 1, 0], name="v0"), "V_1": teil([1, 1, 0], name="v1"), "SENSOR_0": band_knoten()}
+        robot = types.SimpleNamespace(getFromDef=lambda name: dict(teile, BAND_0=knoten).get(name))
+        cfg = dict(CFG, nachlegen={"vorrat": [{"sorte": "rot", "knoten": ["V_0", "FEHLT"]}, {"sorte": "gruen",
+                                                                                           "knoten": ["V_1", "SENSOR_0"]},
+                                              {"knoten": ["V_0"]}, "quatsch"]})
+        meldungen = []
+        alle = fb.Baender([cfg], robot, log=meldungen.append)
+        self.assertEqual([(s, n.getField("name").getSFString()) for s, n, _r in alle.liste[0].vorrat],
+                         [("rot", "v0"), ("gruen", "v1")])
+        self.assertEqual(len(meldungen), 2)
+        self.assertEqual(len(alle.vorrat_parken()), 2)
+        self.assertEqual(alle.geparkt(), {teile["V_0"].getId(), teile["V_1"].getId()})
+        self.assertTrue(alle.nachlegen(0, [], 0.0))
+        self.assertFalse(alle.nachlegen(3, [], 0.0))
+        self.assertEqual(fb.vorrat_liste({}), [])
+
+
+class TestAnzeige(unittest.TestCase):
+    def test_band_html_und_welt(self):
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import uebersicht
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "w.wbt"), "w", encoding="utf-8") as f:
+                f.write("#VRML_SIM R2025a utf8\n")
+            with open(os.path.join(tmp, "w.json"), "w", encoding="utf-8") as f:
+                json.dump({"ea": {"baender": [dict(CFG, taster=[None, {"din": 26, "art": "oeffner"}],
+                                                   nachlegen={"vorrat": [{"sorte": "rot", "knoten": ["V"]}]}),
+                                              {"knoten": "kaputt"}]}}, f)
+            alt, uebersicht.WELTEN_DIR = uebersicht.WELTEN_DIR, tmp
+            try:
+                baender = uebersicht.baender_von_welt("w.wbt")
+            finally:
+                uebersicht.WELTEN_DIR = alt
+        self.assertEqual(baender, [{"name": "Band 1", "dout_vor": 21, "dout_zurueck": 22,
+                                    "taster": [None, {"din": 26, "art": "oeffner"}], "nachlegen": True}])
+        schueler = uebersicht.band_html(baender, True)
+        self.assertIn('class="band-nachlegen" data-band="0"', schueler)
+        self.assertIn("vor DOut21 · zurück DOut22", schueler)
+        self.assertIn("ohne Eingang", schueler)
+        self.assertIn("DIn26 · Öffner", schueler)
+        self.assertNotIn("band-nachlegen", uebersicht.band_html(baender, False))   # Lehreransicht: nur sehen
+        self.assertEqual(uebersicht.band_html([], True), "")
+        self.assertIn("/api/band_nachlegen", uebersicht.EA_JS)
 
 
 if __name__ == "__main__":

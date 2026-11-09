@@ -3,7 +3,10 @@
 # Foerderband fuer die ReBeL-Simulation (Stufe FB1). Der Controller "irc_bridge" schiebt Werkstuecke, die auf dem
 # Gurt liegen, mit der Bandgeschwindigkeit weiter (vor = +x, zurueck = -x), solange der Ausgang in iRC an ist.
 # Ursprung = Mitte der Aufstellflaeche, Gurt entlang x, links = -x (Einlauf), rechts = +x.
-# Bandende "anschlag": Teile bleiben dort stehen (Gurt laeuft darunter durch); "offen": sie fallen herunter.
+# Bandende "anschlag": Teile bleiben dort stehen (Gurt laeuft darunter durch); "offen": sie fallen herunter;
+# "lagerbox": sie fallen in eine Box am Ende und werden dort gezaehlt und ausgeblendet (FB2).
+# Vorratsablage: unsichtbarer Boden 20 m unter dem Band. Dort parkt der Controller Werkstuecke, die "Teil nachlegen"
+# am Einlauf (links) auf den Gurt setzt und die in der Lagerbox verschwinden.
 # Je Ende ein Reflexlichttaster an der Seite +y, "taster_links"/"taster_rechts" = Abstand vom Bandende (m),
 # Strahl "taster_hoehe" ueber dem Gurt. Ausgaenge, Eingaenge und Tempo stehen in worlds/<welt>.json unter
 # "ea" -> "baender"; die Felder hier beschreiben nur das Aussehen und die Lage.
@@ -16,8 +19,8 @@ PROTO Foerderband [
   field SFFloat    laenge       0.6
   field SFFloat    breite       0.08
   field SFFloat    hoehe        0.07
-  field SFString{"anschlag", "offen"} ende_links  "anschlag"
-  field SFString{"anschlag", "offen"} ende_rechts "anschlag"
+  field SFString{"anschlag", "offen", "lagerbox"} ende_links  "anschlag"
+  field SFString{"anschlag", "offen", "lagerbox"} ende_rechts "anschlag"
   field SFFloat    taster_links  0.025
   field SFFloat    taster_rechts 0.025
   field SFFloat    taster_hoehe  0.008
@@ -31,6 +34,10 @@ PROTO Foerderband [
   %< const yw = B / 2 + wange / 2 + 0.001, ws = B / 2 + wange + 0.001; >%
   %< const anschlag = { links: fields.ende_links.value === 'anschlag', rechts: fields.ende_rechts.value === 'anschlag' }; >%
   %< const az = 0.03, ad = 0.006; >%
+  %< const box = { links: fields.ende_links.value === 'lagerbox', rechts: fields.ende_rechts.value === 'lagerbox' }; >%
+  # Lagerbox (Masse wie foerderband.lagerbox_mass): innen 114 x 134 mm, Rand hb, Wand zum Band nur 20 mm hoch
+  %< const bw = 0.003, bx0 = L / 2 + 0.003, bxl = 0.12, byb = 0.14, hb = Math.max(0.03, H - 0.025), hn = 0.02; >%
+  %< const PARK_Z = -20; >%
   %< const tx = { links: -L / 2 + fields.taster_links.value, rechts: L / 2 - fields.taster_rechts.value }; >%
   %< const tz = H + fields.taster_hoehe.value; >%
   Solid {
@@ -69,8 +76,9 @@ PROTO Foerderband [
       }
       %< } >%
       %< } >%
-      Pose {   # Getriebemotor am rechten Ende, mit Lampe (grau steht, gruen laeuft, rot Fehler)
-        translation %<= L / 2 >% %<= -(ws + 0.035) >% %<= H - rolle >%
+      %< const motor_x = fields.ende_rechts.value === 'lagerbox' && fields.ende_links.value !== 'lagerbox' ? -L / 2 : L / 2; >%
+      Pose {   # Getriebemotor am rechten Ende (links, wenn rechts eine Lagerbox steht), Lampe grau/gruen/rot
+        translation %<= motor_x >% %<= -(ws + 0.035) >% %<= H - rolle >%
         rotation 1 0 0 1.5708
         children [
           Shape {
@@ -94,6 +102,24 @@ PROTO Foerderband [
           appearance DEF ANSCHLAG PBRAppearance { baseColor 0.0 0.39 0.61 roughness 0.5 metalness 0.1 }
           geometry Box { size %<= ad >% %<= 2 * ws >% %<= az >% }
         } ]
+      }
+      %< } >%
+      %< if (box[seite]) { >%
+      Pose {   # Lagerbox: Boden, Wand am Band (niedrig), aussen, zwei Seiten
+        translation %<= s * (bx0 + bxl / 2) >% 0 0
+        children [
+          Pose { translation 0 0 %<= bw / 2 >% children [ Shape {
+            appearance DEF BOX PBRAppearance { baseColor 0.0 0.39 0.61 roughness 0.6 metalness 0 }
+            geometry Box { size %<= bxl >% %<= byb >% %<= bw >% } } ] }
+          Pose { translation %<= -s * (bxl - bw) / 2 >% 0 %<= hn / 2 >% children [ Shape { appearance USE BOX
+            geometry Box { size %<= bw >% %<= byb >% %<= hn >% } } ] }
+          Pose { translation %<= s * (bxl - bw) / 2 >% 0 %<= hb / 2 >% children [ Shape { appearance USE BOX
+            geometry Box { size %<= bw >% %<= byb >% %<= hb >% } } ] }
+          %< for (const q of [-1, 1]) { >%
+          Pose { translation 0 %<= q * (byb - bw) / 2 >% %<= hb / 2 >% children [ Shape { appearance USE BOX
+            geometry Box { size %<= bxl >% %<= bw >% %<= hb >% } } ] }
+          %< } >%
+        ]
       }
       %< } >%
       Pose {   # Reflexlichttaster an der Seite +y, Strahl quer ueber den Gurt
@@ -135,12 +161,25 @@ PROTO Foerderband [
           children [ Box { size %<= L + 0.04 >% %<= wange >% %<= wange_h >% } ]
         }
         %< } >%
-        %< for (const seite of ['links', 'rechts']) { if (!anschlag[seite]) continue; const s = seite === 'links' ? -1 : 1; >%
+        %< for (const seite of ['links', 'rechts']) { const s = seite === 'links' ? -1 : 1; >%
+        %< if (anschlag[seite]) { >%
         Pose {
           translation %<= s * (L / 2 + ad / 2) >% 0 %<= H + az / 2 >%
           children [ Box { size %<= ad >% %<= 2 * ws >% %<= az >% } ]
         }
         %< } >%
+        %< if (box[seite]) { const xm = s * (bx0 + bxl / 2); >%
+        Pose { translation %<= xm >% 0 %<= bw / 2 >% children [ Box { size %<= bxl >% %<= byb >% %<= bw >% } ] }
+        Pose { translation %<= xm - s * (bxl - bw) / 2 >% 0 %<= hn / 2 >% children [ Box { size %<= bw >% %<= byb >% %<= hn >% } ] }
+        Pose { translation %<= xm + s * (bxl - bw) / 2 >% 0 %<= hb / 2 >% children [ Box { size %<= bw >% %<= byb >% %<= hb >% } ] }
+        Pose { translation %<= xm >% %<= (byb - bw) / 2 >% %<= hb / 2 >% children [ Box { size %<= bxl >% %<= bw >% %<= hb >% } ] }
+        Pose { translation %<= xm >% %<= -(byb - bw) / 2 >% %<= hb / 2 >% children [ Box { size %<= bxl >% %<= bw >% %<= hb >% } ] }
+        %< } >%
+        %< } >%
+        Pose {   # Vorratsablage (unsichtbar): geparkte Werkstuecke liegen hier
+          translation 0 0 %<= PARK_Z - 0.05 >%
+          children [ Box { size 6 6 0.1 } ]
+        }
       ]
     }
   }

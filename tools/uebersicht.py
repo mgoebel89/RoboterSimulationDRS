@@ -1444,6 +1444,18 @@ webots-view { display:block; width:100%%; height:100%%; position:relative; }
 .ea .leuchte.an[data-farbe=weiss] .lampe { background:#fff; box-shadow:0 0 12px #fff; }
 #ea-meldung { color:#ffd27a; font-size:.85em; max-width:240px; }
 .ea.nur-sehen .taster { cursor:default; pointer-events:none; }
+.ea.band-feld { right:10px; top:10px; bottom:auto; border-radius:0 0 0 var(--ecke); min-width:210px; }
+.ea .band { display:flex; flex-direction:column; gap:3px; }
+.ea .band + .band { border-top:1px solid rgba(255,255,255,.2); padding-top:6px; }
+.ea .band-kopf { display:flex; align-items:center; gap:8px; padding:2px 4px; }
+.ea .band-kopf small b { font-weight:400; color:#fff; }
+.ea .band.laeuft .band-kopf .lampe { background:#2ecc71; box-shadow:0 0 10px #2ecc71; border-color:#fff; }
+.ea .band.fehler .band-kopf .lampe { background:#e74c3c; box-shadow:0 0 10px #e74c3c; border-color:#fff; }
+.ea .sensor.band-taster.an .lampe { background:#f5c518; box-shadow:0 0 10px #f5c518; }
+.ea .band-box { padding:1px 4px 1px 38px; color:#aeb6c6; font-size:.9em; } .ea .band-box b { color:#fff; }
+.ea .band-nachlegen { margin:4px 4px 0; border:0; border-radius:5px; background:var(--blau); color:#fff; padding:5px 10px;
+  font:inherit; cursor:pointer; align-self:flex-start; } .ea .band-nachlegen:disabled { opacity:.6; cursor:default; }
+.ea .band-info { color:#ffd27a; font-size:.85em; padding:0 4px; }
 </style></head>
 <body><header>%(marke)s <span class="unter">%(titel)s</span> <span id="hinweis">verbinde ...</span>
 <div class="knoepfe">%(knoepfe)s</div></header>
@@ -2244,9 +2256,34 @@ function eaZustand(d) {   // abgerufen von platzHolen in der Ansicht (gemeinsam 
     const mm = (d.naeherung_mm || [])[i];
     s.querySelector('.ini-abstand').textContent = mm == null ? '' : ' · ' + String(mm).replace('.', ',') + ' mm';
   });
+  (d.baender || []).forEach((b, i) => {   // Foerderbaender (FB1/FB2): Lauf, Taster, Lagerbox, Vorrat
+    const el = document.querySelector('.ea .band[data-band="' + i + '"]');
+    if (!el) return;
+    el.classList.toggle('laeuft', !!b.lauf && !b.fehler);
+    el.classList.toggle('fehler', !!b.fehler);
+    el.querySelector('.band-lauf').textContent = b.fehler ? 'Fehler: vor und zurück gleichzeitig'
+      : b.lauf > 0 ? 'fährt vor' : b.lauf < 0 ? 'fährt zurück' : 'steht';
+    (b.taster || []).forEach((an, s) => el.querySelector('.band-taster[data-seite="' + s + '"]')?.classList.toggle('an', !!an));
+    [0, 1].forEach(s => {
+      const x = el.querySelector('.band-box[data-seite="' + s + '"]'), n = (b.box || [])[s];
+      if (!x) return;
+      x.hidden = n == null;
+      if (n != null) x.querySelector('b').textContent = n;
+    });
+    const info = el.querySelector('.band-info'), text = b.meldung || (b.vorrat != null ? 'Vorrat: ' + b.vorrat + ' Teile' : '');
+    info.hidden = !text; info.textContent = text; info.classList.toggle('warnung', !!b.meldung);
+  });
   const m = document.getElementById('ea-meldung');
   if (m) { m.hidden = d.ea_ok !== false; m.textContent = d.ea_meldung || ''; }
 }
+document.querySelectorAll('.ea .band-nachlegen').forEach(k => k.addEventListener('click', async () => {
+  if (!EA_STEUERN) return;
+  k.disabled = true;
+  const r = await fetch('/api/band_nachlegen', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                                body: JSON.stringify({nr: Number(k.dataset.band)})}).catch(() => null);
+  if (!r || !r.ok) alert(((r && await r.json().catch(() => ({}))) || {}).fehler || 'Das hat nicht geklappt.');
+  setTimeout(() => { k.disabled = false; }, 400);
+}));
 (window.platzHoerer = window.platzHoerer || []).push(eaZustand);
 </script>"""
 
@@ -2258,6 +2295,49 @@ def ea_von_welt(welt_datei):
         return baukasten.ea_werte({"ea": (welt or {}).get("ea") or {}})
     except baukasten.BaukastenFehler:
         return {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []}
+
+
+def baender_von_welt(welt_datei):
+    """Foerderbaender einer Welt (worlds/<welt>.json, "ea" -> "baender") fuer die Anzeige, grob geprueft (die
+    eigentliche Pruefung macht der Controller, controllers/irc_bridge/foerderband.py)."""
+    welt = next((w for w in verwalter.lese_welten(WELTEN_DIR) if w["datei"] == welt_datei), None)
+    roh = ((welt or {}).get("ea") or {}).get("baender") if isinstance((welt or {}).get("ea"), dict) else None
+    baender = []
+    for b in roh if isinstance(roh, list) else []:
+        if not (isinstance(b, dict) and isinstance(b.get("dout_vor"), int) and isinstance(b.get("dout_zurueck"), int)
+                and isinstance(b.get("knoten"), str)):
+            continue
+        taster = b.get("taster") if isinstance(b.get("taster"), list) else []
+        taster = [t if isinstance(t, dict) and isinstance(t.get("din"), int) and not isinstance(t.get("din"), bool)
+                  else None for t in (taster + [None, None])[:2]]
+        nachlegen = b.get("nachlegen") if isinstance(b.get("nachlegen"), dict) else {}
+        baender.append({"name": str(b.get("name") or "Band %d" % (len(baender) + 1))[:24], "dout_vor": b["dout_vor"],
+                        "dout_zurueck": b["dout_zurueck"], "taster": taster,
+                        "nachlegen": bool(nachlegen.get("vorrat"))})
+    return baender[:2]
+
+
+def band_html(baender, steuern):
+    """Foerderbaender oben rechts: Lauf, Reflextaster, Lagerbox (blendet der Zustand ein), Knopf Teil nachlegen."""
+    if not baender:
+        return ""
+    teile = []
+    for i, b in enumerate(baender):
+        zeilen = ['<div class="band-kopf"><span class="lampe"></span><span>%s<small>vor DOut%d · zurück DOut%d · '
+                  '<b class="band-lauf">steht</b></small></span></div>' % (html.escape(b["name"]), b["dout_vor"], b["dout_zurueck"])]
+        for s, (seite, t) in enumerate(zip(("links", "rechts"), b["taster"])):
+            zeilen.append('<div class="sensor band-taster" data-seite="%d"><span class="lampe"></span><span>Taster %s<small>%s'
+                          '</small></span></div>' % (s, seite, "Reflextaster · " + (
+                              "DIn%d · %s" % (t["din"], "Öffner" if t.get("art") == "oeffner" else "Schließer")
+                              if t else "ohne Eingang")))
+        zeilen += ['<div class="band-box" data-seite="%d" hidden>Lagerbox %s: <b>0</b></div>' % (s, seite)
+                   for s, seite in enumerate(("links", "rechts"))]
+        if b["nachlegen"] and steuern:
+            zeilen.append('<button class="band-nachlegen" data-band="%d" title="Ein Werkstück aus dem Vorrat an den Einlauf '
+                          '(linkes Bandende) legen">Teil nachlegen</button>' % i)
+        zeilen.append('<div class="band-info" hidden></div>')
+        teile.append('<div class="band" data-band="%d">%s</div>' % (i, "".join(zeilen)))
+    return '<div class="ea band-feld">%s</div>' % "".join(teile)
 
 
 def sensor_text(s):
@@ -2325,7 +2405,7 @@ def seite_viewer(platz, welt=None):
                        titel, aufgabe_md.zu_html(welt["aufgabe"] or "Keine Aufgabe hinterlegt."), pdf))
         schueler_js = SCHUELER_JS
     ea = ea_von_welt(platz["welt"])
-    ea_teil = ea_html(ea, welt is not None)
+    ea_teil = ea_html(ea, welt is not None) + band_html(baender_von_welt(platz["welt"]), welt is not None)
     ea_js = (EA_JS.replace("%%STEUERN%%", "true" if welt is not None else "false")
              .replace("%%PLATZ%%", html.escape(platz["platz"]))) if ea_teil else ""
     return VIEWER % {"stil": STIL, "marke": marke(), "platz": html.escape(platz["platz"]), "titel": titel, "ea": ea_teil, "ea_js": ea_js,
@@ -3487,6 +3567,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {"ok": True})
             elif pfad == "/api/taster":
                 VERWALTER.taster(self._pc(), daten.get("nr"), daten.get("an"))
+                self._json(200, {"ok": True})
+            elif pfad == "/api/band_nachlegen":
+                VERWALTER.band_nachlegen(self._pc(), daten.get("nr"))
                 self._json(200, {"ok": True})
             elif pfad == "/api/beenden":
                 VERWALTER.beenden_fuer(self._pc())

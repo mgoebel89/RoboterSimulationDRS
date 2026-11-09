@@ -178,6 +178,16 @@ class TestVergabe(Grundlage):
             with self.assertRaises(verwalter.VerwalterFehler, msg=(nr, an)):
                 self.v.taster("pc-a", nr, an)
 
+    def test_band_nachlegen(self):
+        with self.assertRaises(verwalter.VerwalterFehler):
+            self.v.band_nachlegen("pc-a", 0)               # keine Simulation
+        self.v.starten("pc-a", "tisch.wbt")
+        self.v.band_nachlegen("pc-a", 1)
+        self.assertEqual(self.befehl("01"), "band_nachlegen 1")
+        for nr in (2, -1, "0", True, None):
+            with self.assertRaises(verwalter.VerwalterFehler, msg=nr):
+                self.v.band_nachlegen("pc-a", nr)
+
 
 class TestAutomatischesEnde(Grundlage):
     def test_leerlauf(self):

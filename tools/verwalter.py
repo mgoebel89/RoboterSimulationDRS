@@ -224,6 +224,15 @@ class Verwalter:
             raise VerwalterFehler("Ungueltiger Taster.")
         self.befehl_fn(eigener["platz"], "taster %d %d" % (nr, 1 if an else 0))
 
+    def band_nachlegen(self, pc, nr):
+        """Knopf "Teil nachlegen" am Foerderband nr (0 oder 1): der Controller setzt ein Vorratsteil an den Einlauf."""
+        eigener = self.platz_von(pc)
+        if eigener is None:
+            raise VerwalterFehler("Du hast gerade keine Simulation.")
+        if isinstance(nr, bool) or not isinstance(nr, int) or not 0 <= nr < 2:
+            raise VerwalterFehler("Ungueltiges Foerderband.")
+        self.befehl_fn(eigener["platz"], "band_nachlegen %d" % nr)
+
     def beenden(self, platz, grund="beendet"):
         with self.lock:
             self.helfer("entfernen", platz["platz"])

@@ -1236,9 +1236,8 @@ def main():
     ea_cfg = ea.lade_ea(robot.getWorldPath())
     baender = foerderband.Baender(ea_cfg["baender"], robot, cfg["din_versatz"], cfg["dout_versatz"], log=print)
     for b in baender.liste:
-        print("Foerderband %s: vor DOut%d, zurueck DOut%d, %.0f mm/s, Enden %s/%s" % (
-            b.name, b.cfg["dout_vor"], b.cfg["dout_zurueck"], b.tempo * 1000,
-            *("Anschlag" if a else "offen" for a in b.anschlag)))
+        print("Foerderband %s: vor DOut%d, zurueck DOut%d, %.0f mm/s, Enden %s/%s, Vorrat %d Teile" % (
+            b.name, b.cfg["dout_vor"], b.cfg["dout_zurueck"], b.tempo * 1000, b.ende[0], b.ende[1], len(b.vorrat)))
     crash_zustand = crash.CrashZustand("stopp" if kollision_stoppt or grenzen.stoppt or baender.liste else "melden",
                                        log=print)
     stopper = None
@@ -1248,9 +1247,14 @@ def main():
     def in_mm(p):   # Weltpunkt -> Basis-Koordinaten wie in iRC (mm)
         return [v * 1000.0 for v in m_vec(m_t(me.getOrientation()), sub(p, me.getPosition()))]
 
-    teile = werkstuecke(robot)
+    alle_teile = werkstuecke(robot)
+    teile = alle_teile   # ohne die geparkten Vorratsteile der Foerderbaender (FB2)
     startlagen = {}
-    merke_startlagen(teile, startlagen)
+    merke_startlagen(alle_teile, startlagen)
+
+    def sichtbar():
+        geparkt = baender.geparkt()
+        return [t for t in alle_teile if t.getId() not in geparkt] if geparkt else alle_teile
     befehlsdatei = befehl_pfad(cfg)
     hole_befehle(befehlsdatei)   # alte Befehle von vor dem Start verwerfen
 
@@ -1303,6 +1307,9 @@ def main():
     while robot.step(step) != -1:
         if erster_schritt:   # jetzt kennt Webots die Lage der Aufbauten: Teile darauf ab Start festhalten
             erster_schritt = False
+            if baender.liste:   # Vorrat der Foerderbaender auf die Vorratsablage; "Teile zurueck" legt ihn dorthin
+                startlagen.update(baender.vorrat_parken())
+                teile = sichtbar()
             fest = greifer.startlagen_festhalten(teile, startlagen)
             if fest:
                 print("%d Werkstueck(e) liegen auf Aufbauten oder aufeinander und werden festgehalten, bis sie gegriffen "
@@ -1320,7 +1327,13 @@ def main():
         for befehl in hole_befehle(befehlsdatei):
             worte = befehl.split()
             if befehl == "teile_zuruecksetzen":
-                teile_zuruecksetzen(teile, startlagen, greifer)
+                teile_zuruecksetzen(alle_teile, startlagen, greifer)
+                if baender.liste:
+                    baender.vorrat_parken()
+                    teile = sichtbar()
+            elif len(worte) == 2 and worte[0] == "band_nachlegen" and worte[1].isdigit():
+                if baender.nachlegen(int(worte[1]), teile, jetzt):
+                    teile = sichtbar()
             elif len(worte) == 3 and worte[0] == "taster" and worte[1].isdigit():
                 taster.ereignis(int(worte[1]), worte[2] == "1", jetzt)
             elif befehl == "kollision_quittieren":
@@ -1342,8 +1355,9 @@ def main():
                     signale[nr] = signale.get(nr, False) or pegel
             app.setze(signale)
         if jetzt - teile_zeit > 2.0:   # neu eingefuegte Teile erkennen
-            teile = werkstuecke(robot)
-            merke_startlagen(teile, startlagen)
+            alle_teile = werkstuecke(robot)
+            merke_startlagen(alle_teile, startlagen)
+            teile = sichtbar()
             teile_zeit = jetzt
 
         # Greifer erst schalten, wenn die Gelenke die gemeldete Stellung erreicht haben
@@ -1405,6 +1419,8 @@ def main():
             if greifer.teil is not None:
                 ausnehmen.add(greifer.teil.getId())
             baender.schritt(teile, step / 1000.0, dout, jetzt, ausnehmen)
+            baender.lagerboxen(teile, ausnehmen)   # hineingefallene Teile zaehlen und parken
+            teile = sichtbar()
             baender.taster_pruefen(teile)
         greifer.mitfuehren()
         greifer.festhalten()
@@ -1481,7 +1497,7 @@ def main():
                 "sensoren": list(sensorfelder.belegt),
                 "naeherung": list(naeherung.an),
                 "naeherung_mm": list(naeherung.abstand_mm),
-                "baender": baender.status(),
+                "baender": baender.status(jetzt),
                 "leuchten": ea.leuchten_zustand(ea_cfg["leuchten"], None if letzter is None else letzter.dout,
                                                 cfg["dout_versatz"]),
                 "ea_meldung": None if app is None else app.meldung,
