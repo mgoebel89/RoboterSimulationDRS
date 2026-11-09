@@ -1787,11 +1787,17 @@ function kollisionAnzeigen(d) {   // Stand aus der Statusdatei des Platzes (plat
   const kz = d && d.kollision, cr = d && d.crash, zustand = cr ? cr.zustand : 'frei';
   let text = null, zusatz = cr && cr.meldung, art = '';
   if (zustand === 'crash') {
-    text = cr.text ? 'Grenze verletzt: ' + cr.text : 'Crash: ' + ortText(cr); art = 'crash';
+    text = cr.art === 'band' ? 'Förderband: ' + cr.text : cr.text ? 'Grenze verletzt: ' + cr.text : 'Crash: ' + ortText(cr); art = 'crash';
     zusatz = (cr.programm ? 'Programm „' + cr.programm + '“ angehalten. ' : 'Programm angehalten. ') + (cr.meldung || '');
+  } else if (zustand === 'freifahren' && cr.art === 'band') {
+    text = 'Quittiert: einen der beiden Ausgänge des Förderbands ausschalten'; art = 'freifahren';
+    zusatz = 'Das Band steht, solange vor und zurück gleichzeitig an sind.';
   } else if (zustand === 'freifahren') {
     text = 'Quittiert: Roboter jetzt von Hand frei fahren'; art = 'freifahren';
     zusatz = 'Berührung mit ' + cr.b + ' zählt nicht, bis der Roboter frei ist.' + (kz && kz.aktiv ? ' Noch: ' + ortText(kz) : '');
+  } else if (kz && kz.art === 'band') {   // Foerderband: vor und zurueck gleichzeitig (FB1)
+    text = 'Förderband: ' + kz.text; art = kz.aktiv ? '' : 'vorbei';
+    zusatz = zustand === 'pruefe' ? 'Programm wird angehalten ...' : cr && cr.meldung ? '' : 'Das Band steht.';
   } else if (kz && (kz.art === 'grenze' || kz.art === 'grenze_warnung')) {   // Arbeitsraum, Sperrzone, Achsgrenze (K4)
     text = 'Grenze: ' + kz.text; art = kz.aktiv ? '' : 'vorbei';
     zusatz = kz.art === 'grenze_warnung' ? 'Nur Warnung, das Programm läuft weiter.' : zustand === 'pruefe' ? 'Programm wird angehalten ...' : '';
@@ -3228,7 +3234,7 @@ class Handler(BaseHTTPRequestHandler):
                 st = lese_status(platz["platz"]) or {}
                 self._json(200, {k: st.get(k) for k in ("tcp", "tcp_y", "hilfe", "greifer_zu", "teil", "taster",
                                                         "leuchten", "sensoren", "naeherung", "naeherung_mm", "ea_meldung", "ea_ok",
-                                                        "kollision", "crash")})
+                                                        "kollision", "crash", "baender")})
         elif re.fullmatch(r"/welten/[A-Za-z0-9_-]{1,60}\.(png|jpg|pdf)", pfad):
             datei = os.path.join(WELTEN_DIR, pfad.rsplit("/", 1)[1])
             try:

@@ -28,6 +28,7 @@ from controller import Supervisor
 from cri_client import CriClient
 import crash
 import ea
+import foerderband
 import kollision
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1130,10 +1131,11 @@ class KollisionsWaechter:
         self.dauer_ms = 0.8 * self.dauer_ms + 0.2 * (time.perf_counter() - t0) * 1000
         return self.treffer
 
-    def pruefe_werkstuecke(self, teile):
+    def pruefe_werkstuecke(self, teile, band_teile=frozenset()):
         """Werkstueck gegen Werkstueck (nur Meldung): ein fallendes oder geschobenes Teil (oder eines, das es bei der
         letzten Pruefung noch war) beruehrt ein anderes. Ruhende Teile, die sich beruehren, zaehlen nicht; das
-        gegriffene Teil prueft schon pruefen()."""
+        gegriffene Teil prueft schon pruefen(). band_teile: Ids, die ein Foerderband eben verschoben hat; sie
+        zaehlen untereinander nicht (gestaut, gemeinsam vom Band gefallen)."""
         self.teil_treffer = []
         if not self.an:
             return []
@@ -1150,7 +1152,8 @@ class KollisionsWaechter:
                        kollision.Quader(name, lage, [0.0, 0.0, 0.0], [v / 2 for v in node.getField("size").getSFVec3f()]))
             andere = [kollision.Umgebungsteil(n.getField("name").getSFString(), "werkstueck", self._wolke_werkstueck(n),
                                               (n.getPosition(), n.getOrientation()), n.getId())
-                      for n in teile if n.getId() not in (node.getId(), gegriffen)]
+                      for n in teile if n.getId() not in (node.getId(), gegriffen)
+                      and not (node.getId() in band_teile and n.getId() in band_teile)]
             for t in kollision.pruefe([koerper], andere, None, 0.001, 0.0, hoechstens=1):
                 self.teil_treffer.append(dict(t, art="werkstueck"))
         return self.teil_treffer
@@ -1229,7 +1232,15 @@ def main():
             "Arbeitsraum %s bis %s mm" % (e["arbeitsraum"]["min_mm"], e["arbeitsraum"]["max_mm"]) if e["arbeitsraum"] else "kein Arbeitsraum",
             len(e["sperrzonen"]), "eigene" if e["achsen"] else "wie iRC"))
     kollision_stoppt = waechter.an and waechter.einst["reaktion"] == "stopp"
-    crash_zustand = crash.CrashZustand("stopp" if kollision_stoppt or grenzen.stoppt else "melden", log=print)
+    # Foerderbaender (FB1): "vor" und "zurueck" gleichzeitig haelt das Programm an wie eine Kollision
+    ea_cfg = ea.lade_ea(robot.getWorldPath())
+    baender = foerderband.Baender(ea_cfg["baender"], robot, cfg["din_versatz"], cfg["dout_versatz"], log=print)
+    for b in baender.liste:
+        print("Foerderband %s: vor DOut%d, zurueck DOut%d, %.0f mm/s, Enden %s/%s" % (
+            b.name, b.cfg["dout_vor"], b.cfg["dout_zurueck"], b.tempo * 1000,
+            *("Anschlag" if a else "offen" for a in b.anschlag)))
+    crash_zustand = crash.CrashZustand("stopp" if kollision_stoppt or grenzen.stoppt or baender.liste else "melden",
+                                       log=print)
     stopper = None
     if crash_zustand.stoppen and not os.environ.get("VORSCHAU_BILD"):
         stopper = crash.ProgrammStopp(cfg["host"], cfg["app_port"], cfg["app_name"], log=print).start()
@@ -1243,8 +1254,7 @@ def main():
     befehlsdatei = befehl_pfad(cfg)
     hole_befehle(befehlsdatei)   # alte Befehle von vor dem Start verwerfen
 
-    # Taster, Leuchtmelder und Sensorflaechen der Welt (worlds/<welt>.json, "ea")
-    ea_cfg = ea.lade_ea(robot.getWorldPath())
+    # Taster, Leuchtmelder und Sensorflaechen der Welt (worlds/<welt>.json, "ea", oben geladen)
     taster = ea.Taster(ea_cfg["taster"], cfg["din_versatz"])
     sensorfelder = ea.Sensoren(ea_cfg["sensoren"], robot, cfg["din_versatz"], log=print)
     # Naeherungssensoren (G2) brauchen die Oberflaeche jedes Werkstuecks fein abgetastet (1 mm, einmal je Teil)
@@ -1262,11 +1272,14 @@ def main():
     sensor_hindernisse = [("Näherungssensor %s" % n["name"], k, n.get("durchmesser_mm", 12.0) / 1000.0, n.get("laenge_mm", 50.0) / 1000.0)
                 for n, k in zip(naeherung.liste, naeherung.knoten)]
     app = None
-    if (ea_cfg["taster"] or sensorfelder.liste or naeherung.liste) and not os.environ.get("VORSCHAU_BILD"):
+    band_taster = any(t is not None for b in baender.liste for t in b.taster_cfg)
+    if (ea_cfg["taster"] or sensorfelder.liste or naeherung.liste or band_taster) and not os.environ.get("VORSCHAU_BILD"):
         app = ea.AppVerbindung(cfg["host"], cfg["app_port"], cfg["app_name"], log=print).start()
-        print("E/A: %d Taster, %d Leuchtmelder, %d Sensorflaechen, %d Naeherungssensoren"
-              % (len(ea_cfg["taster"]), len(ea_cfg["leuchten"]), len(sensorfelder.liste), len(naeherung.liste)))
-    status_takt = 0.25 if ea_cfg["taster"] or ea_cfg["leuchten"] or sensorfelder.liste or naeherung.liste else 1.0
+        print("E/A: %d Taster, %d Leuchtmelder, %d Sensorflaechen, %d Naeherungssensoren, %d Foerderbaender"
+              % (len(ea_cfg["taster"]), len(ea_cfg["leuchten"]), len(sensorfelder.liste), len(naeherung.liste),
+                 len(baender.liste)))
+    status_takt = (0.25 if ea_cfg["taster"] or ea_cfg["leuchten"] or sensorfelder.liste or naeherung.liste
+                   or baender.liste else 1.0)
     sensor_zeit = 0.0
     teile_zeit = start_zeit = time.monotonic()
     label_zeit = hilfe_zeit = 0.0
@@ -1324,7 +1337,7 @@ def main():
         if app is not None:
             taster.weiter(jetzt)
             signale = taster.signale()
-            for quelle in (sensorfelder.signale(), naeherung.signale()):   # mehrere am selben Eingang: ODER
+            for quelle in (sensorfelder.signale(), naeherung.signale(), baender.signale()):   # mehrere am selben Eingang: ODER
                 for nr, pegel in quelle.items():
                     signale[nr] = signale.get(nr, False) or pegel
             app.setze(signale)
@@ -1385,25 +1398,36 @@ def main():
                           % (abgleich_bezug, lokal[0] * 1000, lokal[1] * 1000, lokal[2] * 1000,
                              st.cart[0], st.cart[1], st.cart[2], abweichung_mm))
 
+        if baender.liste and not erster_schritt:
+            # meldet iRC nichts mehr (getrennt, haengt), bleibt das Band stehen statt endlos weiterzulaufen
+            dout = letzter.dout if letzter is not None and jetzt - letzter.received < 2.0 else 0
+            ausnehmen = set(greifer.abgelegt)
+            if greifer.teil is not None:
+                ausnehmen.add(greifer.teil.getId())
+            baender.schritt(teile, step / 1000.0, dout, jetzt, ausnehmen)
+            baender.taster_pruefen(teile)
         greifer.mitfuehren()
         greifer.festhalten()
         # Takt nach Rechenzeit: 10-mal je Sekunde, bei teurer Pruefung (viele Teile nah am Roboter) seltener
         kollision_takt = 0.1 if waechter.dauer_ms < 8 else 0.2 if waechter.dauer_ms < 20 else 0.3
-        if (waechter.an or grenzen.an) and not vorschau and jetzt - kollision_zeit >= kollision_takt and not erster_schritt:
+        if (waechter.an or grenzen.an or baender.liste) and not vorschau and jetzt - kollision_zeit >= kollision_takt \
+                and not erster_schritt:
             kollision_zeit = jetzt
             treffer = [dict(t, art="roboter") for t in waechter.pruefen(teile, aufbauten(robot), tischhoehe(), sensor_hindernisse)]
+            treffer += baender.treffer()   # vor und zurueck gleichzeitig (FB1)
             if grenzen.an:   # Arbeitsraum, Sperrzonen, Achsgrenzen (K4)
                 gelenke = None if letzter is None else letzter.joints(cfg["gelenkwerte"])
                 for t in grenzen.pruefe(waechter.hand(), (me.getPosition(), me.getOrientation()), gelenke, tcp.getPosition()):
                     (treffer if t["reaktion"] == "stopp" else grenz_warnungen).append(
                         dict(t, art="grenze" if t["reaktion"] == "stopp" else "grenze_warnung"))
             # angehalten wird bei Kollisionen (wenn so eingestellt) und bei Grenzen mit Reaktion Stopp
-            if crash_zustand.kollision([t for t in treffer if kollision_stoppt or t["art"] == "grenze"], jetzt) and stopper is not None:
+            if crash_zustand.kollision([t for t in treffer if kollision_stoppt or t["art"] in ("grenze", "band")], jetzt) \
+                    and stopper is not None:
                 stopper.anhalten()
             elif crash_zustand.zustand == "pruefe" and stopper is None:
                 crash_zustand.ergebnis("fehler", jetzt, text="keine Verbindung zu iRC vorgesehen")
             # Werkstueck gegen Werkstueck (fallend, geschoben): nur Meldung, haelt nichts an
-            gemeldet = waechter.pruefe_werkstuecke(teile)
+            gemeldet = waechter.pruefe_werkstuecke(teile, baender.kuerzlich_bewegt(jetzt))
             gemeldet = treffer or grenz_warnungen or gemeldet
             aktiv_jetzt = bool(gemeldet)
             grenz_warnungen = []
@@ -1413,6 +1437,8 @@ def main():
                     p_mm, art = in_mm(gemeldet[0]["punkt"]), gemeldet[0].get("art")
                     if art in ("grenze", "grenze_warnung"):
                         print("GRENZE%s: %s" % (" (Warnung)" if art == "grenze_warnung" else "", gemeldet[0]["text"]))
+                    elif art == "band":
+                        print("FOERDERBAND: %s" % gemeldet[0]["text"])
                     else:
                         print("KOLLISION%s: %s mit %s bei x=%.0f y=%.0f z=%.0f mm" % (
                             " (Werkstueck, nur Meldung)" if art == "werkstueck" else "", neu[0], neu[1], p_mm[0], p_mm[1], p_mm[2]))
@@ -1455,6 +1481,7 @@ def main():
                 "sensoren": list(sensorfelder.belegt),
                 "naeherung": list(naeherung.an),
                 "naeherung_mm": list(naeherung.abstand_mm),
+                "baender": baender.status(),
                 "leuchten": ea.leuchten_zustand(ea_cfg["leuchten"], None if letzter is None else letzter.dout,
                                                 cfg["dout_versatz"]),
                 "ea_meldung": None if app is None else app.meldung,
@@ -1477,6 +1504,7 @@ def main():
         zeile2 = "Greifer %s: %s" % (greifer.typ, greifer.meldung or "offen")
         zeile3 = "" if abweichung_mm is None else "Abgleich %s: %.1f mm" % (abgleich_bezug, abweichung_mm)
         zeile4 = "" if echtzeit > 0.8 else "Simulation langsamer als Echtzeit (%.2fx)" % echtzeit
+        zeile4 = "\n".join(z for z in (baender.label(), zeile4) if z)
         # Beschriftungen (nicht im Vorschaubild). Webots schickt sie nur bei Aenderung an
         # die Browser: hoechstens 4x pro Sekunde (sonst kommt ein langsamer Browser nicht
         # mit), und alle 2 s mit wechselndem Leerzeichen, damit neue Zuschauer sie auch bekommen.

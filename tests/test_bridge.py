@@ -634,7 +634,7 @@ class TestEinUndAusgaenge(unittest.TestCase):
                 json.dump({"titel": "x", "ea": {"taster": self.TASTER + [{"din": "21"}], "leuchten": [{"dout": 32}]}}, f)
             cfg = ea.lade_ea(os.path.join(tmp, "w.wbt"))
             self.assertEqual((len(cfg["taster"]), len(cfg["leuchten"])), (3, 1))
-            self.assertEqual(ea.lade_ea(os.path.join(tmp, "fehlt.wbt")), {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []})
+            self.assertEqual(ea.lade_ea(os.path.join(tmp, "fehlt.wbt")), {"taster": [], "leuchten": [], "sensoren": [], "naeherung": [], "baender": []})
 
 
 class _Sensorknoten:

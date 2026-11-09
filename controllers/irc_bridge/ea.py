@@ -75,14 +75,16 @@ def lade_ea(welt_pfad):
         with open(os.path.splitext(welt_pfad)[0] + ".json", encoding="utf-8") as f:
             ea = json.load(f).get("ea") or {}
     except (OSError, ValueError, AttributeError):
-        return {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []}
+        return {"taster": [], "leuchten": [], "sensoren": [], "naeherung": [], "baender": []}
     taster = [t for t in ea.get("taster", []) if isinstance(t, dict) and isinstance(t.get("din"), int)]
     leuchten = [l for l in ea.get("leuchten", []) if isinstance(l, dict) and isinstance(l.get("dout"), int)]
     sensoren = [s for s in ea.get("sensoren", []) if isinstance(s, dict) and isinstance(s.get("knoten"), str)
                 and (isinstance(s.get("din"), int) or s.get("typ") == "farbe")]
     naeherung = [n for n in ea.get("naeherung", []) if isinstance(n, dict) and isinstance(n.get("knoten"), str)
                  and isinstance(n.get("din"), int)]
-    return {"taster": taster[:16], "leuchten": leuchten[:16], "sensoren": sensoren[:32], "naeherung": naeherung[:32]}
+    baender = ea.get("baender") if isinstance(ea.get("baender"), list) else []   # geprueft in foerderband.lade
+    return {"taster": taster[:16], "leuchten": leuchten[:16], "sensoren": sensoren[:32], "naeherung": naeherung[:32],
+            "baender": baender}
 
 
 class Taster:

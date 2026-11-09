@@ -181,7 +181,8 @@ class CrashZustand:
         if self.zustand in ("crash", "pruefe", "freifahren") and self.ausloeser:
             p = self.ausloeser["punkt"]
             d.update(a=self.ausloeser["a"], b=self.ausloeser["b"], punkt=[round(v, 4) for v in p],
-                     punkt_mm=[round(v, 1) for v in in_mm(p)], text=self.ausloeser.get("text"))
+                     punkt_mm=[round(v, 1) for v in in_mm(p)], text=self.ausloeser.get("text"),
+                     art=self.ausloeser.get("art"))
         return d
 
 

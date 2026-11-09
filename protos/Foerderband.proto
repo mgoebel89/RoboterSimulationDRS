@@ -1,0 +1,147 @@
+#VRML_SIM R2025a utf8
+# template language: javascript
+# Foerderband fuer die ReBeL-Simulation (Stufe FB1). Der Controller "irc_bridge" schiebt Werkstuecke, die auf dem
+# Gurt liegen, mit der Bandgeschwindigkeit weiter (vor = +x, zurueck = -x), solange der Ausgang in iRC an ist.
+# Ursprung = Mitte der Aufstellflaeche, Gurt entlang x, links = -x (Einlauf), rechts = +x.
+# Bandende "anschlag": Teile bleiben dort stehen (Gurt laeuft darunter durch); "offen": sie fallen herunter.
+# Je Ende ein Reflexlichttaster an der Seite +y, "taster_links"/"taster_rechts" = Abstand vom Bandende (m),
+# Strahl "taster_hoehe" ueber dem Gurt. Ausgaenge, Eingaenge und Tempo stehen in worlds/<welt>.json unter
+# "ea" -> "baender"; die Felder hier beschreiben nur das Aussehen und die Lage.
+# Die Felder led_links, led_rechts und lampe setzt der Controller (Taster belegt, Band laeuft/Fehler).
+
+PROTO Foerderband [
+  field SFVec3f    translation  0 0 0
+  field SFRotation rotation     0 0 1 0
+  field SFString   name         "foerderband"
+  field SFFloat    laenge       0.6
+  field SFFloat    breite       0.08
+  field SFFloat    hoehe        0.07
+  field SFString{"anschlag", "offen"} ende_links  "anschlag"
+  field SFString{"anschlag", "offen"} ende_rechts "anschlag"
+  field SFFloat    taster_links  0.025
+  field SFFloat    taster_rechts 0.025
+  field SFFloat    taster_hoehe  0.008
+  field SFColor    led_links    0.35 0.3 0.1
+  field SFColor    led_rechts   0.35 0.3 0.1
+  field SFColor    lampe        0.45 0.47 0.5
+]
+{
+  %< const L = fields.laenge.value, B = fields.breite.value, H = fields.hoehe.value; >%
+  %< const gurt = 0.003, rolle = 0.015, wange = 0.008, wange_h = 0.04, ueber = 0.003; >%
+  %< const yw = B / 2 + wange / 2 + 0.001, ws = B / 2 + wange + 0.001; >%
+  %< const anschlag = { links: fields.ende_links.value === 'anschlag', rechts: fields.ende_rechts.value === 'anschlag' }; >%
+  %< const az = 0.03, ad = 0.006; >%
+  %< const tx = { links: -L / 2 + fields.taster_links.value, rechts: L / 2 - fields.taster_rechts.value }; >%
+  %< const tz = H + fields.taster_hoehe.value; >%
+  Solid {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+    children [
+      Pose {   # Gurt oben (Obertrum)
+        translation 0 0 %<= H - gurt / 2 >%
+        children [ Shape {
+          appearance DEF GURT PBRAppearance { baseColor 0.16 0.17 0.19 roughness 0.95 metalness 0 }
+          geometry Box { size %<= L >% %<= B >% %<= gurt >% }
+        } ]
+      }
+      Pose {   # Untertrum
+        translation 0 0 %<= H - 2 * rolle >%
+        children [ Shape { appearance USE GURT geometry Box { size %<= L >% %<= B >% %<= gurt >% } } ]
+      }
+      %< for (const s of [-1, 1]) { >%
+      Pose {   # Umlenkrolle
+        translation %<= s * L / 2 >% 0 %<= H - rolle >%
+        rotation 1 0 0 1.5708
+        children [ Shape {
+          appearance DEF ALU PBRAppearance { baseColor 0.78 0.8 0.83 roughness 0.4 metalness 0.5 }
+          geometry Cylinder { radius %<= rolle >% height %<= B + 0.004 >% subdivision 20 }
+        } ]
+      }
+      Pose {   # Seitenwange (Aluprofil), 3 mm ueber dem Gurt als Fuehrung
+        translation 0 %<= s * yw >% %<= H + ueber - wange_h / 2 >%
+        children [ Shape { appearance USE ALU geometry Box { size %<= L + 0.04 >% %<= wange >% %<= wange_h >% } } ]
+      }
+      %< for (const t of [-1, 1]) { >%
+      Pose {   # Stuetze
+        translation %<= t * (L / 2 - 0.04) >% %<= s * yw >% %<= (H + ueber - wange_h) / 2 >%
+        children [ Shape { appearance USE ALU geometry Box { size 0.02 %<= wange >% %<= H + ueber - wange_h >% } } ]
+      }
+      %< } >%
+      %< } >%
+      Pose {   # Getriebemotor am rechten Ende, mit Lampe (grau steht, gruen laeuft, rot Fehler)
+        translation %<= L / 2 >% %<= -(ws + 0.035) >% %<= H - rolle >%
+        rotation 1 0 0 1.5708
+        children [
+          Shape {
+            appearance PBRAppearance { baseColor 0.36 0.38 0.41 roughness 0.5 metalness 0.3 }
+            geometry Cylinder { radius 0.022 height 0.07 subdivision 20 }
+          }
+          Pose {
+            translation 0 0.024 0
+            children [ Shape {
+              appearance PBRAppearance { baseColor IS lampe emissiveColor IS lampe roughness 0.4 metalness 0 }
+              geometry Box { size 0.012 0.006 0.012 }
+            } ]
+          }
+        ]
+      }
+      %< for (const seite of ['links', 'rechts']) { const s = seite === 'links' ? -1 : 1; >%
+      %< if (anschlag[seite]) { >%
+      Pose {   # Anschlag
+        translation %<= s * (L / 2 + ad / 2) >% 0 %<= H + az / 2 >%
+        children [ Shape {
+          appearance DEF ANSCHLAG PBRAppearance { baseColor 0.0 0.39 0.61 roughness 0.5 metalness 0.1 }
+          geometry Box { size %<= ad >% %<= 2 * ws >% %<= az >% }
+        } ]
+      }
+      %< } >%
+      Pose {   # Reflexlichttaster an der Seite +y, Strahl quer ueber den Gurt
+        translation %<= tx[seite] >% %<= ws + 0.009 >% %<= tz >%
+        children [
+          Shape {
+            appearance PBRAppearance { baseColor 0.1 0.1 0.11 roughness 0.6 metalness 0 }
+            geometry Box { size 0.012 0.018 0.03 }
+          }
+          Pose {
+            translation 0 0 0.017
+            children [ Shape {
+              appearance PBRAppearance { baseColor IS led_%<= seite >% emissiveColor IS led_%<= seite >% roughness 0.4 metalness 0 }
+              geometry Box { size 0.006 0.006 0.004 }
+            } ]
+          }
+          Pose {
+            translation 0 %<= -(ws + 0.009) / 2 - 0.004 >% 0
+            children [ Shape {
+              appearance PBRAppearance { baseColor 0.85 0.0 0.37 transparency 0.5 roughness 1 metalness 0 }
+              geometry Box { size 0.0015 %<= ws + 0.009 >% 0.0015 }
+              castShadows FALSE
+              isPickable FALSE
+            } ]
+          }
+        ]
+      }
+      %< } >%
+    ]
+    boundingObject Group {
+      children [
+        Pose {   # Gurt als dicker Quader (Oberkante = hoehe), damit nichts durchfaellt
+          translation 0 0 %<= H - 0.01 >%
+          children [ Box { size %<= L >% %<= B >% 0.02 } ]
+        }
+        %< for (const s of [-1, 1]) { >%
+        Pose {
+          translation 0 %<= s * yw >% %<= H + ueber - wange_h / 2 >%
+          children [ Box { size %<= L + 0.04 >% %<= wange >% %<= wange_h >% } ]
+        }
+        %< } >%
+        %< for (const seite of ['links', 'rechts']) { if (!anschlag[seite]) continue; const s = seite === 'links' ? -1 : 1; >%
+        Pose {
+          translation %<= s * (L / 2 + ad / 2) >% 0 %<= H + az / 2 >%
+          children [ Box { size %<= ad >% %<= 2 * ws >% %<= az >% } ]
+        }
+        %< } >%
+      ]
+    }
+  }
+}
