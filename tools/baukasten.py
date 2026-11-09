@@ -588,6 +588,127 @@ def naeherung_merkmale(d, laenge):
             "kanten": [], "ecken": []}
 
 
+# --- Foerderbaender (FB3): Pseudoteil wie die Sensorflaeche (Masse im Entwurf, Proto Foerderband in der Welt) ---
+# Ursprung Mitte der Aufstellflaeche, Gurt entlang x: "anfang" = -x (Einlauf, dort legt "Teil nachlegen" an),
+# "ende" = +x; "vor" faehrt vom Anfang zum Ende. Verbinden wie ein Quader L x B x H (Gurtbreite, Oberkante = Gurt),
+# so lassen sich Werkstuecke auf die Flaeche "oben" setzen. Im Proto heissen die Enden links (Anfang) und rechts.
+BAND_STANDARD = {"laenge_mm": 600.0, "breite_mm": 80.0, "hoehe_mm": 70.0, "tempo_mm_s": 60.0,
+                 "ende_anfang": "anschlag", "ende_ende": "lagerbox", "dout_vor": 21, "dout_zurueck": 22,
+                 "taster_hoehe_mm": 8.0,
+                 "taster": [{"din": 25, "art": "schliesser", "abstand_mm": 25.0},
+                            {"din": 26, "art": "schliesser", "abstand_mm": 25.0}]}
+BAND_GRENZEN = {"laenge_mm": (200, 2000), "breite_mm": (30, 300), "hoehe_mm": (30, 300), "tempo_mm_s": (5, 500),
+                "taster_hoehe_mm": (2, 50)}
+BAND_ENDEN = ("anschlag", "lagerbox")
+BAND_MAX = 2            # wie MAX_BAENDER im Controller
+VORRAT_MAX = 30         # Werkstuecke je Band
+# Farben der Vorratsteile: wie ea.FARBEN im Controller, damit ein Farbsensor sie erkennt
+FARB_RGB = {"rot": [0.85, 0.12, 0.1], "gruen": [0.15, 0.7, 0.2], "blau": [0.1, 0.4, 0.9], "gelb": [0.95, 0.85, 0.1],
+            "weiss": [0.95, 0.95, 0.95], "schwarz": [0.08, 0.08, 0.08]}
+TEIL_NAME = re.compile(r"[a-z0-9_-]{1,60}")
+
+
+def band_werte(t):
+    """Einstellungen eines Foerderbands (Eintrag mit "art": "foerderband"), geprueft und mit Standardwerten.
+    vorrat: [{"teil": Name in der Teilebibliothek, "farbe": FARBNAMEN, "material", "anzahl": 1..10}] - die Sorte
+    heisst wie die Farbe (bei zwei Sorten gleicher Farbe zusaetzlich mit dem Teilenamen)."""
+    b = t.get("foerderband") or {}
+    wer = t.get("id")
+    if not isinstance(b, dict):
+        raise BaukastenFehler("%s: 'foerderband' muss ein Objekt sein." % wer)
+    w = {"name": str(b.get("name") or wer)[:24]}
+    for feld, (lo, hi) in BAND_GRENZEN.items():
+        v = b.get(feld, BAND_STANDARD[feld])
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
+            raise BaukastenFehler("%s: %s von %g bis %g." % (wer, feld.replace("_mm_s", " (mm/s)").replace("_mm", " (mm)"), lo, hi))
+        w[feld] = float(v)
+    for feld in ("ende_anfang", "ende_ende"):
+        v = b.get(feld, BAND_STANDARD[feld])
+        if v not in BAND_ENDEN:
+            raise BaukastenFehler("%s: Bandende ist 'anschlag' oder 'lagerbox'." % wer)
+        w[feld] = v
+    w["dout_vor"] = _din(b.get("dout_vor", BAND_STANDARD["dout_vor"]), wer, "DOut vor")
+    w["dout_zurueck"] = _din(b.get("dout_zurueck", BAND_STANDARD["dout_zurueck"]), wer, "DOut zurueck")
+    if w["dout_vor"] == w["dout_zurueck"]:
+        raise BaukastenFehler("%s: vor und zurueck brauchen zwei verschiedene Ausgaenge." % wer)
+    taster = b.get("taster", BAND_STANDARD["taster"])
+    if not isinstance(taster, list) or len(taster) != 2:
+        raise BaukastenFehler("%s: 'taster' ist eine Liste [Anfang, Ende]." % wer)
+    w["taster"] = []
+    for i, ta in enumerate(taster):
+        if ta is None:
+            w["taster"].append(None)
+            continue
+        if not isinstance(ta, dict):
+            raise BaukastenFehler("%s: Taster %d ist kein Objekt." % (wer, i + 1))
+        abstand = ta.get("abstand_mm", 25.0)
+        if isinstance(abstand, bool) or not isinstance(abstand, (int, float)) or not 5 <= abstand <= w["laenge_mm"] / 2:
+            raise BaukastenFehler("%s: Abstand des Tasters vom Bandende 5 bis %g mm." % (wer, w["laenge_mm"] / 2))
+        w["taster"].append({"din": _din(ta.get("din"), wer, "DIn des Tasters"),
+                            "art": "oeffner" if ta.get("art") == "oeffner" else "schliesser", "abstand_mm": float(abstand)})
+    vorrat = b.get("vorrat") or []
+    if not isinstance(vorrat, list):
+        raise BaukastenFehler("%s: 'vorrat' muss eine Liste sein." % wer)
+    w["vorrat"], gesamt = [], 0
+    for v in vorrat:
+        if not isinstance(v, dict) or not TEIL_NAME.fullmatch(str(v.get("teil", ""))):
+            raise BaukastenFehler("%s: Vorrat braucht ein Teil aus der Teilebibliothek." % wer)
+        if v.get("farbe", "rot") not in FARB_RGB:
+            raise BaukastenFehler("%s: Farbe %r gibt es nicht (%s)." % (wer, v.get("farbe"), ", ".join(FARB_RGB)))
+        anzahl = v.get("anzahl", 3)
+        if isinstance(anzahl, bool) or not isinstance(anzahl, int) or not 1 <= anzahl <= 10:
+            raise BaukastenFehler("%s: Anzahl je Sorte 1 bis 10." % wer)
+        gesamt += anzahl
+        w["vorrat"].append({"teil": v["teil"], "farbe": v.get("farbe", "rot"), "anzahl": anzahl,
+                            "material": material_von({"id": wer, "material": v.get("material")})})
+    if gesamt > VORRAT_MAX:
+        raise BaukastenFehler("%s: hoechstens %d Werkstuecke im Vorrat." % (wer, VORRAT_MAX))
+    farben = [v["farbe"] for v in w["vorrat"]]
+    for v in w["vorrat"]:
+        v["sorte"] = v["farbe"] if farben.count(v["farbe"]) == 1 else "%s_%s" % (v["farbe"], v["teil"])
+    if len({v["sorte"] for v in w["vorrat"]}) < len(w["vorrat"]):
+        raise BaukastenFehler("%s: jede Sorte (Teil und Farbe) nur einmal im Vorrat." % wer)
+    return w
+
+
+def band_teile(entwurf):
+    return [t for t in entwurf.get("teile", []) if t.get("art") == "foerderband"]
+
+
+def ea_baender(entwurf):
+    """Foerderbaender fuer worlds/<welt>.json ("ea" -> "baender", liest controllers/irc_bridge/foerderband.py);
+    "knoten" = DEF-Name in der Welt (BAND_<Reihenfolge>), Vorrat VORRAT_<Band>_<Nr>."""
+    ergebnis = []
+    for i, t in enumerate(band_teile(entwurf)):
+        b, k = band_werte(t), 0
+        sorten = []
+        for v in b["vorrat"]:
+            sorten.append({"sorte": v["sorte"], "knoten": ["VORRAT_%d_%d" % (i, k + j) for j in range(v["anzahl"])]})
+            k += v["anzahl"]
+        ergebnis.append({"name": b["name"], "knoten": "BAND_%d" % i, "dout_vor": b["dout_vor"],
+                         "dout_zurueck": b["dout_zurueck"], "geschwindigkeit_mm_s": b["tempo_mm_s"],
+                         "taster": [None if ta is None else {"din": ta["din"], "art": ta["art"]} for ta in b["taster"]],
+                         "nachlegen": {"vorrat": sorten}})
+    return ergebnis
+
+
+def verwendet_teil(entwurf, name):
+    """Braucht der Entwurf das Teil `name` der Teilebibliothek (als Teil oder im Vorrat eines Bands)?"""
+    return any(t.get("teil") == name or (t.get("art") == "foerderband" and any(
+        isinstance(v, dict) and v.get("teil") == name for v in (t.get("foerderband") or {}).get("vorrat") or []))
+        for t in entwurf.get("teile", []))
+
+
+def teile_umbenennen(entwurf, umbenannt):
+    """Teilenamen (Teil und Vorrat der Baender) nach {alt: neu} umschreiben (Welt-Paket-Import)."""
+    for t in entwurf.get("teile", []):
+        if t.get("teil") in umbenannt:
+            t["teil"] = umbenannt[t["teil"]]
+        for v in (t.get("foerderband") or {}).get("vorrat") or [] if isinstance(t.get("foerderband"), dict) else []:
+            if isinstance(v, dict) and v.get("teil") in umbenannt:
+                v["teil"] = umbenannt[v["teil"]]
+
+
 def ea_naeherung(entwurf):
     """Naeherungssensoren fuer worlds/<welt>.json ("ea" -> "naeherung"); "knoten" = DEF-Name in der Welt."""
     return [dict(naeherung_werte(t), knoten="NAEHERUNG_%d" % i)
@@ -908,9 +1029,15 @@ def pruefe_entwurf(entwurf):
         if t["id"] in ids or t["id"] == "greifer":
             raise BaukastenFehler("Der Name %s kommt doppelt vor oder ist vergeben." % t["id"])
         ids.add(t["id"])
-        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor", "sperrzone", "naeherung", "ablage"):
-            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck', 'sensor', 'sperrzone', 'naeherung' oder 'ablage'."
-                                  % t["id"])
+    if len(band_teile(entwurf)) > BAND_MAX:
+        raise BaukastenFehler("Hoechstens %d Foerderbaender je Roboterumgebung." % BAND_MAX)
+    for t in teile:
+        if t.get("art", "aufbau") not in ("aufbau", "werkstueck", "sensor", "sperrzone", "naeherung", "ablage",
+                                          "foerderband"):
+            raise BaukastenFehler("%s: Art ist 'aufbau', 'werkstueck', 'sensor', 'sperrzone', 'naeherung', 'ablage' "
+                                  "oder 'foerderband'." % t["id"])
+        if t.get("art") == "foerderband":
+            band_werte(t)
         if t.get("art") == "naeherung":
             naeherung_werte(t)
         if t.get("art", "aufbau") in ("aufbau", "werkstueck"):
@@ -949,6 +1076,9 @@ def loese(entwurf, merkmale_von):
         if t.get("art") == "naeherung":
             n = naeherung_werte(t)
             return naeherung_merkmale(n["durchmesser_mm"], n["laenge_mm"])
+        if t.get("art") == "foerderband":
+            b = band_werte(t)
+            return quader_merkmale(b["laenge_mm"], b["breite_mm"], b["hoehe_mm"])
         return merkmale_von(t["teil"])
     lagen, in_arbeit = {}, set()
 
@@ -996,6 +1126,7 @@ EXTERNPROTO "../protos/Werkstueck.proto"
 EXTERNPROTO "../protos/Aufbau.proto"
 EXTERNPROTO "../protos/Sensorfeld.proto"
 EXTERNPROTO "../protos/Naeherungssensor.proto"
+EXTERNPROTO "../protos/Foerderband.proto"
 
 WorldInfo {
   info [ %(info)s ]
@@ -1152,9 +1283,13 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
         "tisch_kinder": kinder, "tisch_dicke": dicke, "tisch_dicke_halb": dicke / 2,
         "blick_drehung": _zahlen(_blick(ort, ziel), 4), "blick_ort": _zahlen(ort, 3), "sockel": sockel,
     })
-    sensor_nr = naeherung_nr = 0
+    sensor_nr = naeherung_nr = band_nr = 0
     for t in entwurf["teile"]:
         lage = lagen[t["id"]]
+        if t.get("art") == "foerderband":   # DEF-Namen wie in ea_baender: BAND_<Reihenfolge>, VORRAT_<Band>_<Nr>
+            text += _band_text(t, lage, band_nr, merkmale_von, teile_url)
+            band_nr += 1
+            continue
         if t.get("art") == "sensor":   # DEF-Name wie in ea_sensoren: SENSOR_<Reihenfolge>
             s = sensor_werte(t)
             text += ("DEF SENSOR_%d Sensorfeld {\n  translation %s\n  rotation %s\n  name %s\n  groesse %s\n}\n" % (
@@ -1179,21 +1314,51 @@ def welt_text(entwurf, lagen, merkmale_von, entwurf_name="Entwurf", teile_url=".
         url = "%s/%s/netz.obj" % (teile_url, t["teil"])
         farbe = _zahlen(t.get("farbe") or ([0.1, 0.4, 0.9] if t.get("art") == "werkstueck" else [0.7, 0.7, 0.72]), 3)
         if t.get("art") == "werkstueck":
-            # Werkstueck: Ursprung = Mitte des Huellquaders (so rechnen Physik und Greifer)
-            box = m["box"]
-            mitte = [(box[i] + box[i + 3]) / 2 for i in range(3)]
-            groesse = [(box[i + 3] - box[i]) / 1000 for i in range(3)]
-            # Masse: angegeben, sonst aus Volumen und Dichte des Materials (g/cm3 = 1e-6 kg/mm3)
-            masse = t.get("masse_kg") or round(m.get("volumen_mm3", 1000.0) * mat["dichte"] * 1e-6, 4)
-            text += ("Werkstueck {\n  translation %s\n  rotation %s\n  name %s\n  form \"modell\"\n  modell [ %s ]\n"
-                     "  skalierung 0.001\n  modellversatz %s\n  size %s\n  farbe %s\n  masse %.4f\n%s}\n" % (
-                         _zahlen([v / 1000 for v in lage.punkt(mitte)]), _zahlen(achse_winkel(lage.r)),
-                         _vrml_text(t["id"]), _vrml_text(url), _zahlen([-v / 1000 for v in mitte]),
-                         _zahlen(groesse), farbe, max(0.001, float(masse)), stoff))
+            text += _werkstueck_text(t["id"], t["teil"], m, lage, farbe, material_von(t), t.get("masse_kg"), teile_url)
         else:
             text += ("Aufbau {\n  translation %s\n  rotation %s\n  name %s\n  modell [ %s ]\n  skalierung 0.001\n"
                      "  farbe %s\n%s}\n" % (_zahlen([v / 1000 for v in lage.o]), _zahlen(achse_winkel(lage.r)),
                                             _vrml_text(t["id"]), _vrml_text(url), farbe, stoff))
+    return text
+
+
+def _werkstueck_text(name, teil, m, lage, farbe, material, masse_kg, teile_url, definiert=None):
+    """Werkstueck-Knoten: Ursprung = Mitte des Huellquaders (so rechnen Physik und Greifer); Masse angegeben, sonst
+    aus Volumen und Dichte des Materials (g/cm3 = 1e-6 kg/mm3). farbe als Text "r g b"."""
+    mat = MATERIALIEN[material]
+    box = m["box"]
+    mitte = [(box[i] + box[i + 3]) / 2 for i in range(3)]
+    groesse = [(box[i + 3] - box[i]) / 1000 for i in range(3)]
+    masse = masse_kg or round(m.get("volumen_mm3", 1000.0) * mat["dichte"] * 1e-6, 4)
+    return ("%sWerkstueck {\n  translation %s\n  rotation %s\n  name %s\n  form \"modell\"\n  modell [ %s ]\n"
+            "  skalierung 0.001\n  modellversatz %s\n  size %s\n  farbe %s\n  masse %.4f\n"
+            "  material %s\n  rauheit %.2f\n  metall %.2f\n}\n" % (
+                "DEF %s " % definiert if definiert else "",
+                _zahlen([v / 1000 for v in lage.punkt(mitte)]), _zahlen(achse_winkel(lage.r)),
+                _vrml_text(name), _vrml_text("%s/%s/netz.obj" % (teile_url, teil)), _zahlen([-v / 1000 for v in mitte]),
+                _zahlen(groesse), farbe, max(0.001, float(masse)), _vrml_text(material), mat["rauheit"], mat["metall"]))
+
+
+def _band_text(t, lage, nr, merkmale_von, teile_url):
+    """Foerderband und sein Vorrat. Die Vorratsteile stehen unter dem Band ueber der unsichtbaren Vorratsablage
+    (20 m tiefer); der Controller legt sie beim Start dort auf ihre Plaetze."""
+    b = band_werte(t)
+    ta = [x["abstand_mm"] / 1000 if x else 0.025 for x in b["taster"]]
+    text = ("DEF BAND_%d Foerderband {\n  translation %s\n  rotation %s\n  name %s\n  laenge %.4f\n  breite %.4f\n"
+            "  hoehe %.4f\n  ende_links %s\n  ende_rechts %s\n  taster_links %.4f\n  taster_rechts %.4f\n"
+            "  taster_hoehe %.4f\n}\n" % (
+                nr, _zahlen([v / 1000 for v in lage.o]), _zahlen(achse_winkel(lage.r)), _vrml_text("band_" + t["id"]),
+                b["laenge_mm"] / 1000, b["breite_mm"] / 1000, b["hoehe_mm"] / 1000, _vrml_text(b["ende_anfang"]),
+                _vrml_text(b["ende_ende"]), ta[0], ta[1], b["taster_hoehe_mm"] / 1000))
+    k = 0
+    for v in b["vorrat"]:
+        m = merkmale_von(v["teil"])
+        for _j in range(v["anzahl"]):
+            ort = lage.mal(Lage(None, [-400.0 + 80.0 * (k % 10), -400.0 + 80.0 * (k // 10), -19950.0]))
+            text += _werkstueck_text("%s_%s_%d" % (t["id"], v["sorte"], k + 1), v["teil"], m, ort,
+                                     _zahlen(FARB_RGB[v["farbe"]], 3), v["material"], None, teile_url,
+                                     "VORRAT_%d_%d" % (nr, k))
+            k += 1
     return text
 
 
@@ -1303,10 +1468,10 @@ def teil_verweise(entwurf, name):
     ergebnis = []
     for t in entwurf.get("teile", []):
         v = t.get("verbindung") or {}
-        if t.get("art") not in ("sensor", "sperrzone", "naeherung") and t.get("teil") == name and v.get("punkt"):
+        if t.get("art") not in ("sensor", "sperrzone", "naeherung", "foerderband") and t.get("teil") == name and v.get("punkt"):
             ergebnis.append((t, "punkt"))
         ziel = teile.get(v.get("an"))
-        if v.get("an_punkt") and ((ziel is not None and ziel.get("art") not in ("sensor", "sperrzone", "naeherung") and ziel.get("teil") == name)
+        if v.get("an_punkt") and ((ziel is not None and ziel.get("art") not in ("sensor", "sperrzone", "naeherung", "foerderband") and ziel.get("teil") == name)
                                   or (v.get("an") == "greifer" and greifer == name)):
             ergebnis.append((t, "an_punkt"))
     return ergebnis

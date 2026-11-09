@@ -536,7 +536,7 @@ class TestLehrerSeiten(Grundlage):
             self.assertIn('modell [ "../teile/vorrichtung/netz.obj" ]', f.read())
         with open(os.path.join(self.welten, "lager.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f), {"titel": "Magazin", "aufgabe": "Teile einsortieren", "sichtbar": False,
-                                            "ea": {"taster": [], "leuchten": [], "sensoren": [], "naeherung": []},
+                                            "ea": {"taster": [], "leuchten": [], "sensoren": [], "naeherung": [], "baender": []},
                                             "kollision": {"an": True, "reaktion": "stopp", "abstand_mm": 2.0, "ablage_mm": 2.0},
                                     "grenzen": {"arbeitsraum": None, "sperrzonen": [], "achsen": None, "achsen_reaktion": "stopp"}})
         self.assertEqual(self.vorschauen, ["lager.wbt"])

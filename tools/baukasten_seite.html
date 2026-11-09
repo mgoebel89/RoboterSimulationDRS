@@ -43,7 +43,8 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
 .liste .art { color:var(--leise); font-size:.8em; white-space:nowrap; }
 .symbol { width:22px; height:22px; border-radius:6px; flex:none; display:flex; align-items:center; justify-content:center;
   font-size:.7em; font-weight:800; color:#fff; }
-.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; } .symbol.sperrzone { background:var(--pink); } .symbol.naeherung { background:#5d6779; } .symbol.ablage { background:#2a9d6a; } .symbol.griff { background:#0a7a3e; }
+.symbol.aufbau { background:#8a93a3; } .symbol.werkstueck { background:var(--blau); } .symbol.sensor { background:#8fa300; } .symbol.sperrzone { background:var(--pink); } .symbol.naeherung { background:#5d6779; } .symbol.ablage { background:#2a9d6a; } .symbol.griff { background:#0a7a3e; } .symbol.foerderband { background:#3b4152; }
+.vorrat-zeile select, .vorrat-zeile input { min-width:0; } .vorrat-zeile .v-teil { flex:1; }
 /* Greifpunkt und Ablagen als Unterobjekte ihres Werkstuecks in der Teileliste */
 #teileliste .kind { padding-left:30px; }
 #teileliste .kind.neu { color:var(--leise, #6b7280); font-style:italic; }
@@ -165,6 +166,7 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
   <button id="plus-sensor" title="Fläche, die meldet, ob ein Werkstück darauf liegt (oder welche Farbe es hat)">%%ICON_SENSOR%%Sensorfläche</button>
   <button id="plus-ini" title="Induktiver oder kapazitiver Näherungssensor M12/M18: erkennt Werkstücke davor, je nach Material">%%ICON_NAEHERUNG%%Näherung</button>
   <button id="plus-zone" title="Bereich, in den Greifer und gegriffenes Teil nicht dürfen (Warnung oder Stopp)">%%ICON_SPERRZONE%%Sperrzone</button>
+  <button id="plus-band" title="Förderband: zwei Ausgänge fahren vor/zurück, Reflextaster an den Enden, Anschlag oder Lagerbox, Vorrat für „Teil nachlegen“">%%ICON_BAND%%Förderband</button>
   <button id="plus-griff" title="Greifpunkt für iRC am gewählten Werkstück festlegen (Greifflächen, Anfahrseite)">%%ICON_BACKEN%%Greifpunkt</button>
   <button id="w-tisch" title="Tisch und Lage des Roboters">%%ICON_TISCH%%Tisch</button>
   <button id="w-ea" title="Taster und Leuchtmelder für die Schüleransicht">%%ICON_TASTER%%Taster &amp; Leuchten</button>
@@ -267,6 +269,37 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
       </div>
       <div class="hilfe">Greifer, Backen und das gegriffene Teil dürfen nicht in den Quader. Stopp hält das Programm an
         wie eine Kollision, Warnung zeigt nur einen Hinweis. In Webots unsichtbar; Schüler sehen sie mit „Grenzen“.</div>
+    </div>
+    <div class="abschnitt" id="e-band" hidden><h3>Förderband</h3>
+      <div class="zeile"><label class="feldspalte" style="flex:1">Beschriftung <input id="f-name" maxlength="24"></label>
+        <label class="feldspalte">Tempo (mm/s) <input id="f-tempo" type="number" min="5" max="500" step="5" style="width:84px"></label></div>
+      <div class="zahlen">
+        <label>Länge (mm) <input id="f-lx" type="number" min="200" max="2000" step="10"></label>
+        <label>Gurtbreite (mm) <input id="f-ly" type="number" min="30" max="300" step="5"></label>
+        <label>Höhe (mm) <input id="f-lz" type="number" min="30" max="300" step="5"></label></div>
+      <div class="zeile"><label>DOut vor <input id="f-vor" type="number" min="1" max="64" style="width:64px"></label>
+        <label>DOut zurück <input id="f-zur" type="number" min="1" max="64" style="width:64px"></label></div>
+      <div class="zeile"><label class="feldspalte" style="flex:1">Anfang (Einlauf) <select id="f-anfang">
+          <option value="anschlag">Anschlag</option><option value="lagerbox">Lagerbox</option></select></label>
+        <label class="feldspalte" style="flex:1">Ende <select id="f-ende">
+          <option value="anschlag">Anschlag</option><option value="lagerbox">Lagerbox</option></select></label></div>
+      <div class="hilfe">„vor“ fährt vom Anfang zum Ende (pinker Pfeil im Bild). Beide Ausgänge gleichzeitig an hält das
+        Programm an wie eine Kollision. Werkstücke auf das Band: Unterseite an die Fläche „oben“ des Bands.</div>
+      <h3>Reflextaster</h3>
+      <div class="zeile"><label><input id="f-t0-an" type="checkbox"> Anfang</label>
+        <label>DIn <input id="f-t0-din" type="number" min="1" max="64" style="width:58px"></label>
+        <select id="f-t0-art"><option value="schliesser">Schließer</option><option value="oeffner">Öffner</option></select>
+        <label title="Abstand vom Bandende">ab Ende <input id="f-t0-ab" type="number" min="5" step="5" style="width:58px"> mm</label></div>
+      <div class="zeile"><label><input id="f-t1-an" type="checkbox"> Ende</label>
+        <label>DIn <input id="f-t1-din" type="number" min="1" max="64" style="width:58px"></label>
+        <select id="f-t1-art"><option value="schliesser">Schließer</option><option value="oeffner">Öffner</option></select>
+        <label title="Abstand vom Bandende">ab Ende <input id="f-t1-ab" type="number" min="5" step="5" style="width:58px"> mm</label></div>
+      <h3>Vorrat für „Teil nachlegen“</h3>
+      <div class="ea-liste" id="f-vorrat"></div>
+      <div class="zeile"><button id="f-vorrat-neu">+ Sorte</button></div>
+      <div class="hilfe">Je Sorte ein Teil aus der Bibliothek, eine Farbe (erkennt auch ein Farbsensor) und die Anzahl
+        (höchstens 30 zusammen). Der Knopf „Teil nachlegen“ der Schüler legt eine zufällige Sorte an den Anfang; was in
+        einer Lagerbox landet, kommt zurück in den Vorrat.</div>
     </div>
     <div class="abschnitt" id="e-griff" hidden><h3>Greifpunkt für iRC</h3>
       <div class="zeile"><span class="wahlpunkt" id="g-kurz">–</span><button id="g-oeffnen">bearbeiten …</button></div>
@@ -391,6 +424,24 @@ header svg, .werkzeuge svg, .panel svg, .baum svg, .kontext svg { width:18px; he
     <div class="hilfe">Ein Quader, in den Greifer, Backen und gegriffenes Teil nicht dürfen, z.B. über einem Magazin
       oder vor einer Wand. Nach dem Einfügen das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).</div></div>
   <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="zd-ok">Einfügen</button></div>
+</div></div>
+
+<!-- Dialog: Foerderband einfuegen -->
+<div id="band-dialog" class="dialog" hidden><div class="dialog-feld" role="dialog" aria-label="Förderband einfügen">
+  <div class="dialog-kopf"><h2>Förderband einfügen</h2><button class="zu" data-zu title="Schließen (Esc)">&times;</button></div>
+  <div class="dialog-inhalt">
+    <div class="zeile"><label class="feldspalte" style="flex:1">Beschriftung <input id="bd-name" maxlength="24"></label>
+      <label class="feldspalte">Länge (mm) <input id="bd-lx" type="number" min="200" max="2000" step="10" style="width:96px"></label></div>
+    <div class="zeile"><label class="feldspalte" style="flex:1">Anfang (Einlauf) <select id="bd-anfang">
+        <option value="anschlag">Anschlag</option><option value="lagerbox">Lagerbox</option></select></label>
+      <label class="feldspalte" style="flex:1">Ende <select id="bd-ende">
+        <option value="anschlag">Anschlag</option><option value="lagerbox">Lagerbox</option></select></label></div>
+    <div class="zeile"><label class="feldspalte">DOut vor <input id="bd-vor" type="number" min="1" max="64" style="width:80px"></label>
+      <label class="feldspalte">DOut zurück <input id="bd-zur" type="number" min="1" max="64" style="width:80px"></label></div>
+    <div class="hilfe">Gurt 80 mm breit, Oberkante 70 mm, 60 mm/s, Reflextaster an beiden Enden (DIn 25 und 26) – alles
+      danach rechts in den Eigenschaften änderbar, dort auch der Vorrat für „Teil nachlegen“. Nach dem Einfügen das
+      Gegenstück anklicken (Tisch oder Nut); Drehung 90° stellt das Band quer.</div></div>
+  <div class="dialog-fuss"><button data-zu>Abbrechen</button><button class="haupt" id="bd-ok">Einfügen</button></div>
 </div></div>
 
 <!-- Dialog: Magazine fuer den Matrix-Befehl von iRC -->
@@ -778,7 +829,7 @@ async function greiferAufbauen() {
   $('modus-wechsel').lastChild.textContent = 'Baukasten'; $('modus-wechsel').href = '/lehrer/baukasten';
   $('zurueck').lastChild.textContent = 'Alle Greifer'; $('zurueck').href = '/lehrer#greifer';
   for (const id of ['tisch-feld', 'ea-feld', 'plus-sensor', 'w-tisch', 'w-ea', 'w-plan', 'baum-tisch', 'baum-ea', 'baum-kopf-umgebung',
-                    'w-kollision', 'baum-kollision', 'plus-zone', 'baum-grenzen', 'plus-ini']) $(id).hidden = true;
+                    'w-kollision', 'baum-kollision', 'plus-zone', 'baum-grenzen', 'plus-ini', 'plus-band']) $(id).hidden = true;
   $('backen-feld').hidden = false; $('e-art').disabled = true;
 }
 async function greiferZeigen() {   // Schunk-Modell der gewaehlten Groesse (aus der Teilebibliothek)
@@ -871,7 +922,36 @@ function sensorWerte(t) { return Object.assign({}, SENSOR_STANDARD, t.sensor || 
 const SPERRZONE_STANDARD = {groesse_mm: [100, 100, 100], reaktion: 'stopp'};
 function zoneWerte(t) { return Object.assign({}, SPERRZONE_STANDARD, t.sperrzone || {}); }
 const quaderArt = t => t.art === 'sensor' || t.art === 'sperrzone';
-const ohneTeil = t => quaderArt(t) || t.art === 'naeherung';   // ohne Teil aus der Bibliothek
+const ohneTeil = t => quaderArt(t) || t.art === 'naeherung' || t.art === 'foerderband';   // ohne Teil aus der Bibliothek
+// Foerderband (FB3), Werte wie BAND_STANDARD in baukasten.py: zum Verbinden ein Quader Laenge x Gurtbreite x Hoehe
+const BAND_STANDARD = {laenge_mm: 600, breite_mm: 80, hoehe_mm: 70, tempo_mm_s: 60, ende_anfang: 'anschlag', ende_ende: 'lagerbox',
+  dout_vor: 21, dout_zurueck: 22, taster_hoehe_mm: 8,
+  taster: [{din: 25, art: 'schliesser', abstand_mm: 25}, {din: 26, art: 'schliesser', abstand_mm: 25}], vorrat: []};
+function bandWerte(t) { return Object.assign({}, BAND_STANDARD, t.foerderband || {}); }
+const FARB_RGB = {rot: [0.85, 0.12, 0.1], gruen: [0.15, 0.7, 0.2], blau: [0.1, 0.4, 0.9], gelb: [0.95, 0.85, 0.1],
+                  weiss: [0.95, 0.95, 0.95], schwarz: [0.08, 0.08, 0.08]};
+const FARB_TEXT = {rot: 'rot', gruen: 'grün', blau: 'blau', gelb: 'gelb', weiss: 'weiß', schwarz: 'schwarz'};
+function bandDeko(t) {   // nur zum Ansehen (nicht anklickbar): Laufrichtung, Anschlag/Lagerbox, Reflextaster
+  const b = bandWerte(t), L = b.laenge_mm, B = b.breite_mm, H = b.hoehe_mm, g = new THREE.Group();
+  g.add(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(-L * 0.3, 0, H + 3), L * 0.6, 0xd4005e, 30, 18));
+  const blau = new THREE.MeshStandardMaterial({color: 0x00639c, roughness: 0.6, transparent: true, opacity: 0.85});
+  [[-1, b.ende_anfang], [1, b.ende_ende]].forEach(([s, ende]) => {
+    if (ende === 'anschlag') {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(6, B + 20, 30), blau); m.position.set(s * (L / 2 + 3), 0, H + 15); g.add(m);
+    } else {
+      const hb = Math.max(30, H - 25), box = new THREE.BoxGeometry(120, 140, hb);
+      const m = new THREE.Mesh(box, new THREE.MeshStandardMaterial({color: 0x00639c, transparent: true, opacity: 0.25, depthWrite: false}));
+      const k = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({color: 0x00639c}));
+      for (const o of [m, k]) { o.position.set(s * (L / 2 + 63), 0, hb / 2); g.add(o); }
+    }
+  });
+  (b.taster || []).forEach((ta, i) => {
+    if (!ta) return;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(12, 18, 30), new THREE.MeshStandardMaterial({color: 0x1a1a1c}));
+    m.position.set(i ? L / 2 - (ta.abstand_mm ?? 25) : -L / 2 + (ta.abstand_mm ?? 25), B / 2 + 18, H + b.taster_hoehe_mm); g.add(m);
+  });
+  return g;
+}
 // Material (G1), Werte wie MATERIALIEN in baukasten.py
 const MATERIALIEN = {pla: {name: 'Kunststoff (PLA)', rauheit: 0.5, metall: 0, farbe: null},
   stahl: {name: 'Stahl', rauheit: 0.35, metall: 0.6, farbe: [0.56, 0.58, 0.61]},
@@ -911,8 +991,10 @@ function iniFuerPicking(t) {   // Zylinder entlang z, Ursprung Mitte unten; Drei
 }
 function datenVon(t) {
   if (t.art === 'naeherung') return iniFuerPicking(t);
-  if (!quaderArt(t)) return teilDaten[t.teil];
-  const [lx, ly, lz] = (t.art === 'sensor' ? sensorWerte(t) : zoneWerte(t)).groesse_mm, schluessel = [lx, ly, lz].join(':');
+  if (!quaderArt(t) && t.art !== 'foerderband') return teilDaten[t.teil];
+  const bw = t.art === 'foerderband' && bandWerte(t);
+  const [lx, ly, lz] = bw ? [bw.laenge_mm, bw.breite_mm, bw.hoehe_mm] : (t.art === 'sensor' ? sensorWerte(t) : zoneWerte(t)).groesse_mm;
+  const schluessel = [lx, ly, lz].join(':');
   if (!sensorDaten[schluessel]) {
     const geo = new THREE.BoxGeometry(lx, ly, lz).translate(0, 0, lz / 2).toNonIndexed();
     // BoxGeometry: je zwei Dreiecke +x, -x, +y, -y, +z, -z
@@ -931,6 +1013,7 @@ function datenVon(t) {
 }
 function standardFarbe(t) {
   return t.art === 'sensor' ? [0.15, 0.75, 0.35] : t.art === 'sperrzone' ? [0.83, 0.0, 0.37] : t.art === 'ablage' ? [0.16, 0.62, 0.42]
+    : t.art === 'foerderband' ? [0.23, 0.25, 0.28]
     : t.art === 'naeherung' ? (iniWerte(t).typ === 'kapazitiv' ? [0.9, 0.45, 0.1] : [0.2, 0.45, 0.75]) : t.farbe || (t.art === 'werkstueck' ? [0.1, 0.4, 0.9] : [0.7, 0.7, 0.72]);
 }
 async function objektBauen(t) {
@@ -942,6 +1025,7 @@ async function objektBauen(t) {
                                                                     depthWrite: !durchsichtig}));
   mesh.userData = {teilId: t.id};
   g.add(mesh, new THREE.LineSegments(d.kanten, new THREE.LineBasicMaterial({color: 0x1d2330, transparent: true, opacity: 0.35})));
+  if (t.art === 'foerderband') g.add(bandDeko(t));
   g.userData = {mesh};
   szene.add(g); pickbar.push(mesh);
   objekte[t.id] = g;
@@ -1179,11 +1263,15 @@ function formularZeigen() {
   if (!t) { leeren(punktGruppe); return; }   // Markierungen des abgewaehlten Teils weg
   const v = t.verbindung || {};
   const sensor = t.art === 'sensor', zone = t.art === 'sperrzone', ini = t.art === 'naeherung', ablage = t.art === 'ablage';
-  $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : zone ? 'Sperrzone' : ini ? 'Näherungssensor' : ablage ? 'Ablage' : t.teil) + ')';
+  const band = t.art === 'foerderband';
+  $('e-titel').textContent = t.id + ' (' + (sensor ? 'Sensorfläche' : zone ? 'Sperrzone' : ini ? 'Näherungssensor' : ablage ? 'Ablage'
+                                            : band ? 'Förderband' : t.teil) + ')';
   $('e-symbol').className = 'symbol ' + (t.art || 'aufbau'); $('e-symbol').textContent = ART_KURZ[t.art || 'aufbau'];
   feld('e-id', t.id); $('e-art').value = t.art || 'aufbau';
   $('e-farbe').value = hex(standardFarbe(t));
-  $('e-art').hidden = $('e-farbe').hidden = sensor || zone || ini || ablage;
+  $('e-art').hidden = $('e-farbe').hidden = sensor || zone || ini || ablage || band;
+  $('e-band').hidden = !band;
+  if (band) bandFormular(t);
   $('e-masse-zeile').hidden = t.art !== 'werkstueck';
   $('e-material-zeile').hidden = ohneTeil(t) || BACKEN || ablage; $('e-material').value = t.material || 'pla';
   $('e-sensor').hidden = !sensor; $('e-zone').hidden = !zone; $('e-ini').hidden = !ini;
@@ -1213,7 +1301,7 @@ function formularZeigen() {
                               : 'Noch nicht platziert (steht neben dem Tisch).';
   punkteZeigen();
 }
-const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S', sperrzone: 'Z', naeherung: 'N', ablage: 'L'};
+const ART_KURZ = {aufbau: 'A', werkstueck: 'W', sensor: 'S', sperrzone: 'Z', naeherung: 'N', ablage: 'L', foerderband: 'F'};
 function listeZeigen() {
   $('teile-anzahl').textContent = entwurf.teile.length || '';
   $('magazine-kurz').textContent = (entwurf.magazine || []).length || '';
@@ -1233,10 +1321,12 @@ function listeZeigen() {
 function zeile(t, kind) {
   return '<div data-id="' + t.id + '" class="' + (kind ? 'kind ' : '') + (t.id === auswahl ? 'an' : '') + '" title="'
     + (t.art === 'werkstueck' ? 'Werkstück' : t.art === 'sensor' ? 'Sensorfläche' : t.art === 'sperrzone' ? 'Sperrzone'
-       : t.art === 'naeherung' ? 'Näherungssensor' : t.art === 'ablage' ? 'Ablage (Abbild für iRC)' : 'Aufbau') + ' · Rechtsklick für das Menü">'
+       : t.art === 'naeherung' ? 'Näherungssensor' : t.art === 'ablage' ? 'Ablage (Abbild für iRC)' : t.art === 'foerderband' ? 'Förderband'
+       : 'Aufbau') + ' · Rechtsklick für das Menü">'
     + '<span class="symbol ' + (t.art || 'aufbau') + '">' + ART_KURZ[t.art || 'aufbau'] + '</span><span class="name">' + t.id + '</span>'
     + '<span class="art">' + (t.art === 'sensor' ? (sensorWerte(t).typ === 'farbe' ? 'Farbsensor' : 'DIn' + sensorWerte(t).din)
        : t.art === 'ablage' ? 'Ablage für ' + t.von
+       : t.art === 'foerderband' ? 'Förderband, DOut' + bandWerte(t).dout_vor + '/' + bandWerte(t).dout_zurueck
        : t.art === 'werkstueck' && t.griff ? t.teil + ', Greifpunkt'
        : t.art === 'sperrzone' ? (zoneWerte(t).reaktion === 'stopp' ? 'Sperrzone, Stopp' : 'Sperrzone, Warnung')
        : t.art === 'naeherung' ? (iniWerte(t).typ === 'induktiv' ? 'induktiv ' : 'kapazitiv ') + iniWerte(t).bauform + ', DIn' + iniWerte(t).din
@@ -1837,6 +1927,91 @@ $('zd-ok').onclick = async () => {
   waehlen(t.id); await rechnen(); wahlStarten('ziel'); grenzenKurz();
   status('Jetzt das Gegenstück anklicken (Tisch, Nut oder Fläche eines Teils).');
 };
+function bandFormular(t) {
+  const b = bandWerte(t);
+  feld('f-name', b.name || t.id); feld('f-tempo', b.tempo_mm_s);
+  feld('f-lx', b.laenge_mm); feld('f-ly', b.breite_mm); feld('f-lz', b.hoehe_mm);
+  feld('f-vor', b.dout_vor); feld('f-zur', b.dout_zurueck);
+  $('f-anfang').value = b.ende_anfang; $('f-ende').value = b.ende_ende;
+  [0, 1].forEach(i => {
+    const ta = b.taster[i], st = BAND_STANDARD.taster[i];
+    $('f-t' + i + '-an').checked = !!ta;
+    feld('f-t' + i + '-din', (ta || st).din); $('f-t' + i + '-art').value = (ta || st).art;
+    feld('f-t' + i + '-ab', (ta || st).abstand_mm ?? 25);
+    ['din', 'art', 'ab'].forEach(k => { $('f-t' + i + '-' + k).disabled = !ta; });
+  });
+  const schluessel = JSON.stringify(b.vorrat) + '|' + teileBibliothek.length;
+  if ($('f-vorrat').dataset.stand !== schluessel || $('f-vorrat').dataset.teil !== t.id) {   // nur neu bauen, wenn sich etwas aendert
+    $('f-vorrat').dataset.stand = schluessel; $('f-vorrat').dataset.teil = t.id;
+    const teile = teileBibliothek.map(x => x.name);
+    $('f-vorrat').innerHTML = b.vorrat.map((v, i) => '<div class="zeile vorrat-zeile" data-v="' + i + '">'
+      + '<select class="v-teil" title="Teil aus der Teilebibliothek">' + (teile.includes(v.teil) ? [] : [v.teil]).concat(teile)
+        .map(n => '<option' + (n === v.teil ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select>'
+      + '<select class="v-farbe">' + Object.keys(FARB_RGB).map(f => '<option value="' + f + '"' + (f === (v.farbe || 'rot') ? ' selected' : '')
+        + '>' + FARB_TEXT[f] + '</option>').join('') + '</select>'
+      + '<input class="v-anzahl" type="number" min="1" max="10" value="' + (v.anzahl || 3) + '" style="width:54px" title="Anzahl">'
+      + '<button class="v-weg" title="Sorte entfernen">&times;</button></div>').join('')
+      || '<span class="hilfe">Noch kein Vorrat: ohne Vorrat gibt es den Knopf „Teil nachlegen“ nicht.</span>';
+  }
+}
+function bandAusFormular() {
+  const t = teil(auswahl); if (!t || t.art !== 'foerderband') return;
+  const alt = bandWerte(t), zahl = (id, lo, hi, std) => { const v = Number($(id).value); return Number.isFinite(v) && $(id).value !== '' ? Math.min(hi, Math.max(lo, v)) : std; };
+  const lx = zahl('f-lx', 200, 2000, alt.laenge_mm);
+  const taster = [0, 1].map(i => $('f-t' + i + '-an').checked ? {din: Math.round(zahl('f-t' + i + '-din', 1, 64, 25 + i)),
+    art: $('f-t' + i + '-art').value, abstand_mm: zahl('f-t' + i + '-ab', 5, lx / 2, 25)} : null);
+  const vorrat = [...$('f-vorrat').querySelectorAll('[data-v]')].map(z => ({teil: z.querySelector('.v-teil').value,
+    farbe: z.querySelector('.v-farbe').value, anzahl: Math.round(Math.min(10, Math.max(1, Number(z.querySelector('.v-anzahl').value) || 1)))}));
+  t.foerderband = Object.assign({}, t.foerderband, {name: $('f-name').value.trim().slice(0, 24) || t.id,
+    tempo_mm_s: zahl('f-tempo', 5, 500, alt.tempo_mm_s), laenge_mm: lx, breite_mm: zahl('f-ly', 30, 300, alt.breite_mm),
+    hoehe_mm: zahl('f-lz', 30, 300, alt.hoehe_mm), dout_vor: Math.round(zahl('f-vor', 1, 64, alt.dout_vor)),
+    dout_zurueck: Math.round(zahl('f-zur', 1, 64, alt.dout_zurueck)), ende_anfang: $('f-anfang').value, ende_ende: $('f-ende').value,
+    taster, vorrat});
+  merken();
+  if (JSON.stringify(bandWerte(t)) !== JSON.stringify(alt)) { objektEntfernen(t.id); objektBauen(t).then(() => { waehlen(t.id); rechnen(); }); }
+}
+['f-name', 'f-tempo', 'f-lx', 'f-ly', 'f-lz', 'f-vor', 'f-zur', 'f-anfang', 'f-ende', 'f-t0-an', 'f-t0-din', 'f-t0-art', 'f-t0-ab',
+ 'f-t1-an', 'f-t1-din', 'f-t1-art', 'f-t1-ab'].forEach(i => $(i).addEventListener('change', bandAusFormular));
+$('f-vorrat').addEventListener('change', bandAusFormular);
+$('f-vorrat').addEventListener('click', ev => {
+  const weg = ev.target.closest('.v-weg'); if (!weg) return;
+  weg.closest('[data-v]').remove(); bandAusFormular();
+});
+$('f-vorrat-neu').onclick = () => {
+  const t = teil(auswahl); if (!t || t.art !== 'foerderband') return;
+  const b = bandWerte(t), frei = Object.keys(FARB_RGB).find(f => !b.vorrat.some(v => v.farbe === f)) || 'rot';
+  const werkstueck = entwurf.teile.find(x => x.art === 'werkstueck' && x.teil);
+  t.foerderband = Object.assign({}, t.foerderband, {vorrat: b.vorrat.concat([{teil: werkstueck ? werkstueck.teil
+    : (teileBibliothek[0] || {}).name || '', farbe: frei, anzahl: 3}])});
+  merken(); objektEntfernen(t.id); objektBauen(t).then(() => { waehlen(t.id); rechnen(); });
+};
+$('plus-band').onclick = () => {
+  if (entwurf.teile.filter(t => t.art === 'foerderband').length >= 2) { status('Höchstens zwei Förderbänder je Roboterumgebung.', true); return; }
+  let n = 1;
+  while (teil('band' + n)) n++;
+  const belegt = entwurf.teile.filter(t => t.art === 'foerderband').length;
+  $('bd-name').value = 'Band ' + n; $('bd-lx').value = BAND_STANDARD.laenge_mm;
+  $('bd-anfang').value = 'anschlag'; $('bd-ende').value = 'lagerbox';
+  $('bd-vor').value = BAND_STANDARD.dout_vor + 2 * belegt; $('bd-zur').value = BAND_STANDARD.dout_zurueck + 2 * belegt;
+  dialogAuf('band-dialog');
+};
+$('bd-ok').onclick = async () => {
+  const vor = Math.round(Number($('bd-vor').value)), zur = Math.round(Number($('bd-zur').value));
+  if (!(vor >= 1 && vor <= 64 && zur >= 1 && zur <= 64) || vor === zur) { status('DOut vor und zurück: zwei verschiedene Nummern von 1 bis 64.', true); return; }
+  dialogZu('band-dialog');
+  let n = 1;
+  while (teil('band' + n)) n++;
+  const belegt = entwurf.teile.filter(t => t.art === 'foerderband').length;
+  const foerderband = {name: $('bd-name').value.trim().slice(0, 24) || 'Band ' + n,
+    laenge_mm: Math.min(2000, Math.max(200, Number($('bd-lx').value) || 600)), ende_anfang: $('bd-anfang').value,
+    ende_ende: $('bd-ende').value, dout_vor: vor, dout_zurueck: zur,
+    taster: [{din: 25 + 2 * belegt, art: 'schliesser', abstand_mm: 25}, {din: 26 + 2 * belegt, art: 'schliesser', abstand_mm: 25}], vorrat: []};
+  const t = {id: 'band' + n, art: 'foerderband', foerderband, verbindung: {punkt: {art: 'flaeche', id: 'unten'}, versatz_mm: [0, 0, 0], drehung_grad: 0}};
+  entwurf.teile.push(t); merken();
+  await objektBauen(t);
+  waehlen(t.id); await rechnen(); wahlStarten('ziel');
+  status('Jetzt das Gegenstück anklicken (Tisch oder Nut).');
+};
 $('titel').oninput = () => { entwurf.titel = $('titel').value; };
 for (const [k, id] of Object.entries(TISCH_FELDER)) $(id).addEventListener('change', () => {
   const v = Number($(id).value);
@@ -2260,7 +2435,8 @@ function planZeigen() {
       + masslinie(ax - 22, 0, ax - 22, ay, mm(tw.anschlag_hinten_mm), '#c45500') + masslinie(B, ay - 22, ax, ay - 22, mm(tw.anschlag_links_mm), '#c45500');
   }
   const FARBE = {aufbau: ['#8a93a3', 'rgba(138,147,163,.35)'], werkstueck: ['#00639C', 'rgba(0,99,156,.28)'], sensor: ['#8fa300', 'rgba(177,200,0,.35)'],
-                 sperrzone: ['#D4005E', 'rgba(212,0,94,.12)'], naeherung: ['#5d6779', 'rgba(93,103,121,.35)']};
+                 sperrzone: ['#D4005E', 'rgba(212,0,94,.12)'], naeherung: ['#5d6779', 'rgba(93,103,121,.35)'],
+                 foerderband: ['#3b4152', 'rgba(59,65,82,.3)']};
   const ar = grenzenWerte().arbeitsraum;
   if (ar.an) {   // Arbeitsraum (iRC-Koordinaten) ins Tischsystem, gestrichelt mit Massen zur hinteren und linken Kante
     const ecken = [[ar.min_mm[0], ar.min_mm[1]], [ar.max_mm[0], ar.min_mm[1]], [ar.max_mm[0], ar.max_mm[1]], [ar.min_mm[0], ar.max_mm[1]]]
@@ -2299,9 +2475,10 @@ function planZeigen() {
     zeilen.push('<tr data-nr="' + nr + '"><td><b>' + nr + '</b></td><td><b>' + esc(t.id) + '</b><div class="hilfe">'
       + esc(t.art === 'sensor' ? 'Sensorfläche' : t.art === 'sperrzone' ? 'Höhe ' + mm(zoneWerte(t).groesse_mm[2]) + ' mm'
             : t.art === 'naeherung' ? (iniWerte(t).typ === 'induktiv' ? 'induktiv ' : 'kapazitiv ') + iniWerte(t).bauform + ', DIn' + iniWerte(t).din
+            : t.art === 'foerderband' ? 'Gurt ' + mm(bandWerte(t).laenge_mm) + ' × ' + mm(bandWerte(t).breite_mm) + ' mm, ohne Anschlag/Lagerbox'
             : t.teil + (t.material && t.material !== 'pla' ? ', ' + MATERIALIEN[t.material].name : ''))
       + (auf ? ' · ' + esc(auf) : '') + '</div></td>'
-      + '<td>' + ({aufbau: 'Aufbau', werkstueck: 'Werkstück (Start)', sensor: 'Sensor', sperrzone: 'Sperrzone', naeherung: 'Näherungssensor'}[t.art] || '') + '</td>'
+      + '<td>' + ({aufbau: 'Aufbau', werkstueck: 'Werkstück (Start)', sensor: 'Sensor', sperrzone: 'Sperrzone', naeherung: 'Näherungssensor', foerderband: 'Förderband'}[t.art] || '') + '</td>'
       + '<td class="zahl">' + mm(hinten) + '</td><td class="zahl">' + mm(links) + '</td>'
       + '<td class="zahl">' + mm(f.y1 - f.y0) + ' × ' + mm(f.x1 - f.x0) + '</td><td>' + esc(nut || '–') + '</td></tr>');
   });

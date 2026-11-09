@@ -703,5 +703,85 @@ class TestTeilePipeline(unittest.TestCase):
                 teile.einlesen(datei, tmp, "x")
 
 
+class TestFoerderband(unittest.TestCase):
+    """Foerderband im Baukasten (FB3): Werte, Verbinden wie ein Quader, Welt mit Vorrat, ea.baender."""
+
+    def band(self, ident="band1", **werte):
+        return {"id": ident, "art": "foerderband", "foerderband": werte,
+                "verbindung": {"punkt": {"art": "flaeche", "id": "unten"}, "an": "tisch",
+                               "an_punkt": {"art": "flaeche", "id": "oben"}, "versatz_mm": [350, 0, 0], "drehung_grad": 90}}
+
+    def test_standardwerte_und_pruefung(self):
+        w = bk.band_werte(self.band())
+        self.assertEqual((w["laenge_mm"], w["breite_mm"], w["hoehe_mm"], w["tempo_mm_s"]), (600, 80, 70, 60))
+        self.assertEqual((w["ende_anfang"], w["ende_ende"], w["dout_vor"], w["dout_zurueck"]), ("anschlag", "lagerbox", 21, 22))
+        self.assertEqual(w["taster"][1], {"din": 26, "art": "schliesser", "abstand_mm": 25.0})
+        self.assertEqual(w["name"], "band1")
+        for falsch in ({"laenge_mm": 100}, {"tempo_mm_s": 0}, {"ende_ende": "offen"}, {"dout_vor": 22},
+                       {"taster": [None]}, {"taster": [None, {"din": 0}]}, {"taster": [None, {"din": 5, "abstand_mm": 400}]},
+                       {"vorrat": [{"teil": "Stift!"}]}, {"vorrat": [{"teil": "stift", "farbe": "lila"}]},
+                       {"vorrat": [{"teil": "stift", "anzahl": 11}]},
+                       {"vorrat": [{"teil": "stift", "anzahl": 10}] * 4},
+                       {"vorrat": [{"teil": "stift", "farbe": "rot"}, {"teil": "stift", "farbe": "rot"}]}):
+            with self.assertRaises(bk.BaukastenFehler, msg=falsch):
+                bk.band_werte(self.band(**falsch))
+        sorten = bk.band_werte(self.band(vorrat=[{"teil": "stift", "farbe": "rot"}, {"teil": "wuerfel", "farbe": "rot"},
+                                                 {"teil": "stift", "farbe": "blau", "material": "stahl"}]))["vorrat"]
+        self.assertEqual([v["sorte"] for v in sorten], ["rot_stift", "rot_wuerfel", "blau"])
+        self.assertEqual(sorten[2]["material"], "stahl")
+        with self.assertRaises(bk.BaukastenFehler):   # hoechstens zwei Baender
+            bk.pruefe_entwurf(entwurf(self.band("a"), self.band("b"), self.band("c")))
+
+    def test_lage_und_werkstueck_auf_dem_gurt(self):
+        stift = teil("s", "stift", {"art": "flaeche", "id": 1}, "band1", {"art": "flaeche", "id": "oben"})
+        stift["verbindung"]["punkt"] = {"art": "bohrung", "id": 41, "ende": 0}
+        stift["verbindung"]["an_punkt"] = {"art": "flaeche", "id": "oben"}
+        e = entwurf(self.band(), stift)
+        lagen = bk.loese(e, TEILE.__getitem__)
+        self.assertEqual([round(v, 6) for v in lagen["band1"].o], [600, 0, 0])   # Tischmitte x 250 + 350
+        # Gurt laeuft nach der Drehung um 90 Grad entlang y (Ende = +y)
+        r = lagen["band1"].r
+        self.assertEqual([round(r[i][0], 6) + 0 for i in range(3)], [0, 1, 0])
+        self.assertAlmostEqual(lagen["s"].punkt([0, 0, 0])[2], 70.0)   # steht auf der Gurtoberkante
+
+    def test_welt_und_ea(self):
+        e = entwurf(self.band(name="Zufuhr", vorrat=[{"teil": "stift", "farbe": "rot", "anzahl": 2},
+                                                     {"teil": "wuerfel", "farbe": "gruen", "anzahl": 1}]),
+                    self.band("band2", ende_anfang="lagerbox", ende_ende="anschlag", dout_vor=23, dout_zurueck=24,
+                              taster=[{"din": 30, "art": "oeffner", "abstand_mm": 40}, None]))
+        lagen = bk.loese(e, TEILE.__getitem__)
+        text = bk.welt_text(e, lagen, TEILE.__getitem__)
+        self.assertIn('EXTERNPROTO "../protos/Foerderband.proto"', text)
+        self.assertIn("DEF BAND_0 Foerderband {", text)
+        self.assertIn("DEF BAND_1 Foerderband {", text)
+        self.assertIn('ende_links "lagerbox"\n  ende_rechts "anschlag"\n  taster_links 0.0400\n  taster_rechts 0.0250', text)
+        for k, (name, farbe) in enumerate((("band1_rot_1", "0.850 0.120 0.100"), ("band1_rot_2", "0.850 0.120 0.100"),
+                                           ("band1_gruen_3", "0.150 0.700 0.200"))):
+            block = text.split("DEF VORRAT_0_%d Werkstueck {" % k)[1].split("}")[0]
+            self.assertIn('name "%s"' % name, block)
+            self.assertIn("farbe " + farbe, block)
+            z = float(block.split("translation ")[1].split()[2])
+            self.assertLess(z, -19.9)   # ueber der Vorratsablage unter dem Band
+        self.assertNotIn("VORRAT_1_", text)
+        ea = bk.ea_baender(e)
+        self.assertEqual(ea[0], {"name": "Zufuhr", "knoten": "BAND_0", "dout_vor": 21, "dout_zurueck": 22,
+                                 "geschwindigkeit_mm_s": 60.0,
+                                 "taster": [{"din": 25, "art": "schliesser"}, {"din": 26, "art": "schliesser"}],
+                                 "nachlegen": {"vorrat": [{"sorte": "rot", "knoten": ["VORRAT_0_0", "VORRAT_0_1"]},
+                                                          {"sorte": "gruen", "knoten": ["VORRAT_0_2"]}]}})
+        self.assertEqual(ea[1]["taster"], [{"din": 30, "art": "oeffner"}, None])
+        self.assertEqual(ea[1]["nachlegen"], {"vorrat": []})
+
+    def test_teile_verweise(self):
+        e = entwurf(self.band(vorrat=[{"teil": "stift"}]))
+        self.assertTrue(bk.verwendet_teil(e, "stift"))
+        self.assertFalse(bk.verwendet_teil(e, "wuerfel"))
+        self.assertEqual(bk.teil_verweise(e, "stift"), [])   # Vorrat haengt an keinem Verbindungspunkt
+        bk.teile_umbenennen(e, {"stift": "stift-2"})
+        self.assertEqual(e["teile"][0]["foerderband"]["vorrat"][0]["teil"], "stift-2")
+        import welt_paket
+        self.assertEqual(welt_paket.verwendete_teile("", e), ["stift-2"])
+
+
 if __name__ == "__main__":
     unittest.main()

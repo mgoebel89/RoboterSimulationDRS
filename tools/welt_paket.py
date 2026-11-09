@@ -59,6 +59,10 @@ def verwendete_teile(wbt_text, entwurf=None):
     for t in (entwurf or {}).get("teile", []):
         if t.get("teil") and TEIL_NAME.fullmatch(str(t["teil"])):
             namen.add(t["teil"])
+        band = t.get("foerderband") if isinstance(t.get("foerderband"), dict) else {}
+        for v in band.get("vorrat") or []:   # Vorrat der Foerderbaender (stehen auch in der .wbt)
+            if isinstance(v, dict) and TEIL_NAME.fullmatch(str(v.get("teil", ""))):
+                namen.add(v["teil"])
     return sorted(namen)
 
 
@@ -288,6 +292,10 @@ def importieren(inhalt, welten_dir, teile_dir, backen_dir, neuer_name=None, erse
         for t in entwurf.get("teile", []):
             if t.get("teil") in umbenannt:
                 t["teil"] = umbenannt[t["teil"]]
+            band = t.get("foerderband") if isinstance(t.get("foerderband"), dict) else {}
+            for v in band.get("vorrat") or []:   # Vorrat der Foerderbaender (wie baukasten.teile_umbenennen)
+                if isinstance(v, dict) and v.get("teil") in umbenannt:
+                    v["teil"] = umbenannt[v["teil"]]
         if greifer_alt and entwurf.get("greifer") == greifer_alt:
             entwurf["greifer"] = greifer_neu
         if besitzer:

@@ -302,6 +302,7 @@ SYMBOLE = {
     "KOLLISION": '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
     "SPERRZONE": '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
     "NAEHERUNG": '<rect x="9" y="7" width="6" height="14" rx="1"/><path d="M8 4h8M10 10h4M10 13h4M10 16h4"/>',
+    "BAND": '<rect x="2.5" y="12" width="19" height="6" rx="3"/><circle cx="5.5" cy="15" r="1"/><circle cx="18.5" cy="15" r="1"/><path d="M9 12V8h5v4"/>',
 }
 
 
@@ -2188,7 +2189,7 @@ def welt_beschriftungen(welt_datei):
                     sensor_namen["sensor_" + t["id"]] = (t.get("sensor") or {}).get("name") or t["id"]
                 elif t.get("art") == "naeherung":
                     sensor_namen["naeherung_" + t["id"]] = (t.get("naeherung") or {}).get("name") or t["id"]
-                elif t.get("art") not in ("werkstueck", "sperrzone", "naeherung"):
+                elif t.get("art") not in ("werkstueck", "sperrzone", "naeherung", "foerderband", "ablage"):
                     b = lade(t["teil"])["box"]
                     ecken = [lagen[t["id"]].punkt([x, y, z]) for x in (b[0], b[3]) for y in (b[1], b[4]) for z in (b[2], b[5])]
                     oben[t["id"]] = [round((min(p[0] for p in ecken) + max(p[0] for p in ecken)) / 2000, 5),
@@ -2325,13 +2326,13 @@ def band_html(baender, steuern):
     for i, b in enumerate(baender):
         zeilen = ['<div class="band-kopf"><span class="lampe"></span><span>%s<small>vor DOut%d · zurück DOut%d · '
                   '<b class="band-lauf">steht</b></small></span></div>' % (html.escape(b["name"]), b["dout_vor"], b["dout_zurueck"])]
-        for s, (seite, t) in enumerate(zip(("links", "rechts"), b["taster"])):
+        for s, (seite, t) in enumerate(zip(("Anfang", "Ende"), b["taster"])):
             zeilen.append('<div class="sensor band-taster" data-seite="%d"><span class="lampe"></span><span>Taster %s<small>%s'
                           '</small></span></div>' % (s, seite, "Reflextaster · " + (
                               "DIn%d · %s" % (t["din"], "Öffner" if t.get("art") == "oeffner" else "Schließer")
                               if t else "ohne Eingang")))
         zeilen += ['<div class="band-box" data-seite="%d" hidden>Lagerbox %s: <b>0</b></div>' % (s, seite)
-                   for s, seite in enumerate(("links", "rechts"))]
+                   for s, seite in enumerate(("Anfang", "Ende"))]
         if b["nachlegen"] and steuern:
             zeilen.append('<button class="band-nachlegen" data-band="%d" title="Ein Werkstück aus dem Vorrat an den Einlauf '
                           '(linkes Bandende) legen">Teil nachlegen</button>' % i)
@@ -2550,7 +2551,7 @@ def teile_liste():
         liste.append({"name": name, "quelle": t.get("quelle"), "groesse_mm": t.get("groesse_mm"), "vorschau": vorschau,
                       "volumen_mm3": t.get("volumen_mm3"), "mitgeliefert": name in mitgelieferte_teile(),
                       "anzahl": {k: len(t.get(k, [])) for k in ("flaechen", "bohrungen", "kanten", "ecken")},
-                      "verwendet_in": [w for w, e in entwuerfe().items() if any(x.get("teil") == name for x in e["teile"])
+                      "verwendet_in": [w for w, e in entwuerfe().items() if baukasten.verwendet_teil(e, name)
                                        or (name == baukasten.BASISPLATTE and (e.get("tisch") or {}).get("art") == "profil")]
                       + ["Greifer " + b["name"] for b in backensaetze_liste() if b["teil"] == name]
                       + (["Greifer-Editor (Schunk-Modell)"] if name in baukasten.GREIFER_TEILE.values() else [])})
@@ -2675,7 +2676,7 @@ def teil_ersetzen(name, inhalt, erzwingen, wer_name, quelle=None):
             neu = json.load(f)
         plan = []   # (art, name, entwurf, entwurf umgestellt, offen, verschoben)
         for welt, e in sorted(entwuerfe().items()):
-            if any(t.get("teil") == name for t in e.get("teile", [])):
+            if baukasten.verwendet_teil(e, name):
                 plan.append(("welt", welt, e) + baukasten.entwurf_umstellen(e, name, alt, neu))
         for b in backensaetze_liste():
             satz = None if b["fest"] else backensatz_lesen(b["name"])
@@ -3177,7 +3178,8 @@ def baukasten_speichern(welt, entwurf, wer_name):
     except (OSError, ValueError):   # neue Welt: erst freigeben, wenn sie fertig ist
         angaben = {"titel": entwurf.get("titel") or welt, "aufgabe": entwurf.get("aufgabe", ""), "sichtbar": False}
     # Taster, Leuchten und Sensorflaechen liest der Controller beim Start der Simulation
-    angaben["ea"] = dict(entwurf["ea"], sensoren=baukasten.ea_sensoren(entwurf), naeherung=baukasten.ea_naeherung(entwurf))
+    angaben["ea"] = dict(entwurf["ea"], sensoren=baukasten.ea_sensoren(entwurf), naeherung=baukasten.ea_naeherung(entwurf),
+                         baender=baukasten.ea_baender(entwurf))
     angaben["kollision"] = entwurf["kollision"]   # liest der Controller beim Start (welt_kollision)
     angaben["grenzen"] = baukasten.grenzen_fuer_welt(entwurf, lagen)   # Arbeitsraum, Sperrzonen, Achsgrenzen (K4)
     lehrer.schreibe_json(angaben_datei, angaben)
