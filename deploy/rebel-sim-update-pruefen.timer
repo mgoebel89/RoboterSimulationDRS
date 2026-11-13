@@ -1,0 +1,12 @@
+# Einmal am Tag nach einem neuen Stand suchen (Hinweis im Lehrerbereich unter Einstellungen).
+[Unit]
+Description=ReBeL-Simulation: taeglich nach neuem Stand suchen
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

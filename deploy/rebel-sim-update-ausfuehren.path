@@ -1,0 +1,10 @@
+# Knopf "Jetzt aktualisieren" im Lehrerbereich: der Webdienst legt /var/lib/rebel-sim/update/ausfuehren an.
+[Unit]
+Description=ReBeL-Simulation: Update auf Knopfdruck
+
+[Path]
+PathExists=/var/lib/rebel-sim/update/ausfuehren
+Unit=rebel-sim-update-ausfuehren.service
+
+[Install]
+WantedBy=multi-user.target

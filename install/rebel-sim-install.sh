@@ -104,6 +104,8 @@ fi
 
 schritt "Neustart der Webseite"
 systemctl restart rebel-sim-web
+# Stand fuer "Version und Update" im Lehrerbereich neu ermitteln (im Hintergrund)
+systemctl start --no-block rebel-sim-update-pruefen.service >/dev/null 2>&1 || true
 ip=$(hostname -I | awk '{print $1}')
 gruen "Fertig. Startseite fuer Schueler: http://$ip   Lehrerbereich (verschluesselt): https://$ip/lehrer"
 echo "Lehrer-PCs installieren einmal das Stammzertifikat http://$ip/ca.crt (die Lehrerseite fuehrt dorthin)."

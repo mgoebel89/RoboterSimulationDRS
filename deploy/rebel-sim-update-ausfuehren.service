@@ -1,0 +1,10 @@
+# Update aus dem Lehrerbereich: Sicherung, rebel-sim-update, danach erneut pruefen (als root).
+[Unit]
+Description=ReBeL-Simulation: Update ausfuehren
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rebel-sim-selbstupdate ausfuehren
+TimeoutStartSec=30min

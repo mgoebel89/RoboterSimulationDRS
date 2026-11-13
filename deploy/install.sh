@@ -14,6 +14,9 @@ mkdir -p /etc/rebel-sim
 chown -R rebelsim: "$BASIS"
 # Lehrerbereich: Konten, Protokoll und Einstellungen aus der Webseite (nur der Dienst darf hinein)
 install -d -o rebelsim -g rebelsim -m 750 /var/lib/rebel-sim
+# Update aus dem Lehrerbereich: der Dienst legt nur Anfragen ab (update/), die Ergebnisse schreibt root
+install -d -o rebelsim -g rebelsim -m 750 /var/lib/rebel-sim/update
+install -d -o root -g root -m 755 /var/lib/rebel-sim-update
 chmod +x "$BASIS"/tools/*.sh "$BASIS"/deploy/*.sh
 
 # Platz-Helfer fuer den Simulationsverwalter: eigene Kopie, die root gehoert,
@@ -44,8 +47,17 @@ install -m 644 "$BASIS/deploy/rebel-sim.tmpfiles" /etc/tmpfiles.d/rebel-sim.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/rebel-sim.conf
 install -m 644 "$BASIS/deploy/rebel-sim@.service" /etc/systemd/system/rebel-sim@.service
 install -m 644 "$BASIS/deploy/rebel-sim-web.service" /etc/systemd/system/rebel-sim-web.service
+# Update aus dem Lehrerbereich (Einstellungen -> Version und Update): Pruefen taeglich und auf Knopfdruck, Update auf
+# Knopfdruck; systemd startet rebel-sim-selbstupdate als root, sobald der Webdienst eine Anfrage-Datei ablegt
+install -o root -g root -m 755 "$BASIS/deploy/selbstupdate.sh" /usr/local/sbin/rebel-sim-selbstupdate
+for einheit in rebel-sim-update-pruefen.service rebel-sim-update-pruefen.timer rebel-sim-update-pruefen.path \
+               rebel-sim-update-ausfuehren.service rebel-sim-update-ausfuehren.path; do
+  install -m 644 "$BASIS/deploy/$einheit" "/etc/systemd/system/$einheit"
+done
 systemctl daemon-reload
 systemctl enable --now rebel-sim-tls.timer >/dev/null 2>&1
+systemctl enable --now rebel-sim-update-pruefen.timer rebel-sim-update-pruefen.path rebel-sim-update-ausfuehren.path \
+  >/dev/null 2>&1 || echo "Update aus dem Lehrerbereich konnte nicht eingerichtet werden"
 systemctl enable rebel-sim-firewall.service >/dev/null 2>&1
 systemctl restart rebel-sim-firewall.service || echo "Firewall konnte nicht geladen werden (nft im Container erlaubt?)"
 systemctl enable rebel-sim-web.service

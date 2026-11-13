@@ -1,0 +1,10 @@
+# Nach einem neuen Stand auf GitHub suchen (taeglich per Timer und auf Knopfdruck im Lehrerbereich).
+[Unit]
+Description=ReBeL-Simulation: nach neuem Stand suchen
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rebel-sim-selbstupdate pruefen
+TimeoutStartSec=5min

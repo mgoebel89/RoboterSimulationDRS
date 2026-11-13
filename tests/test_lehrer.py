@@ -328,6 +328,33 @@ class TestLehrerSeiten(Grundlage):
             self.anmelden(passwort="falsch123")
         self.assertEqual(self.anmelden()[0], 429)   # auch das richtige Passwort wartet jetzt
 
+    def test_update_fuer_jede_lehrkraft(self):
+        import updates
+        alt = (updates.STAND_DIR, updates.EINHEIT)
+        updates.STAND_DIR = os.path.join(self.tmp.name, "update-stand")
+        updates.EINHEIT = os.path.join(self.tmp.name, "rebel-sim-update-ausfuehren.path")
+        os.makedirs(updates.STAND_DIR)
+        try:
+            self.konto()
+            self.konto("mueller", "lehrkraft", "eigenes99")
+            self.assertEqual(self.anmelden("mueller", "eigenes99")[0], 200)
+            self.assertIn('id="update-feld"', self.anfrage("GET", "/lehrer")[1])
+            status, u = self.anfrage("GET", "/api/lehrer/update")
+            self.assertEqual(status, 200)
+            self.assertEqual((u["eingerichtet"], u["simulationen"]), (False, 0))
+            self.assertEqual(self.anfrage("GET", "/api/lehrer/ich")[1]["update"], 0)
+            self.assertIn("noch nicht eingerichtet", self.anfrage("POST", "/api/lehrer/update", {"art": "pruefen"})[1]["fehler"])
+            open(updates.EINHEIT, "w").close()
+            status, antwort = self.anfrage("POST", "/api/lehrer/update", {"art": "pruefen"})
+            self.assertEqual(status, 200)
+            self.assertTrue(antwort["update"]["wartet"]["pruefen"])
+            self.assertTrue(os.path.exists(os.path.join(self.zustand, "update", "pruefen")))
+            self.assertEqual(lehrer.lies_protokoll(self.zustand)[0]["was"], "nach neuem Stand gesucht")
+            self.assertEqual(self.anfrage("POST", "/api/lehrer/update", {"art": "ausfuehren"})[0], 409)   # nichts Neues
+            self.assertEqual(self.anfrage("GET", "/api/lehrer/einstellungen")[0], 403)   # der Rest bleibt bei Admins
+        finally:
+            updates.STAND_DIR, updates.EINHEIT = alt
+
     def test_lehrkraft_muss_erst_passwort_aendern_und_darf_weniger(self):
         self.konto()
         self.konto("mueller", "lehrkraft", "vorlaeufig1", muss_aendern=True)

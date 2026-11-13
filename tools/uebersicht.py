@@ -57,6 +57,7 @@ import welt_paket
 import anleitung_html
 import aufgabe_md
 import punkte
+import updates
 
 KONFIG_DIR = os.environ.get("KONFIG_DIR", "/etc/rebel-sim")
 STATUS_DIR = os.environ.get("STATUS_DIR", "/run/rebel-sim")
@@ -527,6 +528,14 @@ table.welten tr.zeile-welt:hover td, #teile tr[data-name]:hover td { background:
 ul.checkliste { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; font-size:.93em; }
 ul.checkliste li { display:flex; gap:10px; } ul.checkliste .ja { color:#6b7c00; font-weight:700; }
 ul.checkliste .nein { color:var(--gelb); font-weight:700; }
+.neu-marke { margin-left:auto; background:var(--pink); color:#fff; border-radius:9px; font-size:.75em; font-weight:700;
+  padding:1px 7px; line-height:1.5; }
+ul.aenderungen { margin:0; padding-left:18px; font-size:.92em; max-height:16em; overflow:auto; }
+ul.aenderungen li { margin:2px 0; } ul.aenderungen code { color:var(--leise); }
+pre.up-protokoll { margin:0; max-height:22em; overflow:auto; background:var(--bg); border:1px solid var(--linie);
+  border-radius:6px; padding:8px 10px; font-size:.8em; white-space:pre-wrap; }
+.up-hinweis { border-left:4px solid var(--gelb); background:#fff8e1; padding:8px 12px; border-radius:4px; font-size:.92em; }
+.up-fehler { color:var(--rot); font-weight:700; }
 .dialog > .feld { width:min(420px, 100%); max-height:calc(100vh - 32px); overflow:auto; box-shadow:var(--schatten-3); gap:14px;
   padding:22px 24px; }
 .dialog > .feld.gross { width:min(760px, 100%); }
@@ -559,7 +568,7 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
 <button data-tab="greifer">%%ICON_BACKEN%%Greifer</button>
 <div class="nav-titel">Verwaltung</div>
 <button data-tab="protokoll">%%ICON_PROTOKOLL%%Protokoll</button>
-<button data-tab="einst" class="nur-admin">%%ICON_EINST%%Einstellungen</button>
+<button data-tab="einst">%%ICON_EINST%%Einstellungen<span class="neu-marke" id="update-marke" hidden></span></button>
 <button data-tab="benutzer" class="nur-admin">%%ICON_BENUTZER%%Benutzer</button>
 <div class="nav-titel">Hilfe</div>
 <a class="nav-link" href="/lehrer/anleitung" target="_blank" rel="noopener">%%ICON_PLAN%%Anleitung</a>
@@ -718,23 +727,32 @@ label.knopf-datei.aus { pointer-events:none; opacity:.5; }
 <section id="tab-einst" hidden>
   <div class="seitenkopf"><div><h1>Einstellungen</h1><div class="unterzeile">Gelten für alle Lehrkräfte und Schüler.</div></div></div>
   <div class="spalte">
-    <div class="feld"><h2>Einrichtung</h2>
+    <div class="feld" id="update-feld"><h2>Version und Update</h2>
+      <div id="up-stand" class="hilfe">Wird geladen …</div>
+      <div id="up-neu"></div>
+      <div class="up-hinweis" id="up-hinweis" hidden></div>
+      <div class="knopfreihe"><button id="up-pruefen">Jetzt prüfen</button>
+        <button class="haupt" id="up-starten" hidden>Jetzt aktualisieren</button>
+        <span class="hilfe" id="up-zustand"></span></div>
+      <details id="up-details" hidden><summary class="hilfe">Protokoll des letzten Updates</summary>
+        <pre class="up-protokoll" id="up-protokoll"></pre></details></div>
+    <div class="feld nur-admin"><h2>Einrichtung</h2>
       <ul class="checkliste" id="einrichtung-liste"></ul>
       <div class="knopfreihe"><a class="btn haupt" href="/einrichtung">Einrichtungsassistent öffnen</a>
         <span class="hilfe">Robotermodell (z.B. nach einem iRC-Update), Konten, Schüler-PCs prüfen</span></div></div>
-    <div class="feld"><h2>Simulationen</h2>
+    <div class="feld nur-admin"><h2>Simulationen</h2>
       <div class="zeile"><label>Gleichzeitig höchstens <input id="e-max" type="number" min="1" max="20"></label>
       <label>Beenden nach so vielen Minuten ohne iRC <input id="e-leer" type="number" min="1" max="240"></label></div>
       <label>Alle beenden um (Stundenende, z.B. 09:30, 11:15) <input id="e-uhr" type="text" placeholder="keine"></label>
       <div><button class="haupt" id="e-speichern">Speichern</button></div></div>
-    <div class="feld"><h2>Logo</h2>
+    <div class="feld nur-admin"><h2>Logo</h2>
       <div class="hilfe">Erscheint oben links auf allen Seiten (Startseite, Simulation, Lehrerbereich). Anklicken wählt es aus.
         PNG, JPG oder SVG, am besten das Logo „quer“ auf weißem Grund.</div>
       <div class="logos" id="logos"></div>
       <div class="zeile" style="align-items:flex-end"><label>Name <input id="l-name" placeholder="z.B. drs_quer" autocapitalize="none"></label>
         <label class="knopf-datei" style="flex:0">Logo hochladen<input type="file" id="l-datei" accept="image/png,image/jpeg,image/svg+xml,.svg"></label></div>
     </div>
-    <div class="feld"><h2>Messungen</h2>
+    <div class="feld nur-admin"><h2>Messungen</h2>
       <div class="hilfe">Ergebnisse des Messkoffers (im Container <code>rebel-sim-messung</code>: SPS, App-Schnittstelle,
         CRI am echten ReBeL). Ohne Passwörter und Konten, IP-Adressen sind enthalten.</div>
       <table><thead><tr><th>Messung</th><th>Größe</th><th></th></tr></thead><tbody id="messungen"></tbody></table>
@@ -793,6 +811,7 @@ async function anmeldung() {
   ich = await (await fetch('/api/lehrer/ich', {cache: 'no-store'})).json();
   $('ich').textContent = ich.anzeige + (ich.rolle === 'admin' ? ' (Admin)' : '');
   document.querySelectorAll('.nur-admin').forEach(b => b.hidden = ich.rolle !== 'admin');
+  updateMarke(ich.update);
   $('pw-knopf').hidden = !!ich.vertraut;
   if (ich.vertraut) {   // Lehrer-PC ohne Anmeldung: mit eigenem Konto anmelden koennen
     $('abmelden').textContent = 'Anmelden'; $('abmelden').onclick = () => location.href = '/lehrer?anmelden=1';
@@ -1221,8 +1240,86 @@ async function protokoll() {
     + esc(e.was) + '</td></tr>').join('') || '<tr><td colspan="3" class="hilfe">Noch keine Einträge.</td></tr>';
 }
 
+// --- Version und Update (jede Lehrkraft) ---
+let updateTimer = null, updateLief = false;
+function updateMarke(neu) {
+  $('update-marke').hidden = !neu; $('update-marke').textContent = neu ? 'neu' : '';
+  $('update-marke').title = neu ? (neu === 1 ? 'Eine Änderung' : neu + ' Änderungen') + ' auf GitHub' : '';
+}
+function updateWarten(ms) { clearTimeout(updateTimer); updateTimer = setTimeout(updateZeigen, ms); }
+function datumZeit(iso) { return new Date(iso).toLocaleString('de-DE', {dateStyle: 'short', timeStyle: 'short'}); }
+async function updateZeigen() {
+  let u;
+  try {
+    const r = await fetch('/api/lehrer/update', {cache: 'no-store'});
+    u = await r.json();
+  } catch (e) {   // waehrend des Updates startet die Webseite neu
+    if (updateLief) { $('up-zustand').textContent = 'Die Seite startet neu …'; updateWarten(3000); }
+    return;
+  }
+  if (!u || u.fehler) return;
+  const i = u.installiert, p = u.pruefung, neu = (p && p.neu) || 0;
+  $('up-stand').innerHTML = i ? 'Installiert: <b>' + esc(i.stand) + '</b> vom ' + esc(i.datum) + ' – ' + esc(i.text)
+    : 'Installierter Stand unbekannt (kein Git-Klon).';
+  let text = '';
+  if (!u.eingerichtet) {
+    text = '<div class="up-hinweis">Das Update über diese Seite ist noch nicht eingerichtet. Einmal von Hand aktualisieren '
+      + '(auf dem Proxmox-Host: <code>pct exec &lt;CT-Nummer&gt; -- rebel-sim-update</code>), danach geht es hier.</div>';
+  } else if (!p) {
+    text = '<div class="hilfe">Noch nicht geprüft.</div>';
+  } else if (p.fehler) {
+    text = '<div class="up-fehler">Prüfung fehlgeschlagen (' + esc(datumZeit(p.zeit)) + '): ' + esc(p.fehler) + '</div>';
+  } else if (p.veraltet) {
+    text = '<div class="hilfe">Seit der letzten Prüfung wurde von Hand aktualisiert. Bitte neu prüfen.</div>';
+  } else if (!neu) {
+    text = '<div class="hilfe">Aktuell, kein neuerer Stand auf GitHub (geprüft ' + esc(datumZeit(p.zeit)) + ').</div>';
+  } else {
+    text = '<div><b>' + (neu === 1 ? 'Eine Änderung' : neu + ' Änderungen') + '</b> auf GitHub (Stand '
+      + esc(p.verfuegbar.stand) + ', geprüft ' + esc(datumZeit(p.zeit)) + '):</div><ul class="aenderungen">'
+      + p.aenderungen.map(a => '<li><code>' + esc(a.datum) + '</code> ' + esc(a.text) + '</li>').join('')
+      + (neu > p.aenderungen.length ? '<li>…</li>' : '') + '</ul>';
+  }
+  $('up-neu').innerHTML = text;
+  const beschaeftigt = u.laeuft || u.wartet.ausfuehren;
+  $('up-hinweis').hidden = !(neu && !beschaeftigt);
+  $('up-hinweis').innerHTML = 'Vor dem Update werden Roboterumgebungen, Teile, Konten und Einstellungen gesichert. '
+    + 'Die Lehrerseite ist dabei einige Minuten nicht erreichbar. '
+    + (u.simulationen ? '<b>' + (u.simulationen === 1 ? 'Eine Simulation läuft' : u.simulationen + ' Simulationen laufen')
+      + '</b> und laufen weiter; den neuen Stand nutzen sie erst nach „Neu starten“. ' : '')
+    + 'Am besten außerhalb des Unterrichts aktualisieren.';
+  $('up-pruefen').hidden = !u.eingerichtet;
+  $('up-pruefen').disabled = beschaeftigt || u.wartet.pruefen;
+  $('up-starten').hidden = !neu || !u.eingerichtet;
+  $('up-starten').disabled = beschaeftigt;
+  const l = u.lauf;
+  $('up-zustand').textContent = beschaeftigt ? 'Update läuft …' + (l && l.beginn && !l.ende ? ' (seit ' + l.beginn.slice(11, 16) + ')' : '')
+    : u.wartet.pruefen ? 'Prüfe …'
+    : l && l.ende ? 'Letztes Update ' + datumZeit(l.ende) + ': ' + (l.ergebnis === 'ok' ? 'erfolgreich' : 'FEHLER (siehe Protokoll)') : '';
+  $('up-details').hidden = !u.protokoll;
+  $('up-protokoll').textContent = u.protokoll;
+  if (beschaeftigt) { $('up-details').open = true; $('up-protokoll').scrollTop = 1e9; }
+  if (updateLief && !beschaeftigt && l && l.ende) {
+    melden(l.ergebnis === 'ok' ? 'Update fertig. Laufende Simulationen nutzen den neuen Stand nach „Neu starten“.'
+      : 'Das Update ist fehlgeschlagen, siehe Protokoll.', l.ergebnis !== 'ok');
+  }
+  updateLief = beschaeftigt;
+  updateMarke(beschaeftigt ? 0 : neu);
+  if (beschaeftigt || u.wartet.pruefen) updateWarten(beschaeftigt ? 2000 : 1500);
+}
+$('up-pruefen').onclick = async () => {
+  await api('update', {art: 'pruefen'});
+  $('up-zustand').textContent = 'Prüfe …'; updateWarten(1500);
+};
+$('up-starten').onclick = async () => {
+  if (!confirm('Jetzt auf den neuesten Stand aktualisieren? Die Lehrerseite ist dabei einige Minuten nicht erreichbar.')) return;
+  await api('update', {art: 'ausfuehren'});
+  updateLief = true; updateWarten(1000);
+};
+
 // --- Einstellungen (Admin) ---
 async function einstellungen() {
+  updateZeigen();
+  if (ich.rolle !== 'admin') return;
   const e = await (await fetch('/api/lehrer/einstellungen', {cache: 'no-store'})).json();
   $('e-max').value = e.max_simulationen;
   $('e-leer').value = e.leerlauf_minuten;
@@ -3383,7 +3480,9 @@ class Handler(BaseHTTPRequestHandler):
             elif pfad == "/api/lehrer/logos":
                 self._json(200, {"logos": lehrer.logos(ZUSTAND_DIR), "gewaehlt": lehrer.gewaehltes_logo(ZUSTAND_DIR)})
             elif pfad == "/api/lehrer/ich":
-                self._json(200, dict(self._wer(), benutzer_vorhanden=lehrer.hat_benutzer(ZUSTAND_DIR)))
+                self._json(200, dict(self._wer(), benutzer_vorhanden=lehrer.hat_benutzer(ZUSTAND_DIR), update=updates.kurz()))
+            elif pfad == "/api/lehrer/update":   # Version und Update (jede Lehrkraft)
+                self._json(200, dict(updates.stand(ZUSTAND_DIR), simulationen=len(lese_plaetze())))
             elif pfad == "/api/lehrer/protokoll":
                 self._json(200, lehrer.lies_protokoll(ZUSTAND_DIR))
             elif (pfad in ("/api/lehrer/einstellungen", "/api/lehrer/benutzer", "/api/lehrer/messungen", "/api/lehrer/messung",
@@ -3649,7 +3748,7 @@ class Handler(BaseHTTPRequestHandler):
     FUER_LEHRKRAFT = {"zuruecksetzen", "teile_zuruecksetzen", "beenden", "alle_beenden", "welt", "welt_loeschen", "markdown",
                       "datei_loeschen", "vorschau", "passwort",
                       "teil_loeschen", "baukasten_rechnen", "baukasten_punkte", "baukasten_speichern", "backensatz_speichern",
-                      "backensatz_loeschen"}
+                      "backensatz_loeschen", "update"}
 
     def _lehrer_aktion(self, aktion, daten):
         """Aktionen der Lehrerseite. Gibt Zusatzdaten fuer die Antwort zurueck."""
@@ -3773,6 +3872,14 @@ class Handler(BaseHTTPRequestHandler):
                                                     "ports": zusatz["ports"]})
             protokoll = "Verbindungstest zu PC %s: %s" % (host, ", ".join(
                 "%d %s" % (p["port"], "offen" if p["offen"] else "zu") for p in zusatz["ports"]))
+        elif aktion == "update":   # Jetzt pruefen / Jetzt aktualisieren
+            art = str(daten.get("art", ""))
+            try:
+                updates.anfordern(ZUSTAND_DIR, art)
+            except updates.UpdateFehler as fehler:
+                raise lehrer.LehrerFehler(str(fehler))
+            protokoll = "Update gestartet" if art == "ausfuehren" else "nach neuem Stand gesucht"
+            zusatz = {"update": dict(updates.stand(ZUSTAND_DIR), simulationen=len(lese_plaetze()))}
         elif aktion == "einrichtung_abschliessen":
             einrichtung.merke(ZUSTAND_DIR, abgeschlossen=time.strftime("%d.%m.%Y %H:%M"))
             protokoll = "Einrichtung abgeschlossen"

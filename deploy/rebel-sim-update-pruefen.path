@@ -1,0 +1,10 @@
+# Knopf "Jetzt pruefen" im Lehrerbereich: der Webdienst legt /var/lib/rebel-sim/update/pruefen an.
+[Unit]
+Description=ReBeL-Simulation: Pruefung auf Knopfdruck
+
+[Path]
+PathExists=/var/lib/rebel-sim/update/pruefen
+Unit=rebel-sim-update-pruefen.service
+
+[Install]
+WantedBy=multi-user.target
