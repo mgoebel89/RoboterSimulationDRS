@@ -14,9 +14,12 @@ SICHERUNGEN="$STAND/sicherungen"
 BEHALTEN=3
 umask 022
 export TZ=Europe/Berlin
+# systemd setzt kein HOME: ohne das greift "git config --global" (auch in rebel-sim-update) nicht, und git lehnt
+# das Repository ab, weil es rebelsim gehoert ("dubious ownership"). safe.directory zusaetzlich ueber die Umgebung.
+export HOME="${HOME:-/root}"
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$BASIS"
 install -d -o root -g root -m 755 "$STAND"
 install -d -o root -g root -m 700 "$SICHERUNGEN"   # enthaelt Konten (Passwort-Hashes): nur root
-git config --global --add safe.directory "$BASIS" 2>/dev/null
 
 jetzt() { date '+%Y-%m-%dT%H:%M:%S'; }
 
