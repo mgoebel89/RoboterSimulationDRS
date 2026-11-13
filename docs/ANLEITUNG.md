@@ -451,6 +451,12 @@ Laufende Simulationen übernehmen geänderte Taster und Sensoren nach **Neu star
 
 ## 10. Update
 
+- Im Lehrerbereich unter **Einstellungen → Version und Update** (jede Lehrkraft): **Jetzt prüfen** zeigt die neuen
+  Änderungen auf GitHub, **Jetzt aktualisieren** spielt sie ein. Das Protokoll erscheint auf der Seite; die Lehrerseite
+  ist dabei einige Minuten nicht erreichbar. Vorher werden Roboterumgebungen, Teile, Konten und Einstellungen
+  gesichert (die letzten drei Sicherungen in `/var/lib/rebel-sim-update/sicherungen` im Container). Geprüft wird
+  außerdem einmal am Tag; gibt es Neues, steht „neu“ an „Einstellungen“. Bei einer älteren Installation muss das
+  erste Update noch über einen der beiden folgenden Wege laufen, danach geht es über die Seite.
 - Auf dem Proxmox-Host das Skript aus Abschnitt 3 erneut starten und **„Vorhandenen Container aktualisieren“** wählen,
 - oder im Container: `rebel-sim-update`.
 

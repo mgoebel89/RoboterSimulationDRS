@@ -45,7 +45,8 @@ Assistent durch den Rest:
 3. **Lehrkräfte, Einstellungen, Schüler-PCs:** weitere Konten, Logo, App
    [`WebotsSim.zip`](deploy/irc_app/WebotsSim.zip) für iRC, Text für die IT und Verbindungstest zu einem Schüler-PC.
 
-**Update:** dasselbe Skript erneut starten und „aktualisieren“ wählen, oder im Container `rebel-sim-update`.
+**Update:** im Lehrerbereich unter Einstellungen → „Version und Update“ (jede Lehrkraft), oder dasselbe Skript erneut
+starten und „aktualisieren“ wählen, oder im Container `rebel-sim-update`.
 
 Ausführlich, mit Bildern: **[Anleitung](docs/ANLEITUNG.md)**.
 
