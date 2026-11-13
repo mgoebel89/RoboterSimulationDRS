@@ -98,8 +98,8 @@ ausfuehren() {
     echo "== $(jetzt) Ende: $ergebnis"
   } > "$STAND/protokoll.txt" 2>&1
   chmod 644 "$STAND/protokoll.txt"
+  pruefen   # vor dem Ende: die Seite liest dann gleich den neuen Stand
   printf '{"beginn": "%s", "ende": "%s", "ergebnis": "%s"}\n' "$beginn" "$(jetzt)" "$ergebnis" | schreiben lauf.json
-  pruefen
 }
 
 case "${1:-}" in

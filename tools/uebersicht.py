@@ -1261,8 +1261,11 @@ async function updateZeigen() {
   const i = u.installiert, p = u.pruefung, neu = (p && p.neu) || 0;
   $('up-stand').innerHTML = i ? 'Installiert: <b>' + esc(i.stand) + '</b> vom ' + esc(i.datum) + ' – ' + esc(i.text)
     : 'Installierter Stand unbekannt (kein Git-Klon).';
+  const beschaeftigt = u.laeuft || u.wartet.ausfuehren;
   let text = '';
-  if (!u.eingerichtet) {
+  if (beschaeftigt) {
+    text = '';   // Stand und Pruefung aendern sich gerade
+  } else if (!u.eingerichtet) {
     text = '<div class="up-hinweis">Das Update über diese Seite ist noch nicht eingerichtet. Einmal von Hand aktualisieren '
       + '(auf dem Proxmox-Host: <code>pct exec &lt;CT-Nummer&gt; -- rebel-sim-update</code>), danach geht es hier.</div>';
   } else if (!p) {
@@ -1280,7 +1283,6 @@ async function updateZeigen() {
       + (neu > p.aenderungen.length ? '<li>…</li>' : '') + '</ul>';
   }
   $('up-neu').innerHTML = text;
-  const beschaeftigt = u.laeuft || u.wartet.ausfuehren;
   $('up-hinweis').hidden = !(neu && !beschaeftigt);
   $('up-hinweis').innerHTML = 'Vor dem Update werden Roboterumgebungen, Teile, Konten und Einstellungen gesichert. '
     + 'Die Lehrerseite ist dabei einige Minuten nicht erreichbar. '
