@@ -70,12 +70,22 @@ install -m 755 "$BASIS/install/rebel-sim-admin" /usr/local/sbin/rebel-sim-admin
 install -m 755 "$BASIS/install/rebel-sim-einrichtung" /usr/local/sbin/rebel-sim-einrichtung
 install -m 755 "$BASIS/install/rebel-sim-messung" /usr/local/sbin/rebel-sim-messung
 
-schritt "Beispielwelten (nur fehlende)"
+schritt "Beispielwelten (jede Vorlage nur einmal)"
 mkdir -p "$BASIS/worlds" "$BASIS/teile"
+# Welche Vorlagen schon geliefert wurden: eine von der Lehrkraft geloeschte Welt kommt beim Update nicht zurueck
+GELIEFERT=/var/lib/rebel-sim/vorlagen-geliefert.txt
+if [ ! -f "$GELIEFERT" ] && compgen -G "$BASIS/worlds/*.wbt" >/dev/null; then
+  # Installation von vor dieser Liste: alle heutigen Vorlagen gelten als geliefert
+  for f in "$BASIS"/vorlagen/welten/*; do basename "$f"; done > "$GELIEFERT"
+fi
+touch "$GELIEFERT"
 for f in "$BASIS"/vorlagen/welten/*; do
-  ziel="$BASIS/worlds/$(basename "$f")"
-  [ -e "$ziel" ] || { cp "$f" "$ziel"; echo "  neu: $(basename "$f")"; }
+  name=$(basename "$f")
+  grep -qxF "$name" "$GELIEFERT" && continue
+  [ -e "$BASIS/worlds/$name" ] || { cp "$f" "$BASIS/worlds/$name"; echo "  neu: $name"; }
+  echo "$name" >> "$GELIEFERT"
 done
+chown rebelsim:rebelsim "$GELIEFERT"
 chown -R rebelsim:rebelsim "$BASIS"
 
 schritt "Teilebibliothek (nur fehlende, gmsh rechnet je Teil einige Sekunden)"
